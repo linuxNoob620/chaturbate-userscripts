@@ -1,0 +1,13 @@
+# Publish only the two maintained userscripts and repository support files.
+*
+!.gitignore
+!README.md
+!LICENSE
+!Chaturbate MultiCam Pro + Cam ARNA.user.js
+!Chaturbate MultiCam Pro + Cam ARNA.meta.js
+!Chaturbate Desktop Mobile Comfort.user.js
+!Chaturbate Desktop Mobile Comfort.meta.js
+!tools/
+!tools/**
+!.github/
+!.github/**

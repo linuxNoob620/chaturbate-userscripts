@@ -2,7 +2,7 @@
 // @name              Chaturbate MultiCam Pro + Cam ARNA
 // @name:zh-CN        Chaturbate 多开直播窗口
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           15.11.0
+// @version           15.11.1
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -1153,7 +1153,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '15.11.0',
+    version: '15.11.1',
     author: 'RYUJO',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -2214,6 +2214,7 @@
         onImported: result => alert(t(result.roomsReplaced ? 'settingsImported' : 'settingsImportedLegacy')),
       }),
       configureGithubSync: () => openGithubSyncSetup(),
+      isGithubSyncConfigured: () => !!loadGithubSyncConfig().token,
     }),
   });
 
@@ -9213,13 +9214,14 @@
         newelem=document.createElement('span');
         newelem.id="githubsyncbutton";
         newelem.style.cursor="pointer";
-        newelem.innerHTML="GitHub Cloud: Setup required";
+        newelem.innerHTML=window.__chaturbateSuiteSettings?.isGithubSyncConfigured?.()
+            ? "GitHub Cloud: Configured"
+            : "GitHub Cloud: Setup required";
         newelem.addEventListener("click", function(event){
             event.stopPropagation();
             if (window.__chaturbateSuiteSettings){window.__chaturbateSuiteSettings.configureGithubSync();}
         });
         document.getElementById("scriptcontrols").appendChild(newelem);
-        updateGithubSyncMenuLabel();
 
         newelem=document.createElement('span');
         newelem.id="reloadedtoolsbutton";

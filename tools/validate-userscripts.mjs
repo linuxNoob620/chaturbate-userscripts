@@ -59,6 +59,16 @@ for (const item of scripts) {
   for (const required of item.required) if (!header.includes(required)) failures.push(`${item.file}: missing ${required.trim()}`);
   const credentialPattern = new RegExp(`\\b(?:github_${'pat_'}|gh[pousr]_|glpat-)[A-Za-z0-9_\\-]{12,}`);
   if (credentialPattern.test(source)) failures.push(`${item.file}: possible embedded access token`);
+  if (item.file.includes('MultiCam Pro')) {
+    const menuStart = source.indexOf('    function moreoptions(){');
+    const menuEnd = source.indexOf('\n    function ', menuStart + 10);
+    const menuSource = menuStart >= 0 && menuEnd > menuStart ? source.slice(menuStart, menuEnd) : '';
+    if (!menuSource) failures.push(`${item.file}: Reloaded menu function was not found`);
+    if (/\bupdateGithubSyncMenuLabel\s*\(/.test(menuSource)) {
+      failures.push(`${item.file}: Reloaded menu calls a private MultiCam helper and can leave the wait overlay active`);
+    }
+    if (!menuSource.includes('isGithubSyncConfigured')) failures.push(`${item.file}: safe GitHub status bridge is missing from Reloaded menu`);
+  }
 
   const metaPath = path.join(root, item.meta);
   if (writeMeta) await writeFile(metaPath, header, 'utf8');

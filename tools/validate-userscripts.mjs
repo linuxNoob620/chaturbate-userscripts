@@ -76,11 +76,15 @@ for (const item of scripts) {
   }
   if (item.file.includes('Desktop Mobile Comfort')) {
     if (!source.includes('ziggy-mobile-clean-view:import-settings')) failures.push(`${item.file}: shared Suite settings import bridge is missing`);
-    for (const selector of ['#chatContents', '#portrait-contents', '#mobileVideoControls']) {
-      if (!source.includes(selector)) failures.push(`${item.file}: real mobile selector ${selector} is missing`);
+    for (const selector of ['.hasDarkBackground > div', '.hasDarkBackground', '.hasDarkBackground.draggableCanvasChatWindow.draggableCanvasWindow']) {
+      if (!source.includes(selector)) failures.push(`${item.file}: original mobile chat selector ${selector} is missing`);
     }
-    if (!source.includes("text === 'drag to resize'")) failures.push(`${item.file}: real mobile resize-label detection is missing`);
-    if (!source.includes('markNativeSplitters(document.body, video)')) failures.push(`${item.file}: normal mobile resize-handle cleanup is missing`);
+    if (!source.includes('for (const selector of ORIGINAL_MOBILE_HIDE_CHAT_SELECTORS)')) {
+      failures.push(`${item.file}: original mobile chat selectors are not integrated into hideChat`);
+    }
+    if (!source.includes('const supported = isMobileDevice() && !isBlockedPage();')) {
+      failures.push(`${item.file}: Clean View behavior is not gated to mobile devices`);
+    }
   }
 
   const metaPath = path.join(root, item.meta);

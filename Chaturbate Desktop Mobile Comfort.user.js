@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name               Ziggy Mobile Clean View
 // @namespace          ziggy.chaturbate.mobile-comfort
-// @version            2.1.4
+// @version            2.1.5
 // @description        A clean Chaturbate mobile layout with chat hidden, video-only fullscreen, Picture-in-Picture, and one shared tools dock.
 // @author             Ziggy
 // @homepageURL        https://github.com/linuxNoob620/chaturbate-userscripts
@@ -19,7 +19,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '2.1.4';
+  const VERSION = '2.1.5';
   const STORE_KEY = 'cb_desktop_mobile_comfort_v1';
   const ROOT_ID = 'zmc-root';
   const STYLE_ID = 'zmc-style';
@@ -48,6 +48,11 @@
     '[data-testid="chat-message-list"]',
     '.mobile-chat-container',
     '.draggableCanvasChatWindow',
+  ];
+  const ORIGINAL_MOBILE_HIDE_CHAT_SELECTORS = [
+    '.hasDarkBackground > div',
+    '.hasDarkBackground',
+    '.hasDarkBackground.draggableCanvasChatWindow.draggableCanvasWindow',
   ];
   const CHAT_TAB_SELECTORS = [
     '[data-testid="mobile-chat-tab"]',
@@ -932,6 +937,9 @@
     }
     chatTabs.forEach(hideNode);
     for (const selector of CHAT_TARGET_SELECTORS) {
+      try { document.querySelectorAll(selector).forEach(hideNode); } catch (_) {}
+    }
+    for (const selector of ORIGINAL_MOBILE_HIDE_CHAT_SELECTORS) {
       try { document.querySelectorAll(selector).forEach(hideNode); } catch (_) {}
     }
   }

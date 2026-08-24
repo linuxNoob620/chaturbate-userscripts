@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.0.2
+// @version           16.0.3
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -699,6 +699,7 @@
       dockPip: 'Picture-in-Picture',
       dockPause: 'Play / pause',
       dockMute: 'Mute / unmute',
+      dockRecu: 'Recu.me profile',
       dockVideoMissing: 'No playable video found on this page',
       dockRecordQueued: 'Recording intent queued in workstation',
       added: 'Added',
@@ -1008,6 +1009,7 @@
       dockPip: '画中画',
       dockPause: '播放 / 暂停',
       dockMute: '静音 / 取消',
+      dockRecu: 'Recu.me 资料页',
       dockVideoMissing: '当前页没有找到可操作的视频',
       dockRecordQueued: '已把录制意图发送到工作台',
       added: '已加入',
@@ -1103,7 +1105,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.0.2',
+    version: '16.0.3',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3176,6 +3178,11 @@
       openWorkstationNew();
     }
 
+    function openCurrentRoomRecu() {
+      if (!currentRoom) { toast(t('dockNoRoom')); return; }
+      openNoopener(`https://recu.me/performer/${encodeURIComponent(currentRoom)}`);
+    }
+
     // ---- RoomGrid 工具坞 ----
     const dockStyle = $('style', { html: trustedHtml(`
       .roomgrid-dock { position:fixed; right:18px; bottom:18px; z-index:2147483200; width:292px; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; color:#f8fafc; user-select:none; transition:bottom .2s ease,opacity .2s ease,transform .2s ease; }
@@ -3308,6 +3315,7 @@
 
     const roomLine = $('div', { class: 'roomgrid-dock-room' }, t('dockNoRoom'));
     const addBtn = $('button', { class: 'roomgrid-dock-action success', onclick: () => toggleCurrentRoomSaved() }, t('dockAdd'));
+    const recuBtn = $('button', { class: 'roomgrid-dock-action', onclick: openCurrentRoomRecu }, t('dockRecu'));
     const head = $('button', { class: 'roomgrid-dock-head', title: 'Alt+M / Alt+A / Shift+A', onclick: () => { if (!dragged) toggleDock(); } }, [
       $('span', { class: 'roomgrid-dock-mark' }, '▦'),
       $('span', {}, [
@@ -3339,6 +3347,7 @@
         $('button', { class: 'roomgrid-dock-action', onclick: toggleCurrentPagePiP }, t('dockPip')),
         $('button', { class: 'roomgrid-dock-action', onclick: toggleCurrentPageMute }, t('dockMute')),
         $('button', { class: 'roomgrid-dock-action', onclick: () => { if (confirm(t('openWorkstationHereConfirm'))) openWorkstationHere(); } }, t('dockOpenHere')),
+        recuBtn,
       ]),
       dockAutoCollapseSetting,
       $('div', { class: 'roomgrid-dock-foot' }, [
@@ -3395,6 +3404,8 @@
       addBtn.classList.toggle('warn', !!(currentRoom && Storage.has(currentRoom)));
       addBtn.disabled = !currentRoom;
       addBtn.style.opacity = currentRoom ? '1' : '.55';
+      recuBtn.disabled = !currentRoom;
+      recuBtn.style.opacity = currentRoom ? '1' : '.55';
       publishSuiteState();
     }
 

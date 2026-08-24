@@ -70,6 +70,8 @@ for (const item of scripts) {
     if (!menuSource.includes('isGithubSyncConfigured')) failures.push(`${item.file}: safe GitHub status bridge is missing from Reloaded menu`);
     if (!source.includes('ziggy-mobile-reloaded-backdrop')) failures.push(`${item.file}: native mobile Reloaded menu is missing`);
     if (!source.includes('mobileCleanView: captureMobileCleanViewSettings()')) failures.push(`${item.file}: Mobile Clean View backup component is missing`);
+    if (!source.includes('onclick: openCurrentRoomRecu')) failures.push(`${item.file}: RoomGrid Recu.me button is missing`);
+    if (!source.includes('https://recu.me/performer/${encodeURIComponent(currentRoom)}')) failures.push(`${item.file}: RoomGrid Recu.me URL is not tied to the current model`);
     const mobileStop = source.indexOf('if (!document.getElementById("desktop-spa-header")){return;}');
     const reloadedStyle = source.indexOf('    setgenstyle();', mobileStop);
     if (mobileStop < 0 || reloadedStyle < mobileStop) failures.push(`${item.file}: Reloaded desktop CSS is not isolated from native mobile`);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name               Ziggy Mobile Clean View
 // @namespace          ziggy.chaturbate.mobile-comfort
-// @version            2.1.1
+// @version            2.1.2
 // @description        A clean Chaturbate mobile layout with chat hidden, video-only fullscreen, Picture-in-Picture, and one shared tools dock.
 // @author             Ziggy
 // @homepageURL        https://github.com/linuxNoob620/chaturbate-userscripts
@@ -19,7 +19,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '2.1.1';
+  const VERSION = '2.1.2';
   const STORE_KEY = 'cb_desktop_mobile_comfort_v1';
   const ROOT_ID = 'zmc-root';
   const STYLE_ID = 'zmc-style';
@@ -56,6 +56,33 @@
     '[aria-controls="ChatTabContainer"]',
     'a[href="#chat"]',
     'button[value="chat"]',
+  ];
+  const NATIVE_FULLSCREEN_CHAT_SELECTORS = [
+    ...CHAT_TARGET_SELECTORS,
+    '[data-testid="fullscreen-chat"]',
+    '[data-testid="fullscreen-chat-panel"]',
+    '[data-testid*="chat-message"]',
+    '[data-testid*="message-list"]',
+    '[role="log"]',
+    '[class*="FullscreenChat"]',
+    '[class*="fullscreenChat"]',
+    '[class*="fullscreen-chat"]',
+    '[class*="ChatPanel"]',
+    '[class*="chatPanel"]',
+    '[class*="chat-panel"]',
+  ];
+  const NATIVE_FULLSCREEN_SPLITTER_SELECTORS = [
+    '[role="separator"]',
+    '[data-testid*="resize"]',
+    '[data-testid*="split"]',
+    '[data-testid*="drag-handle"]',
+    '[class*="ResizeHandle"]',
+    '[class*="resizeHandle"]',
+    '[class*="resize-handle"]',
+    '[class*="Resizer"]',
+    '[class*="resizer"]',
+    '[class*="Splitter"]',
+    '[class*="splitter"]',
   ];
   const DEFAULTS = Object.freeze({
     enabled: true,
@@ -293,6 +320,72 @@
         width:100% !important;
         max-width:100% !important;
         object-fit:contain !important;
+      }
+      html.zmc-active body.zmc-native-fullscreen .zmc-native-chat-hidden,
+      html.zmc-active body.zmc-native-fullscreen .zmc-native-splitter-hidden {
+        display:none !important;
+        visibility:hidden !important;
+        pointer-events:none !important;
+        width:0 !important;
+        height:0 !important;
+        min-width:0 !important;
+        min-height:0 !important;
+        max-width:0 !important;
+        max-height:0 !important;
+        flex:0 0 0 !important;
+        margin:0 !important;
+        padding:0 !important;
+        border:0 !important;
+        overflow:hidden !important;
+      }
+      html.zmc-active body.zmc-native-fullscreen,
+      html.zmc-active body.zmc-native-fullscreen .zmc-native-fullscreen-root {
+        box-sizing:border-box !important;
+        width:100vw !important;
+        height:100dvh !important;
+        min-width:0 !important;
+        min-height:0 !important;
+        max-width:none !important;
+        max-height:none !important;
+        margin:0 !important;
+        overflow:hidden !important;
+        overscroll-behavior:none !important;
+      }
+      html.zmc-active body.zmc-native-fullscreen .zmc-native-layout-reset,
+      html.zmc-active body.zmc-native-fullscreen .zmc-native-fullscreen-video-region {
+        box-sizing:border-box !important;
+        width:100% !important;
+        height:100% !important;
+        min-width:0 !important;
+        min-height:0 !important;
+        max-width:none !important;
+        max-height:none !important;
+        flex:1 1 100% !important;
+        flex-basis:100% !important;
+        margin:0 !important;
+        overflow:hidden !important;
+      }
+      html.zmc-active body.zmc-native-fullscreen .zmc-native-fullscreen-video-region [data-testid="video-container"],
+      html.zmc-active body.zmc-native-fullscreen .zmc-native-fullscreen-video-region #chat-player {
+        box-sizing:border-box !important;
+        width:100% !important;
+        height:100% !important;
+        min-width:0 !important;
+        min-height:0 !important;
+        max-width:none !important;
+        max-height:none !important;
+        aspect-ratio:auto !important;
+        margin:0 !important;
+        overflow:hidden !important;
+      }
+      html.zmc-active body.zmc-native-fullscreen .zmc-native-fullscreen-video-region video {
+        width:100% !important;
+        height:100% !important;
+        max-width:none !important;
+        max-height:none !important;
+        object-fit:contain !important;
+        object-position:center center !important;
+        transform:none !important;
       }
       html.zmc-video-fullscreen,
       html.zmc-video-fullscreen body {
@@ -841,6 +934,137 @@
     for (const selector of CHAT_TARGET_SELECTORS) {
       try { document.querySelectorAll(selector).forEach(hideNode); } catch (_) {}
     }
+  }
+
+  function clearNativeFullscreenMarks() {
+    document.querySelectorAll([
+      '.zmc-native-fullscreen-root',
+      '.zmc-native-layout-reset',
+      '.zmc-native-fullscreen-video-region',
+      '.zmc-native-chat-hidden',
+      '.zmc-native-splitter-hidden',
+    ].join(',')).forEach(node => node.classList.remove(
+      'zmc-native-fullscreen-root',
+      'zmc-native-layout-reset',
+      'zmc-native-fullscreen-video-region',
+      'zmc-native-chat-hidden',
+      'zmc-native-splitter-hidden'
+    ));
+  }
+
+  function elementMarker(node) {
+    if (!(node instanceof Element)) return '';
+    return [
+      node.id,
+      node.className,
+      node.getAttribute('data-testid'),
+      node.getAttribute('role'),
+      node.getAttribute('aria-label'),
+      node.getAttribute('aria-orientation'),
+    ].map(value => typeof value === 'string' ? value : '').join(' ').toLowerCase();
+  }
+
+  function visibleElementRect(node) {
+    if (!(node instanceof Element)) return null;
+    const rect = node.getBoundingClientRect?.();
+    if (!rect || rect.width < 1 || rect.height < 1) return null;
+    const style = getComputedStyle(node);
+    if (style.display === 'none' || style.visibility === 'hidden') return null;
+    return rect;
+  }
+
+  function expandNativeChatPanel(node, rootNode, video) {
+    if (!(node instanceof Element) || node.contains(video) || node.closest('#zmc-root')) return null;
+    let panel = node;
+    const viewportArea = Math.max(1, innerWidth * innerHeight);
+    for (let depth = 0; depth < 4; depth += 1) {
+      const parent = panel.parentElement;
+      if (!parent || parent === rootNode || parent === document.body || parent.contains(video)) break;
+      const rect = visibleElementRect(parent);
+      if (!rect || rect.width * rect.height > viewportArea * 0.72) break;
+      const marker = elementMarker(parent);
+      const ownsChatUi = /chat|message|conversation/.test(marker)
+        || !!parent.querySelector('[role="log"],input[placeholder*="message" i],textarea[placeholder*="message" i]');
+      if (!ownsChatUi) break;
+      panel = parent;
+    }
+    return panel;
+  }
+
+  function markNativeChatPanels(rootNode, video) {
+    const candidates = new Set();
+    for (const selector of NATIVE_FULLSCREEN_CHAT_SELECTORS) {
+      try { rootNode.querySelectorAll(selector).forEach(node => candidates.add(node)); } catch (_) {}
+    }
+    for (const node of candidates) {
+      if (!(node instanceof Element) || node.matches('button,input,textarea,[role="tab"]')) continue;
+      if (node.contains(video) || node.closest('#zmc-root')) continue;
+      const rect = visibleElementRect(node);
+      if (!rect || rect.width < 110 || rect.height < 110) continue;
+      const marker = elementMarker(node);
+      const chatLike = /chat|message|conversation|\blog\b/.test(marker)
+        || node.getAttribute('role') === 'log'
+        || !!node.querySelector('[role="log"],input[placeholder*="message" i],textarea[placeholder*="message" i]');
+      if (!chatLike) continue;
+      expandNativeChatPanel(node, rootNode, video)?.classList.add('zmc-native-chat-hidden');
+    }
+  }
+
+  function markNativeSplitters(rootNode, video) {
+    const candidates = new Set();
+    for (const selector of NATIVE_FULLSCREEN_SPLITTER_SELECTORS) {
+      try { rootNode.querySelectorAll(selector).forEach(node => candidates.add(node)); } catch (_) {}
+    }
+    try {
+      rootNode.querySelectorAll('div,button').forEach(node => {
+        const cursor = getComputedStyle(node).cursor;
+        if (/resize/.test(cursor)) candidates.add(node);
+      });
+    } catch (_) {}
+    for (const node of candidates) {
+      if (!(node instanceof Element) || node.contains(video) || node.closest('#zmc-root')) continue;
+      const rect = visibleElementRect(node);
+      if (!rect) continue;
+      const longAndThin = (rect.width >= 120 && rect.height <= 72 && rect.width >= rect.height * 3)
+        || (rect.height >= 120 && rect.width <= 72 && rect.height >= rect.width * 3);
+      if (!longAndThin) continue;
+      const marker = elementMarker(node);
+      const cursor = getComputedStyle(node).cursor;
+      if (node.getAttribute('role') !== 'separator' && !/resiz|split|separat|drag.?handle/.test(marker) && !/resize/.test(cursor)) continue;
+      node.classList.add('zmc-native-splitter-hidden');
+    }
+  }
+
+  function findNativeFullscreenRoot(videoTarget) {
+    const current = fullscreenElement();
+    if (current instanceof Element && current.contains(videoTarget)) return current;
+    let fallback = null;
+    let node = videoTarget;
+    while (node instanceof Element && node !== document.body) {
+      const rect = visibleElementRect(node);
+      if (rect && rect.width >= innerWidth * 0.85 && rect.height >= innerHeight * 0.85) fallback = node;
+      if (/full.?screen|theater/.test(elementMarker(node)) && fallback) return node;
+      node = node.parentElement;
+    }
+    return fallback || document.body;
+  }
+
+  function syncNativeFullscreenLayout(videoTarget, active) {
+    clearNativeFullscreenMarks();
+    if (!active || !(videoTarget instanceof Element)) return;
+    const video = findPrimaryVideo();
+    if (!(video instanceof HTMLVideoElement)) return;
+    const rootNode = findNativeFullscreenRoot(videoTarget);
+    rootNode.classList.add('zmc-native-fullscreen-root');
+    videoTarget.classList.add('zmc-native-fullscreen-video-region');
+    let node = videoTarget.parentElement;
+    for (let depth = 0; node instanceof Element && depth < 7; depth += 1) {
+      if (node === rootNode || node === document.body) break;
+      node.classList.add('zmc-native-layout-reset');
+      node = node.parentElement;
+    }
+    markNativeChatPanels(rootNode, video);
+    markNativeSplitters(rootNode, video);
   }
 
   function firstVisible(selectors) {
@@ -1507,6 +1731,8 @@
       markVideoTarget(null);
       bindVideo(null);
       body.classList.remove('zmc-fullscreen');
+      body.classList.remove('zmc-native-fullscreen');
+      clearNativeFullscreenMarks();
       if (fullscreenSession) exitVideoOnlyFullscreen();
       return;
     }
@@ -1518,7 +1744,11 @@
     if (room) hideChat();
     else restoreAllHiddenNodes();
     if (fullscreenSession) syncVideoOnlyFullscreen();
-    body.classList.toggle('zmc-fullscreen', room && pseudoFullscreenActive(videoTarget));
+    const anyFullscreen = room && pseudoFullscreenActive(videoTarget);
+    const nativeFullscreen = anyFullscreen && !fullscreenSession;
+    body.classList.toggle('zmc-fullscreen', anyFullscreen);
+    body.classList.toggle('zmc-native-fullscreen', nativeFullscreen);
+    syncNativeFullscreenLayout(videoTarget, nativeFullscreen);
     updateShellState();
     syncPanelState();
   }

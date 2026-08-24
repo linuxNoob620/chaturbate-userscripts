@@ -68,6 +68,14 @@ for (const item of scripts) {
       failures.push(`${item.file}: Reloaded menu calls a private MultiCam helper and can leave the wait overlay active`);
     }
     if (!menuSource.includes('isGithubSyncConfigured')) failures.push(`${item.file}: safe GitHub status bridge is missing from Reloaded menu`);
+    if (!source.includes('ziggy-mobile-reloaded-backdrop')) failures.push(`${item.file}: native mobile Reloaded menu is missing`);
+    if (!source.includes('mobileCleanView: captureMobileCleanViewSettings()')) failures.push(`${item.file}: Mobile Clean View backup component is missing`);
+    const mobileStop = source.indexOf('if (!document.getElementById("desktop-spa-header")){return;}');
+    const reloadedStyle = source.indexOf('    setgenstyle();', mobileStop);
+    if (mobileStop < 0 || reloadedStyle < mobileStop) failures.push(`${item.file}: Reloaded desktop CSS is not isolated from native mobile`);
+  }
+  if (item.file.includes('Desktop Mobile Comfort')) {
+    if (!source.includes('ziggy-mobile-clean-view:import-settings')) failures.push(`${item.file}: shared Suite settings import bridge is missing`);
   }
 
   const metaPath = path.join(root, item.meta);

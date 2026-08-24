@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name               Ziggy Mobile Clean View
 // @namespace          ziggy.chaturbate.mobile-comfort
-// @version            2.0.0
+// @version            2.0.1
 // @description        A clean Chaturbate mobile layout with chat hidden, Picture-in-Picture, and one shared tools dock.
 // @author             Ziggy
 // @homepageURL        https://github.com/linuxNoob620/chaturbate-userscripts
@@ -19,7 +19,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '2.0.0';
+  const VERSION = '2.0.1';
   const STORE_KEY = 'cb_desktop_mobile_comfort_v1';
   const ROOT_ID = 'zmc-root';
   const STYLE_ID = 'zmc-style';
@@ -98,7 +98,6 @@
     try {
       if (typeof GM_setValue === 'function') {
         GM_setValue(STORE_KEY, value);
-        return;
       }
     } catch (_) {}
     try { localStorage.setItem(STORE_KEY, value); } catch (_) {}
@@ -204,7 +203,12 @@
         --zmc-shadow:0 22px 70px rgba(0,0,0,.42);
         --zmc-grid-cols:2;
       }
-      html.zmc-active body { overflow-x:hidden !important; }
+      html.zmc-active,
+      html.zmc-active body {
+        width:100% !important;
+        max-width:100% !important;
+        overflow-x:hidden !important;
+      }
       html.zmc-active .zmc-chat-hidden {
         display:none !important;
         visibility:hidden !important;
@@ -226,6 +230,24 @@
         margin:0 !important;
         padding:6px !important;
         list-style:none !important;
+      }
+      html.zmc-active body.zmc-browse main,
+      html.zmc-active body.zmc-browse .content,
+      html.zmc-active body.zmc-browse [data-testid="room-list"],
+      html.zmc-active body.zmc-browse [data-testid="room-list-container"],
+      html.zmc-active body.zmc-browse .DesktopRoomlistRoot,
+      html.zmc-active body.zmc-browse .HomepagePaginatedRoomlist,
+      html.zmc-active body.zmc-browse .RoomCardGrid {
+        box-sizing:border-box !important;
+        min-width:0 !important;
+        width:100% !important;
+        max-width:100% !important;
+        margin-left:0 !important;
+        margin-right:0 !important;
+      }
+      html.zmc-active body.zmc-browse .RoomCardGrid > * {
+        min-width:0 !important;
+        max-width:100% !important;
       }
       html.zmc-active body.zmc-compact-browse [data-testid="room-card"],
       html.zmc-active body.zmc-compact-browse .RoomCard {
@@ -970,6 +992,19 @@
     if (document.body) ready();
     else document.addEventListener('DOMContentLoaded', ready, { once: true });
   }
+
+  // Mirror these settings into site storage so the Suite can include them in
+  // the same encrypted backup. Tampermonkey storage remains the primary copy.
+  writeStoredValue(JSON.stringify(settings));
+  document.addEventListener('ziggy-mobile-clean-view:import-settings', event => {
+    settings = sanitizeSettings(event.detail);
+    writeStoredValue(JSON.stringify(settings));
+    if (isMobileDevice()) {
+      syncEnvironment();
+      renderSettings();
+      resetIdleTimer();
+    }
+  });
 
   start();
 })();

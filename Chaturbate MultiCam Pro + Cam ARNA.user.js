@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.0.0
+// @version           16.0.1
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -656,10 +656,10 @@
       shortcutOpenRoom: 'Open selected room',
       settingsCenter: 'Settings',
       settingsCenterHint: 'Layout, playback, recording, shortcuts, and settings backup',
-      settingsOnlyHint: 'One file backs up the MultiCam model library, groups, layout, playback, recording, filters, notifications, and shortcuts, plus Reloaded toggles, video preferences, theme, and ignored rooms. Import replaces the current MultiCam model library with the one in the file.',
-      settingsExport: 'Export MultiCam + Reloaded to GitHub',
-      settingsImport: 'Import MultiCam + Reloaded from GitHub',
-      settingsImported: 'MultiCam models, groups, and settings plus Reloaded settings imported',
+      settingsOnlyHint: 'One backup contains the MultiCam model library, groups, layout, playback, recording, filters, notifications, and shortcuts, plus Reloaded and Mobile Clean View settings. Import replaces the current MultiCam model library with the one in the backup.',
+      settingsExport: 'Export all Suite settings to GitHub',
+      settingsImport: 'Import all Suite settings from GitHub',
+      settingsImported: 'MultiCam, Reloaded, and Mobile Clean View settings imported',
       settingsImportedLegacy: 'Older settings-only backup imported; the current MultiCam model list and groups were kept',
       settingsImportConfirm: 'Import this backup? The current MultiCam model list and groups will be deleted and replaced by the list in this file. The current MultiCam configuration will be backed up first.',
       settingsImportLegacyConfirm: 'This is an older settings-only backup and contains no MultiCam model list. Import its settings while keeping the current models and groups?',
@@ -1103,7 +1103,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.0.0',
+    version: '16.0.1',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -1121,6 +1121,8 @@
   const MAX_CONFIG_BYTES = 2 * 1024 * 1024;
   const MAX_CONFIG_BACKUPS = 3;
   const RELOADED_VERSION = '1.8.0';
+  const MOBILE_CLEAN_VIEW_VERSION = '2.0.1';
+  const MOBILE_CLEAN_VIEW_SETTINGS_KEY = 'cb_desktop_mobile_comfort_v1';
   const GITHUB_SYNC_CONFIG_KEY = 'chaturbate_suite_github_sync_v1';
   const GITHUB_SYNC_FORMAT = 'chaturbate-suite-settings-encrypted-v1';
   const GITHUB_SYNC_TARGET = Object.freeze({
@@ -1174,6 +1176,35 @@
       if (typeof value === 'string' && value.length <= 262144) localStorage.setItem(key, value);
     }
     if (typeof snapshot.themeName === 'string') writeCookieSetting('theme_name', snapshot.themeName);
+    return true;
+  }
+
+  function sanitizeMobileCleanViewSettings(snapshot) {
+    const source = snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)
+      ? (snapshot.settings && typeof snapshot.settings === 'object' ? snapshot.settings : snapshot)
+      : {};
+    return {
+      enabled: source.enabled !== false,
+      hidePromos: source.hidePromos !== false,
+      compactBrowse: source.compactBrowse !== false,
+      portraitColumns: clampInt(source.portraitColumns, 1, 3, 2),
+      landscapeColumns: clampInt(source.landscapeColumns, 2, 5, 4),
+      autoHideSeconds: clampInt(source.autoHideSeconds, 0, 30, 5),
+      side: source.side === 'left' || source.handedness === 'left' ? 'left' : 'right',
+    };
+  }
+
+  function captureMobileCleanViewSettings() {
+    let parsed = {};
+    try { parsed = JSON.parse(localStorage.getItem(MOBILE_CLEAN_VIEW_SETTINGS_KEY) || '{}'); } catch (_) {}
+    return { version: MOBILE_CLEAN_VIEW_VERSION, settings: sanitizeMobileCleanViewSettings(parsed) };
+  }
+
+  function restoreMobileCleanViewSettings(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return false;
+    const settings = sanitizeMobileCleanViewSettings(snapshot);
+    localStorage.setItem(MOBILE_CLEAN_VIEW_SETTINGS_KEY, JSON.stringify(settings));
+    document.dispatchEvent(new CustomEvent('ziggy-mobile-clean-view:import-settings', { detail: settings }));
     return true;
   }
 
@@ -1670,7 +1701,7 @@
       showRecordingOnly: false,
     };
     return {
-      format: 'chaturbate-suite-settings-v3',
+      format: 'chaturbate-suite-settings-v4',
       exportedAt: new Date().toISOString(),
       scriptVersion: META.version,
       components: {
@@ -1682,6 +1713,7 @@
           groups: cleanState.groups,
         },
         reloaded: captureReloadedSettings(),
+        mobileCleanView: captureMobileCleanViewSettings(),
       },
     };
   }
@@ -2000,7 +2032,7 @@
     } }, 'Disconnect');
     panel.append(
       $('div', { class: 'roomgrid-github-head' }, [$('h2', {}, 'GitHub cloud backup'), close]),
-      $('p', { class: 'roomgrid-github-copy' }, 'Exports upload one encrypted latest backup. Imports download it and replace the current MultiCam model library after confirmation.'),
+      $('p', { class: 'roomgrid-github-copy' }, 'Exports upload one encrypted latest backup containing MultiCam, Reloaded, and Mobile Clean View settings. Imports download it and replace the current MultiCam model library after confirmation.'),
       $('div', { class: 'roomgrid-github-target' }, `${GITHUB_SYNC_TARGET.owner}/${GITHUB_SYNC_TARGET.repo} · ${GITHUB_SYNC_TARGET.path}`),
       $('label', { class: 'roomgrid-github-field' }, [$('span', {}, 'Device name'), deviceInput]),
       $('label', { class: 'roomgrid-github-field' }, [$('span', {}, 'Fine-grained GitHub token'), tokenInput]),
@@ -2062,11 +2094,13 @@
       : (Array.isArray(multicamComponent?.models) ? multicamComponent.models : null);
     const rawGroups = Array.isArray(multicamComponent?.groups) ? multicamComponent.groups : null;
     const rawReloaded = parsed?.components?.reloaded || parsed?.reloaded;
+    const rawMobileCleanView = parsed?.components?.mobileCleanView || parsed?.mobileCleanView;
     const hasMulticamSettings = !!rawMulticam && typeof rawMulticam === 'object' && !Array.isArray(rawMulticam);
     const replacesRoomLibrary = rawRooms !== null;
     const hasMulticam = hasMulticamSettings || replacesRoomLibrary;
     const hasReloaded = !!rawReloaded && typeof rawReloaded === 'object' && !Array.isArray(rawReloaded);
-    if (!hasMulticam && !hasReloaded) throw new Error('MultiCam or Reloaded settings object missing');
+    const hasMobileCleanView = !!rawMobileCleanView && typeof rawMobileCleanView === 'object' && !Array.isArray(rawMobileCleanView);
+    if (!hasMulticam && !hasReloaded && !hasMobileCleanView) throw new Error('No supported Suite settings were found');
 
     let nextState = null;
     if (hasMulticam) {
@@ -2089,7 +2123,7 @@
       nextSettings.showRecordingOnly = false;
 
       if (replacesRoomLibrary) {
-        // A v3 backup is authoritative: imported rooms/groups replace the old model library instead of merging with it.
+        // A v3/v4 backup is authoritative: imported rooms/groups replace the old model library instead of merging with it.
         nextState = sanitizeState({
           v: current.v,
           rooms: rawRooms,
@@ -2101,7 +2135,7 @@
         nextState = { ...current, settings: nextSettings };
       }
     }
-    if (!nextState && !hasReloaded) throw new Error('no supported settings found');
+    if (!nextState && !hasReloaded && !hasMobileCleanView) throw new Error('no supported settings found');
 
     backupCurrentConfig();
     if (nextState) Storage.save(nextState);
@@ -2114,9 +2148,11 @@
       ));
     }
     if (hasReloaded && !restoreReloadedSettings(rawReloaded)) throw new Error('Reloaded settings are invalid');
+    if (hasMobileCleanView && !restoreMobileCleanViewSettings(rawMobileCleanView)) throw new Error('Mobile Clean View settings are invalid');
     return {
       multicam: !!nextState,
       reloaded: hasReloaded,
+      mobileCleanView: hasMobileCleanView,
       roomsReplaced: replacesRoomLibrary,
       roomCount: nextState ? nextState.rooms.length : null,
     };
@@ -3520,6 +3556,145 @@
       setTimeout(() => toastEl.remove(), ms);
     }
 
+    function initMobileReloadedMenu() {
+      if (!nativeMobilePage) return;
+      const style = $('style', { html: trustedHtml(`
+        .ziggy-mobile-reloaded-link { display:inline-flex !important; align-items:center !important; justify-content:center !important; gap:8px !important; color:inherit !important; text-decoration:none !important; cursor:pointer !important; touch-action:manipulation; }
+        .ziggy-mobile-reloaded-link .ziggy-mobile-reloaded-icon { font-size:25px; line-height:1; }
+        .ziggy-mobile-reloaded-link .ziggy-mobile-reloaded-label { font:750 13px/1.2 system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+        .ziggy-mobile-reloaded-backdrop { position:fixed; inset:0; z-index:2147483500; display:flex; align-items:flex-end; justify-content:center; background:rgba(2,6,23,.70); backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px); font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+        .ziggy-mobile-reloaded-panel { box-sizing:border-box; width:100%; max-height:90dvh; overflow-y:auto; overscroll-behavior:contain; padding:14px max(14px,env(safe-area-inset-right)) max(18px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left)); border:1px solid rgba(255,255,255,.14); border-bottom:0; border-radius:20px 20px 0 0; background:#1d2a3a; color:#f8fafc; box-shadow:0 -20px 70px rgba(0,0,0,.48); }
+        .ziggy-mobile-reloaded-head { position:sticky; top:-14px; z-index:2; display:flex; align-items:center; gap:10px; margin:-14px -2px 10px; padding:14px 2px 10px; background:#1d2a3a; }
+        .ziggy-mobile-reloaded-title { min-width:0; flex:1; }
+        .ziggy-mobile-reloaded-title strong { display:block; font-size:18px; }
+        .ziggy-mobile-reloaded-title span { display:block; margin-top:2px; color:#aeb9c9; font-size:12px; }
+        .ziggy-mobile-reloaded-close { width:44px; height:44px; border:1px solid rgba(255,255,255,.12); border-radius:12px; background:rgba(255,255,255,.08); color:#fff; font-size:22px; cursor:pointer; }
+        .ziggy-mobile-reloaded-section { display:grid; gap:7px; margin-top:12px; }
+        .ziggy-mobile-reloaded-section-title { color:#93c5fd; font-size:12px; font-weight:850; letter-spacing:.04em; text-transform:uppercase; }
+        .ziggy-mobile-reloaded-row { min-height:50px; display:flex; align-items:center; justify-content:space-between; gap:14px; padding:8px 11px; border:1px solid rgba(255,255,255,.11); border-radius:12px; background:rgba(255,255,255,.055); color:#f8fafc; }
+        .ziggy-mobile-reloaded-row span { min-width:0; font-size:14px; font-weight:700; }
+        .ziggy-mobile-reloaded-row input { flex:0 0 auto; width:24px; height:24px; accent-color:#f97316; }
+        .ziggy-mobile-reloaded-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+        .ziggy-mobile-reloaded-action { min-height:48px; padding:9px 11px; border:1px solid rgba(255,255,255,.12); border-radius:12px; background:#0f789e; color:#fff; font-size:13px; font-weight:800; cursor:pointer; touch-action:manipulation; }
+        .ziggy-mobile-reloaded-action.cloud { background:#2563eb; }
+        .ziggy-mobile-reloaded-action.import { background:#a16207; }
+        .ziggy-mobile-reloaded-note { margin-top:10px; padding:9px 11px; border-radius:10px; background:rgba(255,255,255,.05); color:#b9c5d4; font-size:12px; line-height:1.4; }
+        @media (max-width:420px) { .ziggy-mobile-reloaded-actions { grid-template-columns:1fr; } }
+      `)});
+      document.head.appendChild(style);
+
+      const settingDefinitions = [
+        { label: 'Thumbnail zoom', key: 'zoomoff', inverted: true },
+        { label: 'Preview rooms', key: 'animationoff', inverted: true },
+        { label: 'Open rooms in new tab', key: 'newtabon', inverted: true },
+        { label: 'Auto refresh followed', key: 'refreshoff', inverted: false },
+        { label: 'Big thumbnails', key: 'bigthumb', inverted: false },
+        { label: 'Hide male/trans', key: 'hidemt', inverted: false },
+        { label: '480px snapshots', key: 'smallsnap', inverted: false },
+        { label: 'Auto-save recordings every 20 min', key: 'recautosave', inverted: true },
+      ];
+
+      function settingEnabled(definition) {
+        const exists = localStorage.getItem(definition.key) !== null;
+        return definition.inverted ? !exists : exists;
+      }
+
+      function setSettingEnabled(definition, enabled) {
+        const shouldExist = definition.inverted ? !enabled : enabled;
+        if (shouldExist) localStorage.setItem(definition.key, 'foo');
+        else localStorage.removeItem(definition.key);
+        document.dispatchEvent(new CustomEvent('ziggy-suite:reloaded-setting-changed', { detail: definition.key }));
+      }
+
+      function openMobileReloadedPanel() {
+        document.getElementById('ziggy-mobile-reloaded-backdrop')?.remove();
+        const backdrop = $('div', { id: 'ziggy-mobile-reloaded-backdrop', class: 'ziggy-mobile-reloaded-backdrop' });
+        const panel = $('section', { class: 'ziggy-mobile-reloaded-panel', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Reloaded settings' });
+        const close = () => backdrop.remove();
+        const closeButton = $('button', { class: 'ziggy-mobile-reloaded-close', type: 'button', 'aria-label': 'Close Reloaded settings', onclick: close }, '×');
+        const toggles = settingDefinitions.map(definition => {
+          const input = $('input', { type: 'checkbox', checked: settingEnabled(definition), 'aria-label': definition.label });
+          input.addEventListener('change', () => setSettingEnabled(definition, input.checked));
+          return $('label', { class: 'ziggy-mobile-reloaded-row' }, [$('span', {}, definition.label), input]);
+        });
+        const callSuite = (method) => {
+          const api = window.__chaturbateSuiteSettings;
+          if (!api || typeof api[method] !== 'function') { toast('Suite settings are not ready'); return; }
+          close();
+          api[method]();
+        };
+        const configured = !!window.__chaturbateSuiteSettings?.isGithubSyncConfigured?.();
+        panel.append(
+          $('div', { class: 'ziggy-mobile-reloaded-head' }, [
+            $('div', { class: 'ziggy-mobile-reloaded-title' }, [$('strong', {}, '💀 Reloaded'), $('span', {}, `Ziggy Chaturbate Suite ${META.version}`)]),
+            closeButton,
+          ]),
+          $('div', { class: 'ziggy-mobile-reloaded-section' }, [
+            $('div', { class: 'ziggy-mobile-reloaded-section-title' }, 'Backup'),
+            $('div', { class: 'ziggy-mobile-reloaded-actions' }, [
+              $('button', { class: 'ziggy-mobile-reloaded-action cloud', type: 'button', onclick: () => callSuite('exportSettings') }, 'Export all to GitHub'),
+              $('button', { class: 'ziggy-mobile-reloaded-action import', type: 'button', onclick: () => callSuite('importSettings') }, 'Import all from GitHub'),
+              $('button', { class: 'ziggy-mobile-reloaded-action', type: 'button', onclick: () => callSuite('configureGithubSync') }, configured ? 'GitHub Cloud: Configured' : 'Set up GitHub Cloud'),
+            ]),
+          ]),
+          $('div', { class: 'ziggy-mobile-reloaded-section' }, [
+            $('div', { class: 'ziggy-mobile-reloaded-section-title' }, 'Reloaded settings'),
+            ...toggles,
+          ]),
+          $('div', { class: 'ziggy-mobile-reloaded-note' }, 'The encrypted backup now includes the MultiCam model library, Reloaded settings, and Mobile Clean View settings. Desktop-only room controls stay disabled on the native mobile site.'),
+        );
+        backdrop.appendChild(panel);
+        backdrop.addEventListener('click', event => { if (event.target === backdrop) close(); });
+        document.body.appendChild(backdrop);
+        closeButton.focus();
+      }
+
+      function replaceOfficialXLink(scope = document) {
+        const anchors = [];
+        if (scope instanceof HTMLAnchorElement) anchors.push(scope);
+        if (scope === document || scope instanceof Element) anchors.push(...scope.querySelectorAll('a[href]'));
+        for (const link of anchors) {
+          if (link.dataset.ziggyReloadedReplacement === '1') continue;
+          let url;
+          try { url = new URL(link.href, location.href); } catch (_) { continue; }
+          const host = url.hostname.toLowerCase().replace(/^www\./, '');
+          if (!['x.com', 'twitter.com'].includes(host) || !/chaturbate/i.test(`${url.pathname}${url.search}`)) continue;
+          link.dataset.ziggyReloadedReplacement = '1';
+          link.classList.add('ziggy-mobile-reloaded-link');
+          link.href = '#ziggy-reloaded-settings';
+          link.removeAttribute('target');
+          link.setAttribute('aria-label', 'Open Reloaded settings');
+          link.replaceChildren(
+            $('span', { class: 'ziggy-mobile-reloaded-icon', 'aria-hidden': 'true' }, '💀'),
+            $('span', { class: 'ziggy-mobile-reloaded-label' }, 'Reloaded'),
+          );
+          link.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            openMobileReloadedPanel();
+          });
+        }
+      }
+
+      let replaceTimer = 0;
+      const scheduleReplace = () => {
+        clearTimeout(replaceTimer);
+        replaceTimer = setTimeout(() => replaceOfficialXLink(document), 60);
+      };
+      replaceOfficialXLink();
+      const observer = new MutationObserver(records => {
+        for (const record of records) {
+          if (record.type === 'attributes') { scheduleReplace(); continue; }
+          for (const node of record.addedNodes) {
+            if (node instanceof Element) scheduleReplace();
+          }
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['href'] });
+    }
+
+    initMobileReloadedMenu();
+
     // ===========================================================
     // QuickAdd —— 在 chaturbate 主页/分类页的房间卡片上注入「+」按钮
     // 用 MutationObserver 监听动态加载，[data-username] 是稳定锚点
@@ -3548,7 +3723,7 @@
         .multicam-quick-add.added:hover { background: #c62828; }
         html.ziggy-suite-mobile .multicam-quick-add {
           min-width:44px; width:44px; height:44px; padding:0; opacity:1;
-          border-radius:13px; font-size:0; touch-action:manipulation;
+          top:8px; right:auto; left:8px; border-radius:13px; font-size:0; touch-action:manipulation;
         }
         html.ziggy-suite-mobile .multicam-quick-add::before { content:'+'; font-size:22px; line-height:1; }
         html.ziggy-suite-mobile .multicam-quick-add.added::before { content:'✓'; font-size:18px; }
@@ -8751,13 +8926,16 @@
         }
         return;
     }
+
+    // The native mobile site uses a completely different layout. Stop the
+    // legacy desktop component before it injects any CSS; the Suite's compact
+    // mobile Reloaded panel above still exposes the useful shared settings.
+    if (!document.getElementById("desktop-spa-header")){return;}
     setgenstyle();
     if (roomname=="photo_videos"){
         collectiondownload();
         return;
     }
-
-    if (!document.getElementById("desktop-spa-header")){return;}
     var version=GM_info.script.version;
     var scriptname=GM_info.script.name;
     var i=0;
@@ -9238,7 +9416,7 @@
         newelem=document.createElement('span');
         newelem.id="suiteexport";
         newelem.style.cursor="pointer";
-        newelem.innerHTML="Export MultiCam + Reloaded to GitHub";
+        newelem.innerHTML="Export all Suite settings to GitHub";
         newelem.addEventListener("click", function(event){
             event.stopPropagation();
             if (window.__chaturbateSuiteSettings){window.__chaturbateSuiteSettings.exportSettings();}
@@ -9248,7 +9426,7 @@
         newelem=document.createElement('span');
         newelem.id="suiteimport";
         newelem.style.cursor="pointer";
-        newelem.innerHTML="Import MultiCam + Reloaded from GitHub";
+        newelem.innerHTML="Import all Suite settings from GitHub";
         newelem.addEventListener("click", function(event){
             event.stopPropagation();
             if (window.__chaturbateSuiteSettings){window.__chaturbateSuiteSettings.importSettings();}

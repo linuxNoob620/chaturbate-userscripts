@@ -71,10 +71,11 @@ vm.runInContext(`${prelude}\n${implementation}\n;globalThis.__syncTest = {
 
 const api = context.__syncTest;
 const payload = {
-  format: 'chaturbate-suite-settings-v3',
+  format: 'chaturbate-suite-settings-v4',
   components: {
     multicamPro: { rooms: [{ id: 'model_one' }, { id: 'model_two' }], settings: { layoutSize: 2 } },
     reloaded: { storage: { bigthumb: 'yes' } },
+    mobileCleanView: { settings: { compactBrowse: true, portraitColumns: 2, landscapeColumns: 4 } },
   },
 };
 const passphrase = 'correct horse battery staple';

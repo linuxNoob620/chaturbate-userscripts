@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name               Ziggy Mobile Clean View
 // @namespace          ziggy.chaturbate.mobile-comfort
-// @version            2.1.0
+// @version            2.1.1
 // @description        A clean Chaturbate mobile layout with chat hidden, video-only fullscreen, Picture-in-Picture, and one shared tools dock.
 // @author             Ziggy
 // @homepageURL        https://github.com/linuxNoob620/chaturbate-userscripts
@@ -19,7 +19,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '2.1.0';
+  const VERSION = '2.1.1';
   const STORE_KEY = 'cb_desktop_mobile_comfort_v1';
   const ROOT_ID = 'zmc-root';
   const STYLE_ID = 'zmc-style';
@@ -350,6 +350,7 @@
         max-height:none !important;
         margin:0 !important;
         object-fit:var(--zmc-fullscreen-object-fit,cover) !important;
+        object-position:var(--zmc-fullscreen-object-x,50%) var(--zmc-fullscreen-object-y,50%) !important;
         transform:translate3d(var(--zmc-fullscreen-pan-x,0px),var(--zmc-fullscreen-pan-y,0px),0) scale(var(--zmc-fullscreen-zoom,1)) !important;
         transform-origin:center center !important;
         transition:none !important;
@@ -923,7 +924,7 @@
   }
 
   function fullscreenBounds(session = fullscreenSession) {
-    if (!session?.host || !session.video) return { maxX: 0, maxY: 0 };
+    if (!session?.host || !session.video) return { cropMaxX: 0, cropMaxY: 0, zoomMaxX: 0, zoomMaxY: 0 };
     const rect = session.host.getBoundingClientRect();
     const width = Math.max(1, rect.width || innerWidth || 1);
     const height = Math.max(1, rect.height || innerHeight || 1);
@@ -932,12 +933,24 @@
     const baseScale = session.mode === 'fill'
       ? Math.max(width / intrinsicWidth, height / intrinsicHeight)
       : Math.min(width / intrinsicWidth, height / intrinsicHeight);
-    const drawnWidth = intrinsicWidth * baseScale * session.zoom;
-    const drawnHeight = intrinsicHeight * baseScale * session.zoom;
+    const baseWidth = intrinsicWidth * baseScale;
+    const baseHeight = intrinsicHeight * baseScale;
+    const fillMode = session.mode === 'fill';
     return {
-      maxX: Math.max(0, (drawnWidth - width) / 2),
-      maxY: Math.max(0, (drawnHeight - height) / 2),
+      cropMaxX: fillMode ? Math.max(0, (baseWidth - width) / 2) : 0,
+      cropMaxY: fillMode ? Math.max(0, (baseHeight - height) / 2) : 0,
+      zoomMaxX: fillMode
+        ? Math.max(0, width * (session.zoom - 1) / 2)
+        : Math.max(0, (baseWidth * session.zoom - width) / 2),
+      zoomMaxY: fillMode
+        ? Math.max(0, height * (session.zoom - 1) / 2)
+        : Math.max(0, (baseHeight * session.zoom - height) / 2),
     };
+  }
+
+  function objectPositionPercent(pan, maximum) {
+    if (maximum <= 0.01) return 50;
+    return clampNumber(50 - (pan / maximum) * 50, 0, 100);
   }
 
   function updateFullscreenTransform() {
@@ -945,17 +958,25 @@
     if (!session?.host || !session.video) return;
     session.zoom = clampNumber(session.zoom, 1, 3);
     const bounds = fullscreenBounds(session);
-    session.panX = clampNumber(session.panX, -bounds.maxX, bounds.maxX);
-    session.panY = clampNumber(session.panY, -bounds.maxY, bounds.maxY);
+    session.cropPanX = clampNumber(session.cropPanX, -bounds.cropMaxX, bounds.cropMaxX);
+    session.cropPanY = clampNumber(session.cropPanY, -bounds.cropMaxY, bounds.cropMaxY);
+    session.panX = clampNumber(session.panX, -bounds.zoomMaxX, bounds.zoomMaxX);
+    session.panY = clampNumber(session.panY, -bounds.zoomMaxY, bounds.zoomMaxY);
     session.host.style.setProperty('--zmc-fullscreen-object-fit', session.mode === 'fill' ? 'cover' : 'contain');
+    session.host.style.setProperty('--zmc-fullscreen-object-x', objectPositionPercent(session.cropPanX, bounds.cropMaxX).toFixed(3) + '%');
+    session.host.style.setProperty('--zmc-fullscreen-object-y', objectPositionPercent(session.cropPanY, bounds.cropMaxY).toFixed(3) + '%');
     session.host.style.setProperty('--zmc-fullscreen-zoom', String(session.zoom));
     session.host.style.setProperty('--zmc-fullscreen-pan-x', session.panX.toFixed(2) + 'px');
     session.host.style.setProperty('--zmc-fullscreen-pan-y', session.panY.toFixed(2) + 'px');
     if (session.controls) {
       session.controls.dataset.mode = session.mode;
       session.controls.dataset.zoom = session.zoom.toFixed(3);
-      session.controls.dataset.panX = session.panX.toFixed(2);
-      session.controls.dataset.panY = session.panY.toFixed(2);
+      session.controls.dataset.panX = (session.cropPanX + session.panX).toFixed(2);
+      session.controls.dataset.panY = (session.cropPanY + session.panY).toFixed(2);
+      session.controls.dataset.cropPanX = session.cropPanX.toFixed(2);
+      session.controls.dataset.cropPanY = session.cropPanY.toFixed(2);
+      session.controls.dataset.zoomPanX = session.panX.toFixed(2);
+      session.controls.dataset.zoomPanY = session.panY.toFixed(2);
       session.controls.querySelector('.zmc-fullscreen-status').textContent = (session.mode === 'fill' ? 'Fill ' : 'Fit ') + session.zoom.toFixed(1) + '×';
       session.controls.querySelector('[data-mode="fit"]')?.classList.toggle('is-active', session.mode === 'fit');
       session.controls.querySelector('[data-mode="fill"]')?.classList.toggle('is-active', session.mode === 'fill');
@@ -970,6 +991,8 @@
       session.zoom = 1;
       session.panX = 0;
       session.panY = 0;
+      session.cropPanX = 0;
+      session.cropPanY = 0;
     }
     updateFullscreenTransform();
     showFullscreenControls();
@@ -996,6 +1019,8 @@
     session.zoom = 1;
     session.panX = 0;
     session.panY = 0;
+    session.cropPanX = 0;
+    session.cropPanY = 0;
     updateFullscreenTransform();
     showFullscreenControls();
   }
@@ -1079,6 +1104,8 @@
       zoom: session.zoom,
       panX: session.panX,
       panY: session.panY,
+      cropPanX: session.cropPanX,
+      cropPanY: session.cropPanY,
       focalX: local.x,
       focalY: local.y,
       moved: true,
@@ -1100,6 +1127,8 @@
         startY: event.clientY,
         panX: session.panX,
         panY: session.panY,
+        cropPanX: session.cropPanX,
+        cropPanY: session.cropPanY,
         moved: false,
       };
     } else if (session.pointers.size === 2) {
@@ -1130,8 +1159,17 @@
       const dx = event.clientX - gesture.startX;
       const dy = event.clientY - gesture.startY;
       if (Math.hypot(dx, dy) > 7) gesture.moved = true;
-      session.panX = gesture.panX + dx;
-      session.panY = gesture.panY + dy;
+      if (session.mode === 'fill' && session.zoom <= 1.001) {
+        session.cropPanX = gesture.cropPanX + dx;
+        session.cropPanY = gesture.cropPanY + dy;
+        session.panX = gesture.panX;
+        session.panY = gesture.panY;
+      } else {
+        session.panX = gesture.panX + dx;
+        session.panY = gesture.panY + dy;
+        session.cropPanX = gesture.cropPanX;
+        session.cropPanY = gesture.cropPanY;
+      }
       updateFullscreenTransform();
     }
   }
@@ -1158,7 +1196,12 @@
     }
     if (session.pointers.size === 1) {
       const [pointerId, point] = session.pointers.entries().next().value;
-      session.gesture = { kind: 'pan', pointerId, startX: point.x, startY: point.y, panX: session.panX, panY: session.panY, moved: true };
+      session.gesture = {
+        kind: 'pan', pointerId, startX: point.x, startY: point.y,
+        panX: session.panX, panY: session.panY,
+        cropPanX: session.cropPanX, cropPanY: session.cropPanY,
+        moved: true,
+      };
     } else if (!session.pointers.size) {
       session.gesture = null;
     }
@@ -1187,7 +1230,10 @@
     session.host?.querySelectorAll('.zmc-video-keep').forEach(node => node.classList.remove('zmc-video-keep'));
     session.host?.querySelectorAll('.zmc-video-only-video').forEach(node => node.classList.remove('zmc-video-only-video'));
     session.host?.classList.remove('zmc-video-only-host', 'zmc-video-only-fallback');
-    for (const property of ['--zmc-fullscreen-object-fit', '--zmc-fullscreen-zoom', '--zmc-fullscreen-pan-x', '--zmc-fullscreen-pan-y']) {
+    for (const property of [
+      '--zmc-fullscreen-object-fit', '--zmc-fullscreen-object-x', '--zmc-fullscreen-object-y',
+      '--zmc-fullscreen-zoom', '--zmc-fullscreen-pan-x', '--zmc-fullscreen-pan-y',
+    ]) {
       session.host?.style.removeProperty(property);
     }
     document.documentElement.classList.remove('zmc-video-fullscreen');
@@ -1238,6 +1284,8 @@
       zoom: 1,
       panX: 0,
       panY: 0,
+      cropPanX: 0,
+      cropPanY: 0,
       pointers: new Map(),
       gesture: null,
       lastTap: null,

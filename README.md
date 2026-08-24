@@ -2,13 +2,13 @@
 
 This repository publishes the stable update channel for two Tampermonkey userscripts:
 
-- **Chaturbate MultiCam Pro + Cam ARNA** — MultiCam workstation, Cam ARNA dock, and Reloaded tools.
-- **Chaturbate Desktop Mobile Comfort** — responsive controls for native-mobile and desktop-on-phone layouts.
+- **Ziggy Chaturbate Suite** — RoomGrid MultiCam workstation, Cam ARNA, Reloaded tools, recording, split view, and encrypted settings sync.
+- **Ziggy Mobile Clean View** — native-mobile layout with chat hidden, Picture-in-Picture, and one shared tools dock.
 
 ## Install
 
-- [Install MultiCam Pro + Cam ARNA](https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.user.js)
-- [Install Desktop Mobile Comfort](https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20Desktop%20Mobile%20Comfort.user.js)
+- [Install Ziggy Chaturbate Suite](https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.user.js)
+- [Install Ziggy Mobile Clean View](https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20Desktop%20Mobile%20Comfort.user.js)
 
 Install each script from its link on every device. Tampermonkey will use the embedded `@updateURL` and `@downloadURL` values for later update checks.
 

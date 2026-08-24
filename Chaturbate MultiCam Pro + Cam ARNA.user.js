@@ -1,60 +1,13 @@
 // ==UserScript==
-// @name              Chaturbate MultiCam Pro + Cam ARNA
-// @name:zh-CN        Chaturbate 多开直播窗口
+// @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           15.11.1
+// @version           16.0.0
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
 // @downloadURL       https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.user.js
-// @description       MultiCam Pro workstation, Cam ARNA dock tab, and Chaturbate Reloaded 1.8.0 in one userscript.
-// @description:de    All-in-one-Livestream-Workstation: Multi-Room-Layouts, segmentierte Aufnahme, Reconnect, Warnungen, Screenshots, Wiedergabe, Teilen, temporäre URLs und Konfigurations-Tools.
-// @description:es    Herramienta todo en uno para directos: cuadrícula/enfoque multisalón, grabación segmentada, reconexión, alertas, capturas, reproducción, compartir, URL temporales y configuración.
-// @description:es-CO Herramienta todo en uno para directos: cuadrícula/enfoque multisalón, grabación segmentada, reconexión, alertas, capturas, reproducción, compartir, URL temporales y configuración.
-// @description:it    Strumento tutto in uno per livestream: layout multi-room, registrazione segmentata, riconnessione, avvisi, screenshot, riproduzione, condivisione, URL temporanei e configurazione.
-// @description:fr    Outil tout-en-un pour livestreams : vues multi-salons, enregistrement segmenté, reconnexion, alertes, captures, lecture, partage, URL temporaires et configuration.
-// @description:fr-CA Outil tout-en-un pour livestreams : vues multi-salons, enregistrement segmenté, reconnexion, alertes, captures, lecture, partage, URL temporaires et configuration.
-// @description:ru    Универсальный инструмент для livestream: сетка/фокус нескольких комнат, сегментная запись, переподключение, оповещения, снимки, воспроизведение, ссылки и настройки.
-// @description:tr    Can yayınlar için hepsi bir arada araç: çoklu oda düzenleri, parçalı kayıt, yeniden bağlanma, uyarılar, ekran görüntüleri, oynatma, paylaşım ve ayarlar.
-// @description:ro    Instrument all-in-one pentru livestream: layout multi-room, înregistrare segmentată, reconectare, alerte, capturi, redare, partajare, URL temporare și configurare.
-// @description:no    Alt-i-ett-verktøy for direktestrømmer: multirom-oppsett, segmentert opptak, tilkobling på nytt, varsler, skjermbilder, avspilling, deling og innstillinger.
-// @description:nl    Alles-in-één livestreamtool: multi-room raster/focus, gesegmenteerde opname, opnieuw verbinden, meldingen, screenshots, afspelen, delen, tijdelijke URL's en configuratie.
-// @description:pl    Wszechstronne narzędzie livestream: układy wielu pokoi, nagrywanie segmentowe, ponowne łączenie, alerty, zrzuty, odtwarzanie, udostępnianie i konfiguracja.
-// @description:ja    ライブ配信用オールインワンツール：複数ルーム表示、分割録画、自動再接続、通知、スクリーンショット、再生操作、共有、一時URL、設定管理。
-// @description:el    Εργαλείο livestream όλα σε ένα: πολλαπλές αίθουσες, τμηματική εγγραφή, επανασύνδεση, ειδοποιήσεις, στιγμιότυπα, αναπαραγωγή, κοινή χρήση και ρυθμίσεις.
-// @description:hu    Minden egyben livestream eszköz: több szoba elrendezése, szegmenses felvétel, újracsatlakozás, riasztások, képernyőképek, lejátszás, megosztás és beállítások.
-// @description:fi    All-in-one-livestream-työkalu: monihuoneasettelut, segmentoitu tallennus, uudelleenyhdistys, hälytykset, kuvakaappaukset, toisto, jakaminen ja asetukset.
-// @description:ar    أداة بث مباشر شاملة: تخطيطات غرف متعددة، تسجيل مقسم، إعادة اتصال ذكية، تنبيهات، لقطات شاشة، تشغيل، مشاركة، روابط مؤقتة وأدوات إعداد.
-// @description:hi    लाइवस्ट्रीम के लिए ऑल-इन-वन टूल: मल्टी-रूम लेआउट, सेगमेंट रिकॉर्डिंग, रीकनेक्ट, अलर्ट, स्क्रीनशॉट, प्लेबैक, शेयरिंग, अस्थायी URL और कॉन्फिग।
-// @description:id    Alat livestream serba bisa: tata letak multi-room, rekaman tersegmentasi, sambung ulang, peringatan, screenshot, pemutaran, berbagi, URL sementara, dan konfigurasi.
-// @description:ko    라이브스트림 올인원 도구: 다중 방 레이아웃, 분할 녹화, 재연결, 알림, 스크린샷, 재생 제어, 공유, 임시 URL 및 설정 도구.
-// @description:pt-PT Ferramenta tudo-em-um para livestream: layouts multi-sala, gravação segmentada, reconexão, alertas, capturas, reprodução, partilha, URLs temporários e configuração.
-// @description:pt-BR Ferramenta tudo em um para livestream: layouts multi-sala, gravação segmentada, reconexão, alertas, capturas, reprodução, compartilhamento, URLs temporários e configuração.
-// @description:zh    一体化直播工作台工具：多房间网格/主屏布局、分段录制、智能重连、提醒、截图、播放控制、分享、临时 URL 和配置管理。
-// @description:zh-CN 一体化直播工作台工具：多房间网格/主屏布局、分段录制、智能重连、提醒、截图、播放控制、分享、临时 URL 和配置管理。
-// @description:zh-TW 一體化直播工作台工具：多房間網格/主屏佈局、分段錄製、智慧重連、提醒、截圖、播放控制、分享、臨時 URL 和設定管理。
-// @description:cs    Univerzální nástroj pro livestream: rozvržení více místností, segmentované nahrávání, opětovné připojení, upozornění, snímky, přehrávání, sdílení a nastavení.
-// @description:sk    Univerzálny nástroj pre livestream: rozloženia viacerých miestností, segmentované nahrávanie, opätovné pripojenie, upozornenia, snímky, prehrávanie, zdieľanie a nastavenia.
-// @description:sl    Vsestransko orodje za livestream: večsobne postavitve, segmentno snemanje, ponovna povezava, opozorila, posnetki zaslona, predvajanje, deljenje in nastavitve.
-// @description:sv    Allt-i-ett-verktyg för livestream: flerrumslayouter, segmenterad inspelning, återanslutning, varningar, skärmbilder, uppspelning, delning och inställningar.
-// @description:sr    Sve-u-jednom alat za livestream: rasporedi više soba, segmentirano snimanje, ponovno povezivanje, upozorenja, snimci ekrana, reprodukcija, deljenje i podešavanja.
-// @description:af    Alles-in-een livestream-nutsding: veelkamer-uitlegte, gesegmenteerde opname, herkoppeling, waarskuwings, skermskote, afspeel, deel, tydelike URL's en instellings.
-// @description:sq    Mjet gjithëpërfshirës për livestream: pamje me shumë dhoma, regjistrim me segmente, rilidhje, njoftime, pamje ekrani, riprodhim, ndarje dhe konfigurim.
-// @description:hy    Լայվսթրիմի համապարփակ գործիք՝ բազմասենյակ դասավորություններ, հատվածային ձայնագրում, վերամիացում, ծանուցումներ, սքրինշոթեր, նվագարկում, կիսում և կարգավորումներ։
-// @description:be    Універсальны інструмент для livestream: некалькі пакояў, сегментаваны запіс, паўторнае падключэнне, абвесткі, здымкі экрана, прайграванне, абмен і налады.
-// @description:bg    Универсален инструмент за livestream: многостаен изглед, сегментиран запис, повторно свързване, известия, снимки, възпроизвеждане, споделяне и настройки.
-// @description:da    Alt-i-et livestream-værktøj: multirums-layouts, segmenteret optagelse, genforbindelse, advarsler, skærmbilleder, afspilning, deling, midlertidige URL'er og opsætning.
-// @description:et    Kõik-ühes livestreami tööriist: mitme ruumi paigutused, segmenditud salvestus, taasühendus, teavitused, kuvatõmmised, taasesitus, jagamine ja seaded.
-// @description:he    כלי סטרימינג הכל-באחד: פריסות מרובות חדרים, הקלטה מחולקת, חיבור מחדש, התראות, צילומי מסך, הפעלה, שיתוף, כתובות זמניות והגדרות.
-// @description:hr    Sve-u-jednom alat za livestream: rasporedi više soba, segmentirano snimanje, ponovno povezivanje, upozorenja, snimke zaslona, reprodukcija, dijeljenje i postavke.
-// @description:fa    ابزار جامع پخش زنده: چیدمان چند اتاق، ضبط بخش‌بندی‌شده، اتصال مجدد، هشدارها، اسکرین‌شات، پخش، اشتراک‌گذاری، URL موقت و تنظیمات.
-// @description:ur    لائیو اسٹریم کے لیے آل اِن ون ٹول: ملٹی روم لے آؤٹ، سیگمنٹڈ ریکارڈنگ، دوبارہ کنکشن، الرٹس، اسکرین شاٹس، پلے بیک، شیئرنگ اور سیٹنگز۔
-// @description:bn    লাইভস্ট্রিমের অল-ইন-ওয়ান টুল: মাল্টি-রুম লেআউট, সেগমেন্টেড রেকর্ডিং, রিকানেক্ট, অ্যালার্ট, স্ক্রিনশট, প্লেব্যাক, শেয়ারিং ও সেটিংস।
-// @description:th    เครื่องมือไลฟ์สตรีมแบบครบวงจร: เลย์เอาต์หลายห้อง การบันทึกแบบแบ่งช่วง การเชื่อมต่อใหม่ การแจ้งเตือน ภาพหน้าจอ การเล่น การแชร์ และการตั้งค่า
-// @description:eo    Ĉio-en-unu livestream-ilo: plurĉambraj aranĝoj, segmenta registrado, rekonekto, atentigoj, ekrankopioj, reprodukto, kunhavigo, portempaj URL-oj kaj agordoj.
-// @description:ug    بىردە ھەممىسى بار livestream قورالى: كۆپ ھۇجرىلىق كۆرۈنۈش، بۆلەكلىك خاتىرىلەش، قايتا ئۇلاش، ئاگاھلاندۇرۇش، ئېكران سۈرىتى، قويۇش، ھەمبەھىرلەش ۋە تەڭشەكلەر.
-// @description:vi    Công cụ livestream tất cả trong một: bố cục nhiều phòng, ghi theo phân đoạn, kết nối lại, cảnh báo, ảnh chụp màn hình, phát lại, chia sẻ, URL tạm thời và cấu hình.
-// @author            RYUJO + user006-ui + Ladroop
+// @description       RoomGrid MultiCam workstation, Cam ARNA, Reloaded tools, split view, recording, and encrypted settings sync.
+// @author            Ziggy
 // @license           MIT
 // @match             https://chaturbate.com/*
 // @match             https://*.chaturbate.com/*
@@ -125,8 +78,7 @@
 (function () {
   'use strict';
 
-  // v9.0: 防止脚本被重复粘贴 / 重复安装时同页运行两次。
-  // 你上传的 enhancer.txt 是两个相同脚本拼在一起；没有这个保护会导致 UI、轮询、HLS 实例重复。
+  // Prevent duplicate installations from mounting a second UI or media service.
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
     try { console.warn('[RoomGrid] duplicate userscript instance blocked'); } catch (_) {}
@@ -134,9 +86,7 @@
   }
   window[INSTANCE_KEY] = true;
 
-  /* =============================================================
-   * 0. 工具层 / Utils
-   * ============================================================= */
+  /* Core utilities */
   const $ = (tag, props = {}, children = []) => {
     const el = document.createElement(tag);
     for (const [k, v] of Object.entries(props)) {
@@ -495,7 +445,7 @@
   const I18N = {
     en: {
       // ---- workstation chrome ----
-      title: 'RoomGrid MultiCam Pro',
+      title: 'Ziggy Room Suite',
       appTagline: 'All-in-one multiview workstation for rooms, recording, alerts, screenshots, reconnects, and data tools.',
       addPlaceholder: 'Username ↵',
       searchPlaceholder: 'Search rooms',
@@ -819,7 +769,7 @@
       aboutClose: 'Close',
     },
     zh: {
-      title: 'RoomGrid MultiCam Pro',
+      title: 'Ziggy Room Suite',
       appTagline: '多房间、多画面、录制、提醒、截图、重连和数据维护的一体化工作台。',
       addPlaceholder: '输入用户名 ↵',
       searchPlaceholder: '搜索房间',
@@ -1153,8 +1103,8 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '15.11.1',
-    author: 'RYUJO',
+    version: '16.0.0',
+    author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
     eth: '0x6ad5b8Baf993C1C377B81Fa277c5d8350e339D07',
@@ -2952,7 +2902,11 @@
     const uaMobile = navigator.userAgentData?.mobile === true || /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent || '');
     const screenShortEdge = Math.min(Number(window.screen?.width) || 9999, Number(window.screen?.height) || 9999);
     const viewportShortEdge = Math.min(Number(window.innerWidth) || 9999, Number(window.innerHeight) || 9999);
-    return (uaMobile || (coarse && touch)) && Math.min(screenShortEdge, viewportShortEdge) <= 700;
+    return (uaMobile && viewportShortEdge <= 1000) || (coarse && touch && screenShortEdge <= 700);
+  }
+
+  function isNativeMobileSite() {
+    return navigator.userAgentData?.mobile === true || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
   }
 
   const isWorkstation = new URLSearchParams(location.search).get('multicam_mode') === '1';
@@ -2964,6 +2918,9 @@
    * ============================================================= */
   function initInjector() {
     const ROOM_PATH = /^\/([a-zA-Z0-9_-]+)\/?$/;
+    const nativeMobilePage = isNativeMobileSite();
+    document.documentElement.classList.toggle('ziggy-suite-mobile', nativeMobilePage);
+    document.documentElement.dataset.ziggySuiteAvailable = '1';
 
     // ---- 当前房间（响应式：URL / canonical / DOM 变化时自动重算）----
     let currentRoom = null;
@@ -3097,6 +3054,10 @@
     }
 
     function ensureWorkshopHeaderButton() {
+      if (nativeMobilePage) {
+        document.getElementById('roomgrid-workshop-button')?.remove();
+        return;
+      }
       if (document.getElementById('roomgrid-workshop-button')) return;
       const logo = findHeaderLogoContainer();
       const parent = logo?.parentElement;
@@ -3266,11 +3227,34 @@
       .roomgrid-dock.is-collapsed .roomgrid-dock-body { display:none; }
       .roomgrid-dock.is-collapsed .roomgrid-dock-head { border-radius:999px; padding:8px 10px; }
       .roomgrid-dock.is-collapsed .roomgrid-dock-sub, .roomgrid-dock.is-collapsed .roomgrid-dock-chevron { display:none; }
+      html.ziggy-suite-mobile[data-ziggy-mobile-shell="1"] .roomgrid-dock.is-collapsed { display:none !important; }
+      html.ziggy-suite-mobile .roomgrid-dock:not(.is-collapsed) {
+        position:fixed !important; inset:auto 0 0 0 !important; width:100vw !important; max-width:none !important;
+        padding:0 !important; transform:none !important; z-index:2147483400 !important;
+      }
+      html.ziggy-suite-mobile .roomgrid-dock:not(.is-collapsed) .roomgrid-dock-card {
+        max-height:min(78dvh,720px); border-radius:20px 20px 0 0; border-bottom:0;
+        box-shadow:0 -18px 54px rgba(2,6,23,.48);
+      }
+      html.ziggy-suite-mobile .roomgrid-dock:not(.is-collapsed) .roomgrid-dock-head { min-height:54px; padding:9px 12px; touch-action:manipulation; }
+      html.ziggy-suite-mobile .roomgrid-dock:not(.is-collapsed) .roomgrid-dock-body {
+        max-height:calc(min(78dvh,720px) - 54px); overflow-y:auto; overscroll-behavior:contain;
+        padding-bottom:max(12px,env(safe-area-inset-bottom));
+      }
+      html.ziggy-suite-mobile .roomgrid-dock:not(.is-collapsed) .roomgrid-dock-action,
+      html.ziggy-suite-mobile .roomgrid-dock:not(.is-collapsed) .roomgrid-dock-tab,
+      html.ziggy-suite-mobile .roomgrid-dock:not(.is-collapsed) .roomgrid-dock-link { min-height:44px; touch-action:manipulation; }
+      html.ziggy-suite-mobile .roomgrid-dock:not(.is-collapsed) .roomgrid-arna-pane { max-height:none; overflow:visible; }
       @media (max-width:560px), (pointer:coarse) and (max-width:1024px), (orientation:landscape) and (max-height:650px) {
         .roomgrid-workshop-button { width:44px !important; min-width:44px !important; max-width:44px !important; height:44px !important; min-height:44px !important; padding:0 !important; margin-right:6px !important; border-radius:12px; }
         .roomgrid-workshop-button-label { display:none !important; }
         .roomgrid-workshop-button-icon { font-size:20px; }
         .roomgrid-header-logo-target { flex:0 1 auto !important; }
+      }
+      @media (orientation:landscape) and (max-height:650px) {
+        html.ziggy-suite-mobile .roomgrid-dock:not(.is-collapsed) { left:auto !important; width:min(520px,62vw) !important; }
+        html.ziggy-suite-mobile .roomgrid-dock:not(.is-collapsed) .roomgrid-dock-card { max-height:100dvh; border-radius:18px 0 0 18px; }
+        html.ziggy-suite-mobile .roomgrid-dock:not(.is-collapsed) .roomgrid-dock-body { max-height:calc(100dvh - 54px); }
       }
       @media (max-width:560px) { .roomgrid-dock.arna-active { right:8px; width:calc(100vw - 16px); } .roomgrid-arna-grid { grid-template-columns:1fr; } }
       @media (orientation:landscape) and (max-height:650px) { html.cmc-active body.cmc-room.cmc-has-bottom-nav:not(.cmc-controls-hidden):not(.cmc-chat-open):not(.cmc-fullscreen) .roomgrid-dock:not(.roomgrid-user-positioned) { bottom:calc(var(--cmc-nav-h,52px) + env(safe-area-inset-bottom) + 10px); } }
@@ -3373,6 +3357,17 @@
       addBtn.classList.toggle('warn', !!(currentRoom && Storage.has(currentRoom)));
       addBtn.disabled = !currentRoom;
       addBtn.style.opacity = currentRoom ? '1' : '.55';
+      publishSuiteState();
+    }
+
+    function publishSuiteState() {
+      const html = document.documentElement;
+      html.dataset.ziggySuiteAvailable = '1';
+      if (currentRoom) html.dataset.ziggySuiteRoom = currentRoom;
+      else delete html.dataset.ziggySuiteRoom;
+      html.dataset.ziggySuiteSaved = currentRoom && Storage.has(currentRoom) ? '1' : '0';
+      html.dataset.ziggySuiteDockOpen = collapsed ? '0' : '1';
+      document.dispatchEvent(new CustomEvent('ziggy-suite:state'));
     }
     currentRoomSubs.add(updateDockRoom);
     currentRoomSubs.add((room) => { if (activeDockTab === 'arna') camArna.activate(room); });
@@ -3381,6 +3376,7 @@
     function syncDock() {
       root.classList.toggle('is-collapsed', !!collapsed);
       root.querySelector('.roomgrid-dock-chevron').textContent = collapsed ? '▴' : '▾';
+      publishSuiteState();
     }
 
     function getDockAutoCollapseSeconds() {
@@ -3428,16 +3424,32 @@
       else setDockCollapsed(true);
     };
 
+    document.addEventListener('ziggy-suite:open-workshop', openWorkstationNew);
+    document.addEventListener('ziggy-suite:toggle-roomgrid', () => setDockCollapsed(false, 'multicam'));
+    document.addEventListener('ziggy-suite:toggle-current-room', () => {
+      if (currentRoom) toggleCurrentRoomSaved();
+      else toast(t('dockNoRoom'));
+    });
+    document.addEventListener('ziggy-mobile-shell:ready', publishSuiteState);
+    window.addEventListener('pagehide', () => {
+      delete document.documentElement.dataset.ziggySuiteAvailable;
+      delete document.documentElement.dataset.ziggySuiteRoom;
+      delete document.documentElement.dataset.ziggySuiteSaved;
+      delete document.documentElement.dataset.ziggySuiteDockOpen;
+    });
+
     root.appendChild($('div', { class: 'roomgrid-dock-card' }, [head, body]));
     document.body.appendChild(root);
-    ensureWorkshopHeaderButton();
-    const ensureWorkshopHeaderButtonSoon = debounce(ensureWorkshopHeaderButton, 120);
-    try {
-      const workshopButtonMo = new MutationObserver(() => {
-        if (!document.getElementById('roomgrid-workshop-button')) ensureWorkshopHeaderButtonSoon();
-      });
-      workshopButtonMo.observe(document.body, { childList: true, subtree: true });
-    } catch (_) {}
+    if (!nativeMobilePage) {
+      ensureWorkshopHeaderButton();
+      const ensureWorkshopHeaderButtonSoon = debounce(ensureWorkshopHeaderButton, 120);
+      try {
+        const workshopButtonMo = new MutationObserver(() => {
+          if (!document.getElementById('roomgrid-workshop-button')) ensureWorkshopHeaderButtonSoon();
+        });
+        workshopButtonMo.observe(document.body, { childList: true, subtree: true });
+      } catch (_) {}
+    }
     updateDockRoom();
     setDockTab('multicam');
     syncDock();
@@ -3447,28 +3459,30 @@
       root.addEventListener(eventName, () => { if (!collapsed) scheduleDockAutoCollapse(); }, true);
     }
 
-    head.addEventListener('mousedown', (e) => {
-      sx = e.clientX; sy = e.clientY;
-      const rect = root.getBoundingClientRect();
-      ox = rect.left; oy = rect.top;
-      dragged = false;
-      const move = (ev) => {
-        if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) > 6) dragged = true;
-        if (dragged) {
-          root.classList.add('roomgrid-user-positioned');
-          root.style.left = (ox + ev.clientX - sx) + 'px';
-          root.style.top = (oy + ev.clientY - sy) + 'px';
-          root.style.right = 'auto';
-          root.style.bottom = 'auto';
-        }
-      };
-      const up = () => {
-        document.removeEventListener('mousemove', move);
-        document.removeEventListener('mouseup', up);
-      };
-      document.addEventListener('mousemove', move);
-      document.addEventListener('mouseup', up);
-    });
+    if (!nativeMobilePage) {
+      head.addEventListener('mousedown', (e) => {
+        sx = e.clientX; sy = e.clientY;
+        const rect = root.getBoundingClientRect();
+        ox = rect.left; oy = rect.top;
+        dragged = false;
+        const move = (ev) => {
+          if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) > 6) dragged = true;
+          if (dragged) {
+            root.classList.add('roomgrid-user-positioned');
+            root.style.left = (ox + ev.clientX - sx) + 'px';
+            root.style.top = (oy + ev.clientY - sy) + 'px';
+            root.style.right = 'auto';
+            root.style.bottom = 'auto';
+          }
+        };
+        const up = () => {
+          document.removeEventListener('mousemove', move);
+          document.removeEventListener('mouseup', up);
+        };
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', up);
+      });
+    }
 
     // —— 快捷键 ——
     document.addEventListener('keydown', (e) => {
@@ -3532,6 +3546,12 @@
         .multicam-quick-add.added { opacity: 1; }
         .multicam-quick-add.added { background: #16a34a; opacity: 1; }
         .multicam-quick-add.added:hover { background: #c62828; }
+        html.ziggy-suite-mobile .multicam-quick-add {
+          min-width:44px; width:44px; height:44px; padding:0; opacity:1;
+          border-radius:13px; font-size:0; touch-action:manipulation;
+        }
+        html.ziggy-suite-mobile .multicam-quick-add::before { content:'+'; font-size:22px; line-height:1; }
+        html.ziggy-suite-mobile .multicam-quick-add.added::before { content:'✓'; font-size:18px; }
       `)});
       document.head.appendChild(style);
 
@@ -3574,28 +3594,30 @@
         updateBtnState(btn, username);
       }
 
-      // ---- 检测候选 host 元素 ----
-      function scan() {
+      // Scan only newly inserted card subtrees on mobile; desktop keeps the existing full scan.
+      function scopedMatches(scope, selector) {
+        if (scope === document) return [...document.querySelectorAll(selector)];
+        if (!(scope instanceof Element)) return [];
+        const matches = scope.matches(selector) ? [scope] : [];
+        return matches.concat([...scope.querySelectorAll(selector)]);
+      }
+
+      function scan(scope = document) {
         if (document.hidden) return;
-        // 策略 1: 元素本身有 data-username（最强信号）
         let checked = 0;
-        for (const el of document.querySelectorAll('[data-username]')) {
+        for (const el of scopedMatches(scope, '[data-username]')) {
           if (++checked > 900) break;
           const u = normalizeUsername(el.getAttribute('data-username'));
           if (!u || !isLikelyUsername(u)) continue;
-          // 跳过过小的元素（如聊天里的 avatar）
           if (el.offsetWidth < 100 || el.offsetHeight < 80) continue;
           injectButton(el, u);
         }
 
-        // 策略 2: 房间卡片 li，包含一个指向 /<username>/ 的 <a>
-        // 兼容 chaturbate 列表页结构
         checked = 0;
-        for (const li of document.querySelectorAll('li')) {
+        for (const li of scopedMatches(scope, 'li')) {
           if (++checked > 900) break;
           if (observed.has(li)) continue;
           if (li.offsetWidth < 100 || li.offsetHeight < 80) continue;
-          // 找第一个匹配主播路径的 a
           const a = li.querySelector('a[href]');
           if (!a) continue;
           const href = a.getAttribute('href') || '';
@@ -3611,12 +3633,23 @@
         }
       }
 
-      // 节流 scan
       let scanScheduled = false;
-      function scheduleScan() {
-        if (document.hidden || scanScheduled) return;
+      const pendingScopes = new Set();
+      function scheduleScan(scope = document) {
+        if (document.hidden) return;
+        pendingScopes.add(nativeMobilePage ? scope : document);
+        if (pendingScopes.size > 80) {
+          pendingScopes.clear();
+          pendingScopes.add(document);
+        }
+        if (scanScheduled) return;
         scanScheduled = true;
-        const run = () => { scanScheduled = false; scan(); };
+        const run = () => {
+          scanScheduled = false;
+          const scopes = [...pendingScopes];
+          pendingScopes.clear();
+          scopes.forEach(candidate => scan(candidate));
+        };
         try {
           if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 900 });
           else setTimeout(run, 260);
@@ -3625,7 +3658,17 @@
 
       document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleScan(); });
       scan();
-      const mo = new MutationObserver(scheduleScan);
+      const mo = new MutationObserver(records => {
+        if (!nativeMobilePage) {
+          scheduleScan(document);
+          return;
+        }
+        for (const record of records) {
+          for (const node of record.addedNodes) {
+            if (node instanceof Element) scheduleScan(node);
+          }
+        }
+      });
       mo.observe(document.body, { childList: true, subtree: true });
 
       // 跨标签页 storage 同步：刷新所有按钮状态
@@ -4801,27 +4844,28 @@
         body.rg-phone-mode { width:100vw; height:100dvh; min-height:0 !important; overflow:hidden !important; background:#ece9df !important; }
         body.rg-phone-mode .app-shell { width:100vw !important; height:100dvh !important; min-height:0 !important; padding:max(3px,env(safe-area-inset-top)) max(3px,env(safe-area-inset-right)) max(3px,env(safe-area-inset-bottom)) max(3px,env(safe-area-inset-left)) !important; gap:0 !important; }
         body.rg-phone-mode main { position:relative; z-index:1; width:100% !important; height:100% !important; min-width:0 !important; min-height:0 !important; border-radius:10px !important; }
-        body.rg-phone-mode header { position:relative; z-index:20; flex:0 0 auto; isolation:isolate; padding:5px 6px !important; gap:5px !important; min-height:52px; scrollbar-width:none; touch-action:pan-x; }
+        body.rg-phone-mode header { position:relative; z-index:20; flex:0 0 auto; isolation:isolate; padding:5px 6px 5px 60px !important; gap:5px !important; min-height:52px; scrollbar-width:none; touch-action:pan-x; }
         body.rg-phone-mode header::-webkit-scrollbar { display:none; }
         body.rg-phone-mode header .toolbar-group { padding:2px 3px !important; gap:4px !important; }
         body.rg-phone-mode header .toolbar-group-title,
         body.rg-phone-mode header .btn-label { display:none !important; }
         body.rg-phone-mode header .ctrl-input { min-height:42px !important; max-width:112px !important; }
-        body.rg-phone-mode .grid.view-phone { position:relative; z-index:1; padding:4px !important; gap:4px !important; min-height:0 !important; overflow-x:hidden !important; overflow-y:auto !important; overscroll-behavior:contain; scrollbar-gutter:auto; }
-        body.rg-phone-mode .grid.view-phone .cam-card { border-radius:8px !important; }
+        body.rg-phone-mode .grid.view-phone { position:relative; z-index:1; padding:4px !important; gap:4px !important; min-height:0 !important; overflow-x:hidden !important; overflow-y:auto !important; overscroll-behavior:contain; scrollbar-gutter:auto; touch-action:pan-y; }
+        body.rg-phone-mode .grid.view-phone .cam-card { border-radius:8px !important; touch-action:pan-y; }
         body.rg-phone-mode .sidebar { position:fixed !important; z-index:2147483000 !important; inset:max(4px,env(safe-area-inset-top)) auto max(4px,env(safe-area-inset-bottom)) max(4px,env(safe-area-inset-left)) !important; height:auto !important; border-radius:14px !important; box-shadow:0 22px 70px rgba(15,23,42,.32) !important; pointer-events:auto !important; touch-action:pan-y; overscroll-behavior:contain; }
         body.rg-phone-mode.rg-sidebar-collapsed .sidebar { display:none !important; }
         /* The base rule uses top:10px. Reset it here before anchoring to the
            phone safe-area bottom; otherwise the transparent flex box stretches
            across the viewport, centres Groups between cards, and intercepts taps. */
-        body.rg-phone-mode .shell-controls { position:fixed !important; top:auto !important; right:auto !important; bottom:max(8px,env(safe-area-inset-bottom)) !important; left:max(8px,env(safe-area-inset-left)) !important; width:auto !important; height:auto !important; z-index:2147483500 !important; align-items:center !important; pointer-events:none !important; }
+        body.rg-phone-mode .shell-controls { position:fixed !important; top:max(8px,env(safe-area-inset-top)) !important; right:auto !important; bottom:auto !important; left:max(8px,env(safe-area-inset-left)) !important; width:auto !important; height:auto !important; z-index:2147483500 !important; align-items:center !important; pointer-events:none !important; }
         body.rg-phone-mode .shell-controls button { min-width:48px; min-height:48px; padding:8px 12px; border-radius:14px; pointer-events:auto !important; touch-action:manipulation; }
         body.rg-phone-mode .shell-controls .show-sidebar-btn { width:48px; padding:0; font-size:0; }
         body.rg-phone-mode .shell-controls .show-sidebar-btn::before { content:'☰'; font-size:22px; line-height:1; }
+        body.rg-phone-mode .more-menu-pop { position:fixed !important; inset:auto 6px max(6px,env(safe-area-inset-bottom)) 6px !important; min-width:0 !important; width:auto !important; max-height:82dvh !important; border-radius:16px !important; box-shadow:0 20px 70px rgba(15,23,42,.36) !important; }
         body.rg-phone-mode .roomgrid-modal-backdrop { align-items:flex-end; padding:0; }
         body.rg-phone-mode .roomgrid-modal { width:100%; max-height:88dvh; overflow-y:auto; border-radius:16px 16px 0 0; padding-bottom:max(14px,env(safe-area-inset-bottom)); }
         @media (orientation:landscape) and (max-height:600px) {
-          body.rg-phone-mode header { min-height:46px; padding:2px 5px !important; }
+          body.rg-phone-mode header { min-height:46px; padding:2px 5px 2px 54px !important; }
           body.rg-phone-mode header .ctrl-btn,
           body.rg-phone-mode header .ctrl-input { min-height:38px !important; height:38px !important; }
           body.rg-phone-mode .cam-card .favorite-toggle,

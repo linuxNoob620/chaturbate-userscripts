@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name               Chaturbate Desktop Mobile Comfort
+// @name               Ziggy Mobile Clean View
 // @namespace          ziggy.chaturbate.mobile-comfort
-// @version            1.5.0
-// @description        Makes both Chaturbate's desktop-on-phone and native mobile layouts easier to browse and watch in portrait or landscape.
-// @author             Ziggy + Codex
+// @version            2.0.0
+// @description        A clean Chaturbate mobile layout with chat hidden, Picture-in-Picture, and one shared tools dock.
+// @author             Ziggy
 // @homepageURL        https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL         https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL          https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20Desktop%20Mobile%20Comfort.meta.js

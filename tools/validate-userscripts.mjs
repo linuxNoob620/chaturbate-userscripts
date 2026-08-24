@@ -76,6 +76,11 @@ for (const item of scripts) {
   }
   if (item.file.includes('Desktop Mobile Comfort')) {
     if (!source.includes('ziggy-mobile-clean-view:import-settings')) failures.push(`${item.file}: shared Suite settings import bridge is missing`);
+    for (const selector of ['#chatContents', '#portrait-contents', '#mobileVideoControls']) {
+      if (!source.includes(selector)) failures.push(`${item.file}: real mobile selector ${selector} is missing`);
+    }
+    if (!source.includes("text === 'drag to resize'")) failures.push(`${item.file}: real mobile resize-label detection is missing`);
+    if (!source.includes('markNativeSplitters(document.body, video)')) failures.push(`${item.file}: normal mobile resize-handle cleanup is missing`);
   }
 
   const metaPath = path.join(root, item.meta);

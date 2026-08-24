@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.0.1
+// @version           16.0.2
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -1103,7 +1103,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.0.1',
+    version: '16.0.2',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -1121,7 +1121,7 @@
   const MAX_CONFIG_BYTES = 2 * 1024 * 1024;
   const MAX_CONFIG_BACKUPS = 3;
   const RELOADED_VERSION = '1.8.0';
-  const MOBILE_CLEAN_VIEW_VERSION = '2.0.1';
+  const MOBILE_CLEAN_VIEW_VERSION = '2.1.0';
   const MOBILE_CLEAN_VIEW_SETTINGS_KEY = 'cb_desktop_mobile_comfort_v1';
   const GITHUB_SYNC_CONFIG_KEY = 'chaturbate_suite_github_sync_v1';
   const GITHUB_SYNC_FORMAT = 'chaturbate-suite-settings-encrypted-v1';
@@ -1191,6 +1191,8 @@
       landscapeColumns: clampInt(source.landscapeColumns, 2, 5, 4),
       autoHideSeconds: clampInt(source.autoHideSeconds, 0, 30, 5),
       side: source.side === 'left' || source.handedness === 'left' ? 'left' : 'right',
+      portraitFullscreenMode: source.portraitFullscreenMode === 'fit' ? 'fit' : 'fill',
+      landscapeFullscreenMode: source.landscapeFullscreenMode === 'fill' ? 'fill' : 'fit',
     };
   }
 

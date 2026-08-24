@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name               Ziggy Mobile Clean View
 // @namespace          ziggy.chaturbate.mobile-comfort
-// @version            2.0.1
-// @description        A clean Chaturbate mobile layout with chat hidden, Picture-in-Picture, and one shared tools dock.
+// @version            2.1.0
+// @description        A clean Chaturbate mobile layout with chat hidden, video-only fullscreen, Picture-in-Picture, and one shared tools dock.
 // @author             Ziggy
 // @homepageURL        https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL         https://github.com/linuxNoob620/chaturbate-userscripts/issues
@@ -19,7 +19,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '2.0.1';
+  const VERSION = '2.1.0';
   const STORE_KEY = 'cb_desktop_mobile_comfort_v1';
   const ROOT_ID = 'zmc-root';
   const STYLE_ID = 'zmc-style';
@@ -65,6 +65,8 @@
     landscapeColumns: 4,
     autoHideSeconds: 5,
     side: 'right',
+    portraitFullscreenMode: 'fill',
+    landscapeFullscreenMode: 'fit',
   });
 
   if (window[INSTANCE_KEY]) return;
@@ -79,6 +81,7 @@
   let lastUrl = location.href;
   let lastRoomRedirect = '';
   let boundVideo = null;
+  let fullscreenSession = null;
   const hiddenNodes = new Set();
   const hiddenState = new WeakMap();
 
@@ -113,6 +116,8 @@
       landscapeColumns: clampInt(source.landscapeColumns, 2, 5, 4),
       autoHideSeconds: clampInt(source.autoHideSeconds, 0, 30, 5),
       side: source.side === 'left' || source.handedness === 'left' ? 'left' : 'right',
+      portraitFullscreenMode: source.portraitFullscreenMode === 'fit' ? 'fit' : 'fill',
+      landscapeFullscreenMode: source.landscapeFullscreenMode === 'fill' ? 'fill' : 'fit',
     };
   }
 
@@ -289,6 +294,119 @@
         max-width:100% !important;
         object-fit:contain !important;
       }
+      html.zmc-video-fullscreen,
+      html.zmc-video-fullscreen body {
+        overflow:hidden !important;
+        overscroll-behavior:none !important;
+      }
+      html.zmc-video-fullscreen #zmc-root,
+      html.zmc-video-fullscreen .roomgrid-dock { display:none !important; }
+      .zmc-video-only-host {
+        position:relative !important;
+        width:100% !important;
+        height:100% !important;
+        max-width:none !important;
+        max-height:none !important;
+        margin:0 !important;
+        padding:0 !important;
+        overflow:hidden !important;
+        background:#000 !important;
+        touch-action:none !important;
+        user-select:none !important;
+        -webkit-user-select:none !important;
+        overscroll-behavior:none !important;
+      }
+      .zmc-video-only-host.zmc-video-only-fallback {
+        position:fixed !important;
+        inset:0 !important;
+        z-index:2147483646 !important;
+        width:100vw !important;
+        height:100dvh !important;
+      }
+      .zmc-video-only-host:fullscreen,
+      .zmc-video-only-host:-webkit-full-screen {
+        width:100vw !important;
+        height:100dvh !important;
+      }
+      .zmc-video-only-host > :not(.zmc-video-keep):not(.zmc-video-only-controls) {
+        display:none !important;
+      }
+      .zmc-video-only-host .zmc-video-keep {
+        width:100% !important;
+        height:100% !important;
+        max-width:none !important;
+        max-height:none !important;
+        margin:0 !important;
+        padding:0 !important;
+        overflow:hidden !important;
+      }
+      html.zmc-video-fullscreen body.zmc-room .zmc-video-only-host video.zmc-video-only-video {
+        position:absolute !important;
+        inset:0 !important;
+        display:block !important;
+        width:100% !important;
+        height:100% !important;
+        max-width:none !important;
+        max-height:none !important;
+        margin:0 !important;
+        object-fit:var(--zmc-fullscreen-object-fit,cover) !important;
+        transform:translate3d(var(--zmc-fullscreen-pan-x,0px),var(--zmc-fullscreen-pan-y,0px),0) scale(var(--zmc-fullscreen-zoom,1)) !important;
+        transform-origin:center center !important;
+        transition:none !important;
+        will-change:transform;
+        touch-action:none !important;
+      }
+      .zmc-video-only-controls {
+        position:absolute;
+        z-index:2147483647;
+        left:max(10px,env(safe-area-inset-left));
+        right:max(10px,env(safe-area-inset-right));
+        bottom:max(12px,env(safe-area-inset-bottom));
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        flex-wrap:wrap;
+        gap:5px;
+        padding:6px;
+        border:1px solid rgba(255,255,255,.18);
+        border-radius:16px;
+        background:rgba(15,23,42,.82);
+        color:#fff;
+        box-shadow:0 14px 42px rgba(0,0,0,.42);
+        backdrop-filter:blur(14px);
+        -webkit-backdrop-filter:blur(14px);
+        opacity:0;
+        transform:translateY(12px);
+        pointer-events:none;
+        transition:opacity .18s ease,transform .18s ease;
+        font:750 13px/1.2 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+        touch-action:manipulation;
+      }
+      .zmc-video-only-controls.is-visible {
+        opacity:1;
+        transform:translateY(0);
+        pointer-events:auto;
+      }
+      .zmc-video-only-controls button {
+        min-width:40px;
+        min-height:44px;
+        padding:7px 8px;
+        border:1px solid rgba(255,255,255,.16);
+        border-radius:11px;
+        background:#243247;
+        color:#fff;
+        font:inherit;
+        cursor:pointer;
+        touch-action:manipulation;
+      }
+      .zmc-video-only-controls button.is-active { background:#2563eb; border-color:#93c5fd; }
+      .zmc-video-only-controls .zmc-fullscreen-status {
+        min-width:60px;
+        color:#e2e8f0;
+        text-align:center;
+        font-variant-numeric:tabular-nums;
+      }
+      .zmc-video-only-controls .zmc-fullscreen-exit { background:#b91c1c; border-color:#fca5a5; }
       #zmc-root {
         display:none;
         position:fixed;
@@ -534,7 +652,9 @@
 
     const main = makeElement('div', 'zmc-main');
     const actions = makeElement('div', 'zmc-actions');
-    const pipButton = makeAction('▣', 'Picture-in-Picture', 'Pop out the current video', 'primary', togglePictureInPicture);
+    const fullscreenButton = makeAction('⛶', 'Video-only fullscreen', 'Fill, pinch, zoom, and pan', 'primary', enterVideoOnlyFullscreen);
+    fullscreenButton.classList.add('zmc-fullscreen-action');
+    const pipButton = makeAction('▣', 'Picture-in-Picture', 'Pop out the current video', '', togglePictureInPicture);
     pipButton.classList.add('zmc-pip-action');
     const workshopButton = makeAction('▦', 'Workshop', 'Open the MultiCam workstation', '', () => requestSuiteAction(SUITE_EVENTS.workshop));
     workshopButton.classList.add('zmc-workshop-action');
@@ -546,7 +666,7 @@
       settingsOpen = true;
       syncPanelState();
     });
-    actions.append(pipButton, workshopButton, roomGridButton, addButton, settingsButton);
+    actions.append(fullscreenButton, pipButton, workshopButton, roomGridButton, addButton, settingsButton);
     main.append(actions, makeElement('div', 'zmc-status', 'Chat stays hidden on mobile room pages.'));
 
     const settingsPanel = makeElement('div', 'zmc-settings');
@@ -607,6 +727,8 @@
       settingRow('Hide promotional sections', 'Keep browsing focused on room cards', checkboxControl(settings.hidePromos, value => saveSettings({ hidePromos: value }))),
       settingRow('Portrait columns', 'Models shown across the screen', selectControl([['1', '1'], ['2', '2'], ['3', '3']], settings.portraitColumns, value => saveSettings({ portraitColumns: value }))),
       settingRow('Landscape columns', 'Models shown across the screen', selectControl([['2', '2'], ['3', '3'], ['4', '4'], ['5', '5']], settings.landscapeColumns, value => saveSettings({ landscapeColumns: value }))),
+      settingRow('Portrait fullscreen', 'How video first fills a tall screen', selectControl([['fill', 'Fill'], ['fit', 'Fit']], settings.portraitFullscreenMode, value => saveSettings({ portraitFullscreenMode: value }))),
+      settingRow('Landscape fullscreen', 'How video first fills a wide screen', selectControl([['fit', 'Fit'], ['fill', 'Fill']], settings.landscapeFullscreenMode, value => saveSettings({ landscapeFullscreenMode: value }))),
       settingRow('Dock auto-hide', 'Seconds before the dock becomes compact', selectControl([['0', 'Off'], ['3', '3 s'], ['5', '5 s'], ['8', '8 s'], ['12', '12 s']], settings.autoHideSeconds, value => saveSettings({ autoHideSeconds: value }))),
       settingRow('Dock side', 'Choose the easiest thumb position', selectControl([['right', 'Right'], ['left', 'Left']], settings.side, value => saveSettings({ side: value })))
     );
@@ -781,17 +903,434 @@
     }
   }
 
+  function findFullscreenHost(video) {
+    if (!(video instanceof HTMLVideoElement)) return null;
+    const host = video.closest('[data-testid="video-container"],#chat-player,.video-container,[data-testid="video-panel"],#VideoPanel');
+    if (host && host !== video) return host;
+    return video.parentElement instanceof Element ? video.parentElement : null;
+  }
+
+  function fullscreenElement() {
+    return document.fullscreenElement || document.webkitFullscreenElement || null;
+  }
+
+  function orientationFullscreenMode() {
+    return innerWidth > innerHeight ? settings.landscapeFullscreenMode : settings.portraitFullscreenMode;
+  }
+
+  function clampNumber(value, min, max) {
+    return Math.min(max, Math.max(min, Number.isFinite(value) ? value : min));
+  }
+
+  function fullscreenBounds(session = fullscreenSession) {
+    if (!session?.host || !session.video) return { maxX: 0, maxY: 0 };
+    const rect = session.host.getBoundingClientRect();
+    const width = Math.max(1, rect.width || innerWidth || 1);
+    const height = Math.max(1, rect.height || innerHeight || 1);
+    const intrinsicWidth = Math.max(1, Number(session.video.videoWidth) || Number(session.video.clientWidth) || 16);
+    const intrinsicHeight = Math.max(1, Number(session.video.videoHeight) || Number(session.video.clientHeight) || 9);
+    const baseScale = session.mode === 'fill'
+      ? Math.max(width / intrinsicWidth, height / intrinsicHeight)
+      : Math.min(width / intrinsicWidth, height / intrinsicHeight);
+    const drawnWidth = intrinsicWidth * baseScale * session.zoom;
+    const drawnHeight = intrinsicHeight * baseScale * session.zoom;
+    return {
+      maxX: Math.max(0, (drawnWidth - width) / 2),
+      maxY: Math.max(0, (drawnHeight - height) / 2),
+    };
+  }
+
+  function updateFullscreenTransform() {
+    const session = fullscreenSession;
+    if (!session?.host || !session.video) return;
+    session.zoom = clampNumber(session.zoom, 1, 3);
+    const bounds = fullscreenBounds(session);
+    session.panX = clampNumber(session.panX, -bounds.maxX, bounds.maxX);
+    session.panY = clampNumber(session.panY, -bounds.maxY, bounds.maxY);
+    session.host.style.setProperty('--zmc-fullscreen-object-fit', session.mode === 'fill' ? 'cover' : 'contain');
+    session.host.style.setProperty('--zmc-fullscreen-zoom', String(session.zoom));
+    session.host.style.setProperty('--zmc-fullscreen-pan-x', session.panX.toFixed(2) + 'px');
+    session.host.style.setProperty('--zmc-fullscreen-pan-y', session.panY.toFixed(2) + 'px');
+    if (session.controls) {
+      session.controls.dataset.mode = session.mode;
+      session.controls.dataset.zoom = session.zoom.toFixed(3);
+      session.controls.dataset.panX = session.panX.toFixed(2);
+      session.controls.dataset.panY = session.panY.toFixed(2);
+      session.controls.querySelector('.zmc-fullscreen-status').textContent = (session.mode === 'fill' ? 'Fill ' : 'Fit ') + session.zoom.toFixed(1) + '×';
+      session.controls.querySelector('[data-mode="fit"]')?.classList.toggle('is-active', session.mode === 'fit');
+      session.controls.querySelector('[data-mode="fill"]')?.classList.toggle('is-active', session.mode === 'fill');
+    }
+  }
+
+  function setFullscreenMode(mode, resetView = true) {
+    const session = fullscreenSession;
+    if (!session) return;
+    session.mode = mode === 'fit' ? 'fit' : 'fill';
+    if (resetView) {
+      session.zoom = 1;
+      session.panX = 0;
+      session.panY = 0;
+    }
+    updateFullscreenTransform();
+    showFullscreenControls();
+  }
+
+  function setFullscreenZoom(nextZoom, focalX = 0, focalY = 0) {
+    const session = fullscreenSession;
+    if (!session) return;
+    const previousZoom = session.zoom;
+    const zoom = clampNumber(nextZoom, 1, 3);
+    if (Math.abs(zoom - previousZoom) < 0.001) return;
+    const ratio = zoom / previousZoom;
+    session.panX = focalX - (focalX - session.panX) * ratio;
+    session.panY = focalY - (focalY - session.panY) * ratio;
+    session.zoom = zoom;
+    updateFullscreenTransform();
+    showFullscreenControls();
+  }
+
+  function resetFullscreenView(useOrientationDefault = true) {
+    const session = fullscreenSession;
+    if (!session) return;
+    if (useOrientationDefault) session.mode = orientationFullscreenMode();
+    session.zoom = 1;
+    session.panX = 0;
+    session.panY = 0;
+    updateFullscreenTransform();
+    showFullscreenControls();
+  }
+
+  function hideFullscreenControls() {
+    fullscreenSession?.controls?.classList.remove('is-visible');
+  }
+
+  function showFullscreenControls() {
+    const session = fullscreenSession;
+    if (!session?.controls) return;
+    clearTimeout(session.controlsTimer);
+    session.controls.classList.add('is-visible');
+    session.controlsTimer = setTimeout(hideFullscreenControls, 3000);
+  }
+
+  function makeFullscreenControl(label, action, options = {}) {
+    const button = makeElement('button', options.className || '', label);
+    button.type = 'button';
+    if (options.mode) button.dataset.mode = options.mode;
+    if (options.ariaLabel) button.setAttribute('aria-label', options.ariaLabel);
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      action();
+    });
+    return button;
+  }
+
+  function createFullscreenControls() {
+    const controls = makeElement('div', 'zmc-video-only-controls is-visible');
+    controls.setAttribute('role', 'toolbar');
+    controls.setAttribute('aria-label', 'Video-only fullscreen controls');
+    const status = makeElement('span', 'zmc-fullscreen-status', 'Fill 1.0×');
+    controls.append(
+      makeFullscreenControl('Fit', () => setFullscreenMode('fit'), { mode: 'fit' }),
+      makeFullscreenControl('Fill', () => setFullscreenMode('fill'), { mode: 'fill' }),
+      makeFullscreenControl('−', () => setFullscreenZoom((fullscreenSession?.zoom || 1) - 0.25), { ariaLabel: 'Zoom out' }),
+      status,
+      makeFullscreenControl('+', () => setFullscreenZoom((fullscreenSession?.zoom || 1) + 0.25), { ariaLabel: 'Zoom in' }),
+      makeFullscreenControl('Reset', () => resetFullscreenView(true)),
+      makeFullscreenControl('Exit', exitVideoOnlyFullscreen, { className: 'zmc-fullscreen-exit' })
+    );
+    for (const eventName of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'dblclick']) {
+      controls.addEventListener(eventName, event => event.stopPropagation());
+    }
+    return controls;
+  }
+
+  function markFullscreenVideo(session, video) {
+    if (!session?.host || !(video instanceof HTMLVideoElement)) return false;
+    session.host.querySelectorAll('.zmc-video-keep').forEach(node => node.classList.remove('zmc-video-keep'));
+    session.host.querySelectorAll('.zmc-video-only-video').forEach(node => node.classList.remove('zmc-video-only-video'));
+    let node = video;
+    while (node && node !== session.host) {
+      node.classList.add('zmc-video-keep');
+      node = node.parentElement;
+    }
+    if (node !== session.host) return false;
+    video.classList.add('zmc-video-only-video');
+    session.video = video;
+    updateFullscreenTransform();
+    return true;
+  }
+
+  function localFullscreenPoint(session, point) {
+    const rect = session.host.getBoundingClientRect();
+    return { x: point.x - rect.left - rect.width / 2, y: point.y - rect.top - rect.height / 2 };
+  }
+
+  function beginPinch(session) {
+    const points = [...session.pointers.values()];
+    if (points.length < 2) return;
+    const first = points[0];
+    const second = points[1];
+    const midpoint = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
+    const local = localFullscreenPoint(session, midpoint);
+    session.gesture = {
+      kind: 'pinch',
+      distance: Math.max(1, Math.hypot(second.x - first.x, second.y - first.y)),
+      zoom: session.zoom,
+      panX: session.panX,
+      panY: session.panY,
+      focalX: local.x,
+      focalY: local.y,
+      moved: true,
+    };
+  }
+
+  function handleFullscreenPointerDown(event) {
+    const session = fullscreenSession;
+    if (!session || event.target.closest?.('.zmc-video-only-controls')) return;
+    event.preventDefault();
+    showFullscreenControls();
+    try { session.host.setPointerCapture(event.pointerId); } catch (_) {}
+    session.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (session.pointers.size === 1) {
+      session.gesture = {
+        kind: 'pan',
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        panX: session.panX,
+        panY: session.panY,
+        moved: false,
+      };
+    } else if (session.pointers.size === 2) {
+      beginPinch(session);
+    }
+  }
+
+  function handleFullscreenPointerMove(event) {
+    const session = fullscreenSession;
+    if (!session || !session.pointers.has(event.pointerId)) return;
+    event.preventDefault();
+    session.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (session.pointers.size >= 2) {
+      if (session.gesture?.kind !== 'pinch') beginPinch(session);
+      const points = [...session.pointers.values()];
+      const distance = Math.max(1, Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y));
+      const ratio = distance / Math.max(1, session.gesture.distance);
+      const zoom = clampNumber(session.gesture.zoom * ratio, 1, 3);
+      const zoomRatio = zoom / session.gesture.zoom;
+      session.zoom = zoom;
+      session.panX = session.gesture.focalX - (session.gesture.focalX - session.gesture.panX) * zoomRatio;
+      session.panY = session.gesture.focalY - (session.gesture.focalY - session.gesture.panY) * zoomRatio;
+      updateFullscreenTransform();
+      return;
+    }
+    const gesture = session.gesture;
+    if (gesture?.kind === 'pan' && gesture.pointerId === event.pointerId) {
+      const dx = event.clientX - gesture.startX;
+      const dy = event.clientY - gesture.startY;
+      if (Math.hypot(dx, dy) > 7) gesture.moved = true;
+      session.panX = gesture.panX + dx;
+      session.panY = gesture.panY + dy;
+      updateFullscreenTransform();
+    }
+  }
+
+  function handleFullscreenPointerEnd(event) {
+    const session = fullscreenSession;
+    if (!session || !session.pointers.has(event.pointerId)) return;
+    event.preventDefault();
+    const wasSingleTap = session.pointers.size === 1
+      && session.gesture?.kind === 'pan'
+      && session.gesture.pointerId === event.pointerId
+      && !session.gesture.moved;
+    session.pointers.delete(event.pointerId);
+    try { session.host.releasePointerCapture(event.pointerId); } catch (_) {}
+    if (wasSingleTap) {
+      const now = performance.now();
+      const last = session.lastTap;
+      if (last && now - last.time < 330 && Math.hypot(event.clientX - last.x, event.clientY - last.y) < 45) {
+        session.lastTap = null;
+        setFullscreenMode(session.mode === 'fill' ? 'fit' : 'fill');
+      } else {
+        session.lastTap = { time: now, x: event.clientX, y: event.clientY };
+      }
+    }
+    if (session.pointers.size === 1) {
+      const [pointerId, point] = session.pointers.entries().next().value;
+      session.gesture = { kind: 'pan', pointerId, startX: point.x, startY: point.y, panX: session.panX, panY: session.panY, moved: true };
+    } else if (!session.pointers.size) {
+      session.gesture = null;
+    }
+    showFullscreenControls();
+  }
+
+  function bindFullscreenGestures(session) {
+    session.host.addEventListener('pointerdown', handleFullscreenPointerDown, { passive: false });
+    session.host.addEventListener('pointermove', handleFullscreenPointerMove, { passive: false });
+    session.host.addEventListener('pointerup', handleFullscreenPointerEnd, { passive: false });
+    session.host.addEventListener('pointercancel', handleFullscreenPointerEnd, { passive: false });
+  }
+
+  function unbindFullscreenGestures(session) {
+    session.host?.removeEventListener('pointerdown', handleFullscreenPointerDown);
+    session.host?.removeEventListener('pointermove', handleFullscreenPointerMove);
+    session.host?.removeEventListener('pointerup', handleFullscreenPointerEnd);
+    session.host?.removeEventListener('pointercancel', handleFullscreenPointerEnd);
+  }
+
+  function cleanupVideoOnlyFullscreen(session = fullscreenSession) {
+    if (!session || session !== fullscreenSession) return;
+    clearTimeout(session.controlsTimer);
+    unbindFullscreenGestures(session);
+    session.controls?.remove();
+    session.host?.querySelectorAll('.zmc-video-keep').forEach(node => node.classList.remove('zmc-video-keep'));
+    session.host?.querySelectorAll('.zmc-video-only-video').forEach(node => node.classList.remove('zmc-video-only-video'));
+    session.host?.classList.remove('zmc-video-only-host', 'zmc-video-only-fallback');
+    for (const property of ['--zmc-fullscreen-object-fit', '--zmc-fullscreen-zoom', '--zmc-fullscreen-pan-x', '--zmc-fullscreen-pan-y']) {
+      session.host?.style.removeProperty(property);
+    }
+    document.documentElement.classList.remove('zmc-video-fullscreen');
+    document.body?.classList.remove('zmc-fullscreen');
+    fullscreenSession = null;
+    try { scrollTo({ top: session.scrollY, left: session.scrollX, behavior: 'instant' }); } catch (_) {}
+    scheduleSync();
+  }
+
+  async function exitVideoOnlyFullscreen() {
+    const session = fullscreenSession;
+    if (!session || session.exiting) return;
+    session.exiting = true;
+    const current = fullscreenElement();
+    try {
+      if (current && (current === session.host || session.host.contains(current))) {
+        if (typeof document.exitFullscreen === 'function') await document.exitFullscreen();
+        else if (typeof document.webkitExitFullscreen === 'function') await document.webkitExitFullscreen();
+      }
+    } catch (_) {}
+    cleanupVideoOnlyFullscreen(session);
+  }
+
+  async function enterVideoOnlyFullscreen() {
+    if (fullscreenSession) {
+      showFullscreenControls();
+      setPanelOpen(false);
+      return;
+    }
+    const video = findPrimaryVideo();
+    const host = findFullscreenHost(video);
+    if (!video || !host) {
+      showToast('The room video is not ready yet');
+      return;
+    }
+    try {
+      if (pictureInPictureActive(video)) {
+        if (document.pictureInPictureElement === video && typeof document.exitPictureInPicture === 'function') await document.exitPictureInPicture();
+        else if (video.webkitPresentationMode === 'picture-in-picture') video.webkitSetPresentationMode('inline');
+      }
+    } catch (_) {}
+    const controls = createFullscreenControls();
+    const session = {
+      host,
+      video,
+      controls,
+      mode: orientationFullscreenMode(),
+      zoom: 1,
+      panX: 0,
+      panY: 0,
+      pointers: new Map(),
+      gesture: null,
+      lastTap: null,
+      controlsTimer: 0,
+      landscape: innerWidth > innerHeight,
+      fallback: false,
+      entering: true,
+      exiting: false,
+      scrollX: scrollX,
+      scrollY: scrollY,
+    };
+    fullscreenSession = session;
+    host.classList.add('zmc-video-only-host');
+    host.appendChild(controls);
+    bindFullscreenGestures(session);
+    markFullscreenVideo(session, video);
+    document.documentElement.classList.add('zmc-video-fullscreen');
+    document.body?.classList.add('zmc-fullscreen');
+    setPanelOpen(false);
+    showFullscreenControls();
+
+    let requested = false;
+    try {
+      if (typeof host.requestFullscreen === 'function') {
+        requested = true;
+        try {
+          await host.requestFullscreen({ navigationUI: 'hide' });
+        } catch (_) {
+          await host.requestFullscreen();
+        }
+      } else if (typeof host.webkitRequestFullscreen === 'function') {
+        requested = true;
+        await host.webkitRequestFullscreen();
+      }
+    } catch (_) {
+      requested = false;
+    }
+    if (fullscreenSession !== session) return;
+    session.entering = false;
+    const current = fullscreenElement();
+    if (!requested || !(current === host || host.contains(current))) {
+      session.fallback = true;
+      host.classList.add('zmc-video-only-fallback');
+    }
+    updateFullscreenTransform();
+  }
+
+  function handleVideoOnlyFullscreenChange() {
+    const session = fullscreenSession;
+    if (!session || session.entering || session.fallback || session.exiting) return;
+    const current = fullscreenElement();
+    if (!(current === session.host || session.host.contains(current))) cleanupVideoOnlyFullscreen(session);
+  }
+
+  function syncVideoOnlyFullscreen() {
+    const session = fullscreenSession;
+    if (!session) return;
+    if (!session.host.isConnected || !isRoomPage()) {
+      exitVideoOnlyFullscreen();
+      return;
+    }
+    const video = findPrimaryVideo();
+    if (video && video !== session.video) {
+      if (!session.host.contains(video) || !markFullscreenVideo(session, video)) {
+        exitVideoOnlyFullscreen();
+        return;
+      }
+    }
+    const landscape = innerWidth > innerHeight;
+    if (landscape !== session.landscape) {
+      session.landscape = landscape;
+      resetFullscreenView(true);
+    } else {
+      updateFullscreenTransform();
+    }
+  }
+
+  function handleBoundVideoState() {
+    if (fullscreenSession && pictureInPictureActive(boundVideo)) exitVideoOnlyFullscreen();
+    scheduleSync();
+  }
+
   function bindVideo(video) {
     if (video === boundVideo) return;
     if (boundVideo) {
       for (const event of ['enterpictureinpicture', 'leavepictureinpicture', 'webkitpresentationmodechanged', 'webkitbeginfullscreen', 'webkitendfullscreen']) {
-        boundVideo.removeEventListener(event, scheduleSync);
+        boundVideo.removeEventListener(event, handleBoundVideoState);
       }
     }
     boundVideo = video || null;
     if (boundVideo) {
       for (const event of ['enterpictureinpicture', 'leavepictureinpicture', 'webkitpresentationmodechanged', 'webkitbeginfullscreen', 'webkitendfullscreen']) {
-        boundVideo.addEventListener(event, scheduleSync);
+        boundVideo.addEventListener(event, handleBoundVideoState);
       }
     }
   }
@@ -853,6 +1392,8 @@
       pipButton.disabled = !pipAvailable;
       pipButton.querySelector('strong').textContent = pipActive ? 'Exit Picture-in-Picture' : 'Picture-in-Picture';
     }
+    const fullscreenButton = root.querySelector('.zmc-fullscreen-action');
+    if (fullscreenButton) fullscreenButton.disabled = !video || !findFullscreenHost(video);
     for (const selector of ['.zmc-workshop-action', '.zmc-roomgrid-action']) {
       const button = root.querySelector(selector);
       if (button) button.disabled = !suiteAvailable;
@@ -918,6 +1459,7 @@
       markVideoTarget(null);
       bindVideo(null);
       body.classList.remove('zmc-fullscreen');
+      if (fullscreenSession) exitVideoOnlyFullscreen();
       return;
     }
 
@@ -927,6 +1469,7 @@
     bindVideo(video);
     if (room) hideChat();
     else restoreAllHiddenNodes();
+    if (fullscreenSession) syncVideoOnlyFullscreen();
     body.classList.toggle('zmc-fullscreen', room && pseudoFullscreenActive(videoTarget));
     updateShellState();
     syncPanelState();
@@ -978,12 +1521,13 @@
       addEventListener('resize', scheduleSync, { passive: true });
       addEventListener('orientationchange', scheduleSync, { passive: true });
       window.visualViewport?.addEventListener('resize', scheduleSync, { passive: true });
-      addEventListener('fullscreenchange', scheduleSync);
-      addEventListener('webkitfullscreenchange', scheduleSync);
+      addEventListener('fullscreenchange', () => { handleVideoOnlyFullscreenChange(); scheduleSync(); });
+      addEventListener('webkitfullscreenchange', () => { handleVideoOnlyFullscreenChange(); scheduleSync(); });
       addEventListener('pointerdown', resetIdleTimer, { passive: true });
       document.addEventListener(SUITE_EVENTS.state, scheduleSync);
       document.addEventListener('keydown', event => {
-        if (event.key === 'Escape' && panelOpen) setPanelOpen(false);
+        if (event.key === 'Escape' && fullscreenSession) exitVideoOnlyFullscreen();
+        else if (event.key === 'Escape' && panelOpen) setPanelOpen(false);
       });
       document.dispatchEvent(new CustomEvent(SUITE_EVENTS.ready));
       resetIdleTimer();

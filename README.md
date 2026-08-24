@@ -3,7 +3,7 @@
 This repository publishes the stable update channel for two Tampermonkey userscripts:
 
 - **Ziggy Chaturbate Suite** — RoomGrid MultiCam workstation, Cam ARNA, Reloaded tools, recording, split view, encrypted settings sync, and a native-mobile Reloaded entry in Chaturbate's hamburger menu.
-- **Ziggy Mobile Clean View** — native-mobile layout with chat hidden, Picture-in-Picture, a compact room grid, and one shared tools dock.
+- **Ziggy Mobile Clean View** — native-mobile layout with chat hidden, video-only fullscreen with Fit/Fill, pinch zoom and pan, Picture-in-Picture, a compact room grid, and one shared tools dock.
 
 ## Install
 

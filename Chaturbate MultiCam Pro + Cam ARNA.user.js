@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.4.5
+// @version           16.4.6
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -88,7 +88,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.4.5');
+  instanceMarker.setAttribute('data-suite-version', '16.4.6');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1163,7 +1163,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.4.5',
+    version: '16.4.6',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3458,13 +3458,13 @@
       .roomgrid-native-desktop .roomgrid-private-action { display:none; }
       .roomgrid-native-trigger {
         overflow:hidden; box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center;
-        height:24px; max-width:96px; margin:11px 4px 11px 0; padding:3px 10px;
+        height:34px; max-width:118px; margin:0 4px; padding:6px 12px;
         border:1px solid #0c6a93; border-radius:3px; background:#0c6a93; color:#fff;
         cursor:pointer; white-space:nowrap; text-overflow:ellipsis;
         font:500 12px/1.4 UbuntuMedium,UbuntuRegular,Helvetica,Arial,sans-serif;
       }
       .roomgrid-native-trigger:hover,.roomgrid-native-trigger:focus-visible { border-color:#68b5f0; background:#0f7fab; outline:none; }
-      .roomgrid-native-send-tip-source { display:none !important; }
+      .roomgrid-native-fanclub-source { display:none !important; }
 
       .roomgrid-mobile-panel {
         box-sizing:border-box; width:100%; min-height:320px; padding:0 0 calc(76px + env(safe-area-inset-bottom));
@@ -3516,6 +3516,8 @@
     let dockAutoCollapseTimer = 0;
     let dragged = false, sx, sy, ox, oy;
     let nativeSendTipSource = null;
+    let nativeDesktopRoomGridSource = null;
+    let nativeDesktopRoomGridReplacesSource = false;
     let nativeRoomGridTrigger = null;
     let mobilePrivateTab = null;
     let mobilePrivateBypass = false;
@@ -3707,6 +3709,55 @@
       return nodes.find(node => !node.classList.contains('roomgrid-native-trigger')) || null;
     }
 
+    function nativeActionText(node) {
+      return String(node?.textContent || node?.value || node?.getAttribute?.('aria-label') || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toUpperCase();
+    }
+
+    function desktopNativeActionCandidates() {
+      return [...document.querySelectorAll('button,a,[role="button"],input[type="button"],input[type="submit"]')]
+        .filter(node => !node.closest('#scriptcontrols,#zmc-root,.roomgrid-dock,.roomgrid-mobile-panel'));
+    }
+
+    function findNativeFanClubSource() {
+      const mounted = document.querySelector('.roomgrid-native-fanclub-source');
+      const direct = [
+        document.getElementById('joinFanClubButton'),
+        document.getElementById('join_fan_club_button'),
+        document.querySelector('[data-testid="join-fan-club-button"]'),
+        document.querySelector('[data-testid*="fan-club" i]'),
+      ].filter(Boolean);
+      const candidates = [...new Set([...direct, ...desktopNativeActionCandidates()])]
+        .filter(node => node !== mounted && visibleNode(node) && nativeActionText(node) === 'JOIN FAN CLUB')
+        .sort((a, b) => {
+          const ar = a.getBoundingClientRect();
+          const br = b.getBoundingClientRect();
+          return br.top - ar.top || (ar.width * ar.height) - (br.width * br.height);
+        });
+      // Theatre Mode can render a second action row while leaving the normal
+      // row connected but hidden. Prefer that newly visible Fan Club control;
+      // otherwise retain the already mounted source to avoid remount loops.
+      return candidates[0] || (mounted?.isConnected ? mounted : null);
+    }
+
+    function findNativeRoomActionFallback() {
+      const direct = [
+        document.getElementById('followButton'),
+        document.getElementById('unfollowButton'),
+        document.querySelector('[data-testid="follow-button"]'),
+        document.querySelector('[data-testid="unfollow-button"]'),
+      ].filter(Boolean);
+      const candidates = [...new Set([...direct, ...desktopNativeActionCandidates()])].filter(node => {
+        if (!visibleNode(node)) return false;
+        if (node.closest('nav,[role="navigation"]')) return false;
+        const text = nativeActionText(node);
+        return /^(?:FOLLOW|UNFOLLOW|FOLLOWING)(?:\s|$)/.test(text);
+      });
+      return candidates.sort((a, b) => b.getBoundingClientRect().top - a.getBoundingClientRect().top)[0] || null;
+    }
+
     function openNativeSendTip() {
       const source = nativeSendTipSource || findNativeSendTipSource();
       setDockCollapsed(true);
@@ -3730,7 +3781,9 @@
     function removeDesktopRoomGridMount() {
       nativeRoomGridTrigger?.remove();
       nativeRoomGridTrigger = null;
-      if (nativeSendTipSource) nativeSendTipSource.classList.remove('roomgrid-native-send-tip-source');
+      nativeDesktopRoomGridSource?.classList.remove('roomgrid-native-fanclub-source');
+      nativeDesktopRoomGridSource = null;
+      nativeDesktopRoomGridReplacesSource = false;
       nativeSendTipSource = null;
       root.classList.remove('roomgrid-native-desktop');
       if (!nativeMobilePage) root.remove();
@@ -3738,17 +3791,22 @@
 
     function mountDesktopRoomGrid() {
       if (nativeMobilePage || !currentRoom) { removeDesktopRoomGridMount(); return false; }
-      const source = findNativeSendTipSource();
+      const fanClubSource = findNativeFanClubSource();
+      const source = fanClubSource || findNativeRoomActionFallback();
+      const replacesSource = !!fanClubSource;
       if (!source) { removeDesktopRoomGridMount(); return false; }
-      if (nativeSendTipSource !== source || !nativeRoomGridTrigger?.isConnected) {
+      if (nativeDesktopRoomGridSource !== source
+        || nativeDesktopRoomGridReplacesSource !== replacesSource
+        || !nativeRoomGridTrigger?.isConnected) {
         removeDesktopRoomGridMount();
-        nativeSendTipSource = source;
-        source.classList.add('roomgrid-native-send-tip-source');
-        nativeRoomGridTrigger = $('span', {
+        nativeDesktopRoomGridSource = source;
+        nativeDesktopRoomGridReplacesSource = replacesSource;
+        nativeSendTipSource = findNativeSendTipSource();
+        if (replacesSource) source.classList.add('roomgrid-native-fanclub-source');
+        nativeRoomGridTrigger = $('button', {
           id: 'roomgrid-native-trigger',
           class: 'roomgrid-native-trigger',
-          role: 'button',
-          tabindex: '0',
+          type: 'button',
           title: 'Open RoomGrid tools',
           'aria-label': 'Open RoomGrid tools',
           'aria-haspopup': 'menu',
@@ -3764,8 +3822,10 @@
           if (event.key === 'Enter' || event.key === ' ') activate(event);
           else if (event.key === 'ArrowUp') { event.preventDefault(); setDockCollapsed(false, 'multicam'); }
         });
-        source.insertAdjacentElement('afterend', nativeRoomGridTrigger);
+        if (replacesSource) source.insertAdjacentElement('afterend', nativeRoomGridTrigger);
+        else source.insertAdjacentElement('beforebegin', nativeRoomGridTrigger);
       }
+      nativeSendTipSource = findNativeSendTipSource();
       root.classList.add('roomgrid-native-desktop');
       root.setAttribute('role', 'menu');
       root.setAttribute('aria-label', 'RoomGrid tools');

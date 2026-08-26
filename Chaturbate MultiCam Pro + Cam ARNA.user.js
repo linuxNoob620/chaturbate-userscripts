@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.2.2
+// @version           16.2.3
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -1105,7 +1105,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.2.2',
+    version: '16.2.3',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -5266,7 +5266,11 @@
         .cam-info { box-sizing:border-box; min-height:48px; display:flex; align-items:center; gap:8px; padding:6px 8px; border-top:1px solid #2d3e50; background:#202c39; }
         .cam-info-copy { min-width:0; flex:1; }.cam-info-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#68b5f0; font:500 12px/1.2 UbuntuMedium,UbuntuRegular,Arial,sans-serif; }.cam-info-meta { margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#b3b3b3; font-size:10px; }
         .cam-info-actions { display:flex; align-items:center; gap:4px; }.cam-info-actions .icon-btn { position:static!important; width:28px!important; height:28px!important; border-radius:3px!important; background:#17202a!important; border:1px solid #2d3e50!important; color:#d7d7d7!important; }
-        .cam-info-actions .icon-btn:hover { background:#253648!important;color:#fff!important; }.cam-info-actions .favorite-active { color:#f59e0b!important; }
+        .cam-info-actions .icon-btn:hover { background:#253648!important;color:#fff!important; }
+        .cam-info-actions .favorite-toggle,
+        .cam-info-actions .favorite-toggle:hover,
+        .cam-info-actions .favorite-toggle.favorite-active { position:static!important; background:#17202a!important; border-color:#2d3e50!important; transform:none!important; }
+        .cam-info-actions .favorite-toggle.favorite-active { color:#f59e0b!important; }
         .cam-card .name-label,.cam-card > .pill,.cam-card > .favorite-toggle,.cam-card > .split-toggle { display:none!important; }
         .cam-card .ops-row { top:auto!important; right:6px!important; bottom:52px!important; left:auto!important; transform:none!important; padding:4px!important; border:1px solid #2d3e50!important; border-radius:4px!important; background:#202c39!important; }
         .status-layer { pointer-events:none; }.status-layer .status-retry { pointer-events:auto; margin-top:8px; min-height:32px; padding:5px 10px; border:1px solid #0c6a93; border-radius:3px; background:#0c6a93; color:#fff; cursor:pointer; }
@@ -5293,6 +5297,8 @@
         body.rg-phone-mode .rg-visible-count { margin-left:4px; }
         body.rg-phone-mode .cam-info { min-height:46px; }.rg-phone-mode .cam-info-name{font-size:12px}.rg-phone-mode .cam-info-actions .icon-btn{width:32px!important;height:32px!important}
         body.rg-phone-mode .rg-control-drawer { width:100vw; border-left:0; }
+        .shell-controls { top:72px!important; right:auto!important; left:8px!important; }
+        body.rg-phone-mode .shell-controls { top:56px!important; left:max(4px,env(safe-area-inset-left))!important; }
         @media (prefers-reduced-motion: reduce) {
           .cam-card, .ctrl-btn, .icon-btn, .group-tab, .menu-pop, .mc-tooltip { transition:none !important; animation:none !important; }
         }
@@ -5477,7 +5483,7 @@
     function syncShellControls() {
       if (!shellControls) return;
       const hidden = !!store.state.settings.pureMode || !!store.state.settings.viewerMode || !!store.state.settings.splitViewActive;
-      shellControls.style.display = hidden ? 'none' : 'flex';
+      shellControls.style.display = !hidden && !!store.state.settings.toolbarCollapsed ? 'flex' : 'none';
     }
 
     let pureCursorTimer = 0;

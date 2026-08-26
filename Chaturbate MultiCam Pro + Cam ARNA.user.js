@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.4.10
+// @version           16.4.11
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -88,7 +88,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.4.10');
+  instanceMarker.setAttribute('data-suite-version', '16.4.11');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1165,7 +1165,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.4.10',
+    version: '16.4.11',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -10280,6 +10280,13 @@
     var c8=0;
     var c10=0;
     var reloadedChatSettingsKey='reloadedGlobalChatSettingsV1';
+    var reloadedChatControlsRoot=null;
+    var reloadedChatObserver=null;
+    var reloadedPmChatObserver=null;
+    var reloadedChatObservedNode=null;
+    var reloadedPmChatObservedNode=null;
+    var reloadedChatInitTimer=0;
+    var reloadedChatInitAttempts=0;
     var firstentry=true;
     var twaiting=false;
     var chatrules="";
@@ -10607,6 +10614,7 @@
 
     function cleanuppage(){
         observer3.disconnect();
+        resetReloadedChatRuntime();
         if (document.getElementById("notepop")){
             document.getElementById("notepop").remove();
         }
@@ -12404,6 +12412,10 @@
             option.value=langcode[i];
             document.getElementById("language").appendChild(option);
         }
+        // The controls are already complete at this point. Make Chat available
+        // immediately instead of waiting for the unrelated room-info API.
+        setReloadedToolsTabAvailable("chat",true);
+        scheduleReloadedChatInit(true);
     }
 
     function followbut(){
@@ -12640,29 +12652,38 @@
         var cred="same-origin";
         if (!anon){cred="omit";}
         var url=domain+"api/chatvideocontext/"+roomname+"/";
+        var requestFinished=false;
+        function finishInfoRequest(){
+            if (requestFinished){return;}
+            requestFinished=true;
+            fetching=Math.max(0,fetching-1);
+        }
         fetching++;
         fetch(url,{ credentials: cred}).then(
             function(response) {
                 if (response.status !== 200){
                     wprof("Error:","<div style='color:red'>You have no access to this room</div>");
+                    finishInfoRequest();
                     if (anon){
                         noaccess=true;
-                        fetching--;
                         info(false);
                         return;
                     }
-                    fetching--;
                     return;
                 }
-                response.json().then(function(roomdata) {
+                return response.json().then(function(roomdata) {
                     data=roomdata;
-                    fetching--;
+                    finishInfoRequest();
                     if (biodata==""){
                         fanbiodata();
                     }else{
                         setprofileinfo();
                     }
                 });
+            }).catch(function(error){
+                finishInfoRequest();
+                console.warn("[Ziggy Suite] Reloaded room info was unavailable or not JSON.",error);
+                scheduleReloadedChatInit(false);
             });
     }
 
@@ -12686,6 +12707,7 @@
         username=data.viewer_username;
         if (room_status =="offline"){
             setReloadedToolsTabAvailable("video",false);
+            setReloadedToolsTabAvailable("chat",false);
         }
         if(pageType=="ppage"){
             setReloadedToolsTabAvailable("video",false);
@@ -13047,32 +13069,89 @@
         document.getElementById("picon").remove();
     }
 
+    function resetReloadedChatRuntime(){
+        clearTimeout(reloadedChatInitTimer);
+        reloadedChatInitTimer=0;
+        reloadedChatInitAttempts=0;
+        if (reloadedChatObserver){reloadedChatObserver.disconnect();}
+        if (reloadedPmChatObserver){reloadedPmChatObserver.disconnect();}
+        reloadedChatObserver=null;
+        reloadedPmChatObserver=null;
+        reloadedChatObservedNode=null;
+        reloadedPmChatObservedNode=null;
+        reloadedChatControlsRoot=null;
+    }
+
+    function nativeReloadedChatReady(){
+        return !!document.getElementById("ChatTabContainer")
+            || document.getElementsByClassName("message-list").length>0
+            || !!document.querySelector('[data-testid="chat-message"]');
+    }
+
+    function bindReloadedChatMessageObservers(){
+        var messageLists=document.getElementsByClassName("message-list");
+        var observenode=messageLists[0]||null;
+        var pmobservenode=messageLists[1]||null;
+        var chatobserverConfig={childList:true};
+        if (observenode!==reloadedChatObservedNode){
+            if (reloadedChatObserver){reloadedChatObserver.disconnect();}
+            reloadedChatObserver=null;
+            reloadedChatObservedNode=observenode;
+            if (observenode){
+                reloadedChatObserver=new MutationObserver(chatadjust);
+                reloadedChatObserver.observe(observenode,chatobserverConfig);
+            }
+        }
+        if (pmobservenode!==reloadedPmChatObservedNode){
+            if (reloadedPmChatObserver){reloadedPmChatObserver.disconnect();}
+            reloadedPmChatObserver=null;
+            reloadedPmChatObservedNode=pmobservenode;
+            if (pmobservenode){
+                reloadedPmChatObserver=new MutationObserver(pmchatadjust);
+                reloadedPmChatObserver.observe(pmobservenode,chatobserverConfig);
+            }
+        }
+    }
+
+    function scheduleReloadedChatInit(resetAttempts){
+        if (resetAttempts){reloadedChatInitAttempts=0;}
+        if (reloadedChatInitTimer){return;}
+        reloadedChatInitTimer=setTimeout(function checkReloadedChat(){
+            reloadedChatInitTimer=0;
+            var controlsRoot=document.getElementById("chatcontrols");
+            if (!controlsRoot){return;}
+            if (nativeReloadedChatReady()){
+                chatchange();
+                return;
+            }
+            reloadedChatInitAttempts++;
+            if (reloadedChatInitAttempts<30){scheduleReloadedChatInit(false);}
+        },180);
+    }
+
     function chatchange(){
+        var controlsRoot=document.getElementById("chatcontrols");
+        if (!controlsRoot){return;}
         setReloadedToolsTabAvailable("chat",true);
         applyReloadedChatSettings();
-        document.getElementById("c1").addEventListener("change",chatsetchange);
-        document.getElementById("c2").addEventListener("change",chatsetchange);
-        document.getElementById("c3").addEventListener("change",chatsetchange);
-        document.getElementById("c4").addEventListener("change",chatsetchange);
-        document.getElementById("c5").addEventListener("change",chatsetchange);
-        document.getElementById("c6").addEventListener("change",chatsetchange);
-        document.getElementById("c7").addEventListener("change",chatsetchange);
-        document.getElementById("c7a").addEventListener("change",chatsetchange);
-        document.getElementById("c8").addEventListener("change",chatsetchange);
-        document.getElementById("c10").addEventListener("change",chatsetchange);
-        document.getElementById("language").addEventListener("change",saveReloadedChatSettings);
-        var chatobserver = new MutationObserver(chatadjust);
-        var pmchatobserver = new MutationObserver(pmchatadjust);
-        var chatobserverConfig = {childList: true};
-        var observenode=document.getElementsByClassName("message-list")[0];
-        var pmobservenode=document.getElementsByClassName("message-list")[1];
-        if (localStorage.getItem(roomname+"Tokens")){
-            document.getElementById("c9").innerHTML=localStorage.getItem(roomname+"Tokens");
-            firstentry=false;
+        if (reloadedChatControlsRoot!==controlsRoot){
+            reloadedChatControlsRoot=controlsRoot;
+            ["c1","c2","c3","c4","c5","c6","c7","c7a","c8","c10"].forEach(function(controlId){
+                var control=document.getElementById(controlId);
+                if (control){control.addEventListener("change",chatsetchange);}
+            });
+            var languageControl=document.getElementById("language");
+            if (languageControl){languageControl.addEventListener("change",saveReloadedChatSettings);}
+            var clearControl=document.getElementById("tclear");
+            if (clearControl){clearControl.addEventListener("click",cleartokens);}
+            if (localStorage.getItem(roomname+"Tokens")){
+                var tokenControl=document.getElementById("c9");
+                if (tokenControl){tokenControl.innerHTML=localStorage.getItem(roomname+"Tokens");}
+                firstentry=false;
+            }
         }
-        document.getElementById("tclear").addEventListener("click",cleartokens);
-        if (observenode) chatobserver.observe(observenode,chatobserverConfig);
-        if (pmobservenode) pmchatobserver.observe(pmobservenode,chatobserverConfig);
+        bindReloadedChatMessageObservers();
+        if (!nativeReloadedChatReady()){scheduleReloadedChatInit(false);}
         applyReloadedChatSettingsToMessages();
     }
 

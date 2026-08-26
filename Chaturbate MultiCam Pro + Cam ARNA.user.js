@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.2.3
+// @version           16.2.4
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -79,6 +79,17 @@
   'use strict';
 
   // Prevent duplicate installations from mounting a second UI or media service.
+  // The DOM marker is visible across separate Tampermonkey sandboxes; a window
+  // property alone is not.
+  const INSTANCE_MARKER_ID = 'ziggy-chaturbate-suite-runtime';
+  if (document.getElementById(INSTANCE_MARKER_ID)) {
+    try { console.warn('[RoomGrid] duplicate userscript installation blocked'); } catch (_) {}
+    return;
+  }
+  const instanceMarker = document.createElement('meta');
+  instanceMarker.id = INSTANCE_MARKER_ID;
+  instanceMarker.setAttribute('data-suite-version', '16.2.4');
+  (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
     try { console.warn('[RoomGrid] duplicate userscript instance blocked'); } catch (_) {}
@@ -1105,7 +1116,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.2.3',
+    version: '16.2.4',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',

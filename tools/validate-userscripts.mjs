@@ -12,6 +12,7 @@ const scripts = [
     file: 'Chaturbate MultiCam Pro + Cam ARNA.user.js',
     meta: 'Chaturbate MultiCam Pro + Cam ARNA.meta.js',
     internalVersion: /version:\s*'([^']+)'/,
+    canonicalRef: true,
     required: ['// @connect           api.github.com'],
   },
   {
@@ -47,7 +48,8 @@ for (const item of scripts) {
   const version = field(header, 'version');
   const updateUrl = field(header, 'updateURL');
   const downloadUrl = field(header, 'downloadURL');
-  const expectedBase = `https://raw.githubusercontent.com/${owner}/${repo}/main/`;
+  const branchPath = item.canonicalRef ? 'refs/heads/main' : 'main';
+  const expectedBase = `https://raw.githubusercontent.com/${owner}/${repo}/${branchPath}/`;
   const internalVersion = source.match(item.internalVersion)?.[1] || '';
   const syntax = spawnSync(process.execPath, ['--check', scriptPath], { encoding: 'utf8' });
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.2.1
+// @version           16.2.2
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -1105,7 +1105,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.2.1',
+    version: '16.2.2',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -4428,6 +4428,10 @@
     document.body.classList.toggle('rg-phone-device', phoneEnvironment);
     if (phoneEnvironment && store.state.settings.phoneModeAuto) {
       store.patchSettings({ viewMode: 'phone', sidebarCollapsed: true });
+    } else if (!phoneEnvironment && store.state.settings.viewMode === 'phone') {
+      // Phone mode is a device presentation choice, not a cloud-synced desktop layout.
+      // A backup restored from a phone should therefore reopen as the normal desktop grid.
+      store.patchSettings({ viewMode: 'grid', sidebarCollapsed: false });
     }
     const service = createRoomService(store);
     Notify.init();
@@ -5246,7 +5250,7 @@
         .rg-visible-count { margin-left:auto; padding:0 8px; color:#b3b3b3; font-size:11px; white-space:nowrap; }
         .sidebar { border:0!important; border-right:1px solid #2d3e50!important; border-radius:0!important; }
         .grid { padding:8px!important; }
-        .rg-control-backdrop { position:fixed; inset:0; z-index:2147483300; background:rgba(0,0,0,.56); }
+        .rg-control-backdrop { position:fixed; inset:0; z-index:2147483600; background:rgba(0,0,0,.56); }
         .rg-control-drawer { position:absolute; top:0; right:0; width:min(360px,92vw); height:100dvh; box-sizing:border-box; display:flex; flex-direction:column; overflow:hidden; background:#202c39; color:#f1f1f1; border-left:1px solid #2d3e50; box-shadow:-12px 0 32px rgba(0,0,0,.34); }
         .rg-control-drawer-head { display:flex; align-items:center; justify-content:space-between; min-height:58px; padding:0 12px; border-bottom:1px solid #2d3e50; }
         .rg-control-drawer-head strong { font-size:15px; }.rg-control-drawer-close { width:34px; height:34px; border:1px solid #2d3e50; border-radius:4px; background:#17202a; color:#fff; font-size:20px; }
@@ -5275,7 +5279,10 @@
         .cam-card:fullscreen .cam-media { width:100%; height:100%; flex:1 1 100%; }
         body.rg-pure-mode .rg-native-header { display:none!important; }
         body.rg-pure-mode .app-shell { height:100dvh!important; }
-        body.rg-phone-mode .rg-native-header { display:grid!important; height:52px; min-height:52px; grid-template-columns:minmax(0,1fr) auto; gap:6px; padding:max(4px,env(safe-area-inset-top)) 6px 4px!important; overflow:hidden!important; touch-action:auto!important; }
+        body.rg-phone-mode .rg-native-header { display:grid!important; height:52px; min-height:52px; grid-template-columns:minmax(0,1fr) auto; gap:6px; padding:max(4px,env(safe-area-inset-top)) 6px 4px 52px!important; overflow:hidden!important; touch-action:auto!important; }
+        body.rg-phone-mode .rg-native-logo-source,
+        body.rg-phone-mode .rg-native-logo-source svg,
+        body.rg-phone-mode .rg-native-logo-source img { max-width:112px; }
         body.rg-phone-mode .rg-native-logo { font-size:18px; }.rg-phone-mode .rg-native-brand-title { padding-left:8px; font-size:11px; }.rg-phone-mode .rg-native-header-center { grid-column:1/-1; display:none; }.rg-phone-mode .rg-native-header-actions .ctrl-btn { width:36px; min-width:36px; padding:0!important; overflow:hidden; font-size:0; }
         body.rg-phone-mode .app-shell { height:calc(100dvh - 52px)!important; }
         body.rg-phone-mode .rg-native-nav { height:44px; min-height:44px!important; padding-left:46px!important; overflow-x:auto!important; overflow-y:hidden!important; scrollbar-width:none; }

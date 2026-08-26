@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.4.6
+// @version           16.4.7
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -88,7 +88,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.4.6');
+  instanceMarker.setAttribute('data-suite-version', '16.4.7');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -515,6 +515,7 @@
       sortManual: 'Manual',
       sortStatus: 'By status',
       sortName: 'By name',
+      sortFavoriteName: 'Favorites, then name',
       sortAdded: 'By added time',
       refreshAll: 'Refresh all',
       notifyOnline: 'Online alerts',
@@ -840,6 +841,7 @@
       sortManual: '手动排序',
       sortStatus: '按状态',
       sortName: '按名称',
+      sortFavoriteName: '收藏优先，再按名称',
       sortAdded: '按添加时间',
       refreshAll: '全部刷新',
       notifyOnline: '上线提醒',
@@ -1163,7 +1165,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.4.6',
+    version: '16.4.7',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -1530,7 +1532,7 @@
     out.settings.focusMainHPct = clampInt(out.settings.focusMainHPct, 44, 78, def.settings.focusMainHPct);
     out.settings.focusAspect = ['auto', '16:9', '4:3', '1:1', '9:16'].includes(out.settings.focusAspect) ? out.settings.focusAspect : 'auto';
     out.settings.focusThumbSize = clampInt(out.settings.focusThumbSize, 96, 260, def.settings.focusThumbSize);
-    out.settings.sortBy = ['manual', 'status', 'name', 'addedAt'].includes(out.settings.sortBy) ? out.settings.sortBy : 'manual';
+    out.settings.sortBy = ['manual', 'status', 'name', 'favoriteName', 'addedAt'].includes(out.settings.sortBy) ? out.settings.sortBy : 'manual';
     out.settings.activeGroup = out.groups.some(g => g.id === out.settings.activeGroup) ? out.settings.activeGroup : DEFAULT_GROUP_ID;
     out.settings.searchQuery = normalizeUsername(out.settings.searchQuery || '');
     out.settings.pureMode = false;
@@ -3519,6 +3521,11 @@
     let nativeDesktopRoomGridSource = null;
     let nativeDesktopRoomGridReplacesSource = false;
     let nativeRoomGridTrigger = null;
+    let desktopVideoFitTimer = 0;
+    let desktopVideoFitBusy = false;
+    let desktopVideoFitObserver = null;
+    let desktopVideoFitPanel = null;
+    let desktopVideoFitAnchor = null;
     let mobilePrivateTab = null;
     let mobilePrivateBypass = false;
     let mobilePrivateMode = false;
@@ -3834,6 +3841,119 @@
       return true;
     }
 
+    function disconnectDesktopVideoFitObserver() {
+      desktopVideoFitObserver?.disconnect?.();
+      desktopVideoFitObserver = null;
+      desktopVideoFitPanel = null;
+      desktopVideoFitAnchor = null;
+    }
+
+    function desktopVideoFitNodes() {
+      if (nativeMobilePage || !currentRoom || document.fullscreenElement || isWorkstation) return null;
+      const video = getPrimaryPageVideo();
+      if (!video) return null;
+      const panel = video.closest('#VideoPanel') || document.getElementById('VideoPanel');
+      if (!panel || !panel.contains(video) || !visibleNode(panel)) return null;
+      const roomContents = panel.closest('#TheaterModeRoomContents') || document.getElementById('TheaterModeRoomContents');
+      if (!roomContents) return null;
+      const handle = [...roomContents.querySelectorAll('.resizeHandle')].find(visibleNode);
+      // Chaturbate hides this handle in Theatre Mode. Its visible state is the
+      // most reliable signal that the room is in normal desktop split mode.
+      if (!handle) return null;
+      if (!nativeRoomGridTrigger || !visibleNode(nativeRoomGridTrigger)) return null;
+
+      let anchor = nativeRoomGridTrigger;
+      for (let node = anchor.parentElement, depth = 0; node && node !== document.body && depth < 4; node = node.parentElement, depth += 1) {
+        const rect = node.getBoundingClientRect();
+        const anchorRect = anchor.getBoundingClientRect();
+        if (rect.height <= 96 && rect.bottom >= anchorRect.bottom && rect.bottom - anchorRect.bottom <= 18) anchor = node;
+        else if (rect.height > 96) break;
+      }
+
+      let topSection = panel.parentElement;
+      while (topSection && topSection !== roomContents && !topSection.contains(handle)) topSection = topSection.parentElement;
+      if (!topSection || !topSection.contains(handle)) topSection = roomContents;
+      return { video, panel, handle, roomContents, topSection, anchor };
+    }
+
+    function bindDesktopVideoFitObserver(panel, anchor) {
+      if (desktopVideoFitPanel === panel && desktopVideoFitAnchor === anchor && desktopVideoFitObserver) return;
+      disconnectDesktopVideoFitObserver();
+      desktopVideoFitPanel = panel;
+      desktopVideoFitAnchor = anchor;
+      if (typeof ResizeObserver !== 'function') return;
+      desktopVideoFitObserver = new ResizeObserver(() => scheduleDesktopVideoFit(140));
+      desktopVideoFitObserver.observe(panel);
+      if (anchor !== panel) desktopVideoFitObserver.observe(anchor);
+    }
+
+    function applyDesktopVideoFit() {
+      if (desktopVideoFitBusy) return;
+      const nodes = desktopVideoFitNodes();
+      if (!nodes) return;
+      const { video, panel, handle, roomContents, topSection, anchor } = nodes;
+      bindDesktopVideoFitObserver(panel, anchor);
+
+      // Do not resize the room in response to an unrelated page scroll. The
+      // controller owns the initial/top-of-room layout and browser resizes.
+      if (Math.abs(window.scrollY || 0) > 32) return;
+      const viewportHeight = window.visualViewport?.height || window.innerHeight;
+      const anchorRect = anchor.getBoundingClientRect();
+      const panelRect = panel.getBoundingClientRect();
+      const handleRect = handle.getBoundingClientRect();
+      const topRect = topSection.getBoundingClientRect();
+      if (!viewportHeight || panelRect.width < 1 || anchorRect.height < 1 || topRect.width < 1) return;
+
+      const videoRect = video.getBoundingClientRect();
+      let heightPerWidth = videoRect.width > 0 ? videoRect.height / videoRect.width : 0;
+      if (!(heightPerWidth > 0.3 && heightPerWidth < 1.1) && video.videoWidth > 0 && video.videoHeight > 0) {
+        heightPerWidth = video.videoHeight / video.videoWidth;
+      }
+      if (!(heightPerWidth > 0.3 && heightPerWidth < 1.1)) heightPerWidth = 9 / 16;
+
+      const rowSafety = 8;
+      const heightDelta = (viewportHeight - rowSafety) - anchorRect.bottom;
+      const nativeMinimumVideoWidth = 504;
+      const nativeMinimumChatWidth = 155;
+      const maximumByContainer = Math.floor(topRect.width - Math.max(0, handleRect.width) - nativeMinimumChatWidth);
+      const maximumWidth = Math.max(nativeMinimumVideoWidth, maximumByContainer);
+      const targetWidth = Math.round(Math.max(
+        nativeMinimumVideoWidth,
+        Math.min(maximumWidth, panelRect.width + (heightDelta / heightPerWidth)),
+      ));
+      if (!Number.isFinite(targetWidth) || Math.abs(targetWidth - panelRect.width) <= 3) return;
+
+      const handleX = handleRect.left + (handleRect.width / 2);
+      const targetX = panelRect.left + targetWidth + (handleRect.width / 2);
+      desktopVideoFitBusy = true;
+      handle.dispatchEvent(new MouseEvent('mousedown', {
+        bubbles: true, cancelable: true, view: window,
+        clientX: handleX, clientY: handleRect.top + (handleRect.height / 2),
+        button: 0, buttons: 1,
+      }));
+      requestAnimationFrame(() => {
+        roomContents.dispatchEvent(new MouseEvent('mousemove', {
+          bubbles: true, cancelable: true, view: window,
+          clientX: targetX, clientY: handleRect.top + (handleRect.height / 2),
+          button: 0, buttons: 1,
+        }));
+        requestAnimationFrame(() => {
+          roomContents.dispatchEvent(new MouseEvent('mouseup', {
+            bubbles: true, cancelable: true, view: window,
+            clientX: targetX, clientY: handleRect.top + (handleRect.height / 2),
+            button: 0, buttons: 0,
+          }));
+          desktopVideoFitBusy = false;
+          scheduleDesktopVideoFit(220);
+        });
+      });
+    }
+
+    function scheduleDesktopVideoFit(delay = 120) {
+      clearTimeout(desktopVideoFitTimer);
+      desktopVideoFitTimer = setTimeout(applyDesktopVideoFit, delay);
+    }
+
     function mobileTabText(node) {
       return String(node?.textContent || '').replace(/\s+/g, ' ').trim();
     }
@@ -4061,12 +4181,16 @@
     function syncNativeRoomGridPlacement() {
       if (!currentRoom) {
         collapsed = true;
+        clearTimeout(desktopVideoFitTimer);
+        disconnectDesktopVideoFitObserver();
         removeDesktopRoomGridMount();
         restoreMobilePrivateTab();
         syncDock();
         return;
       }
       if (nativeMobilePage) {
+        clearTimeout(desktopVideoFitTimer);
+        disconnectDesktopVideoFitObserver();
         removeDesktopRoomGridMount();
         if (!collapsed) mobilePrivateMode = false;
         mountMobileRoomGrid();
@@ -4076,6 +4200,7 @@
         mountDesktopRoomGrid();
         nativeRoomGridTrigger?.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
         if (!collapsed) requestAnimationFrame(positionDesktopRoomGridMenu);
+        scheduleDesktopVideoFit();
       }
     }
 
@@ -4117,7 +4242,15 @@
     addEventListener('resize', () => {
       if (!nativeMobilePage && !collapsed) positionDesktopRoomGridMenu();
       else syncNativeRoomGridPlacementSoon();
+      if (!nativeMobilePage) scheduleDesktopVideoFit(160);
     }, { passive: true });
+    window.visualViewport?.addEventListener('resize', () => scheduleDesktopVideoFit(160), { passive: true });
+    document.addEventListener('fullscreenchange', () => scheduleDesktopVideoFit(180));
+    for (const eventName of ['mouseup', 'touchend', 'pointerup']) {
+      document.addEventListener(eventName, () => {
+        if (!nativeMobilePage && !desktopVideoFitBusy) scheduleDesktopVideoFit(180);
+      }, true);
+    }
     document.addEventListener('pointerdown', event => {
       if (collapsed || nativeMobilePage) return;
       if (root.contains(event.target) || nativeRoomGridTrigger?.contains(event.target)) return;
@@ -6256,6 +6389,7 @@
       $('option', { value: 'manual' }, t('sortManual')),
       $('option', { value: 'status' }, t('sortStatus')),
       $('option', { value: 'name' }, t('sortName')),
+      $('option', { value: 'favoriteName' }, t('sortFavoriteName')),
       $('option', { value: 'addedAt' }, t('sortAdded')),
     ]);
     sortSel.value = store.state.settings.sortBy;
@@ -8883,12 +9017,16 @@
       const sb = s.settings.sortBy;
       if (sb === 'manual') list.sort((a, b) => roomOrderInGroup(a, ag) - roomOrderInGroup(b, ag));
       else if (sb === 'name') list.sort((a, b) => a.id.localeCompare(b.id));
+      else if (sb === 'favoriteName') list.sort((a, b) => {
+        const favoriteDelta = Number(roomInGroup(b, FAVORITE_GROUP_ID)) - Number(roomInGroup(a, FAVORITE_GROUP_ID));
+        return favoriteDelta || a.id.localeCompare(b.id);
+      });
       else if (sb === 'addedAt') list.sort((a, b) => b.addedAt - a.addedAt);
       else if (sb === 'status') {
         const rank = { online: 0, private: 1, loading: 2, error: 3, offline: 4, unknown: 5 };
         list.sort((a, b) => (rank[a.lastStatus] ?? 9) - (rank[b.lastStatus] ?? 9));
       }
-      if (s.settings.favoriteFirst !== false && ag !== FAVORITE_GROUP_ID) {
+      if (sb !== 'favoriteName' && s.settings.favoriteFirst !== false && ag !== FAVORITE_GROUP_ID) {
         list = list
           .map((room, idx) => ({ room, idx, fav: roomInGroup(room, FAVORITE_GROUP_ID) ? 1 : 0 }))
           .sort((a, b) => (b.fav - a.fav) || (a.idx - b.idx))

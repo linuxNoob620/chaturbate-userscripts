@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name               Ziggy Mobile Clean View
 // @namespace          ziggy.chaturbate.mobile-comfort
-// @version            2.1.5
+// @version            2.2.0
 // @description        A clean Chaturbate mobile layout with chat hidden, video-only fullscreen, Picture-in-Picture, and one shared tools dock.
 // @author             Ziggy
 // @homepageURL        https://github.com/linuxNoob620/chaturbate-userscripts
@@ -19,7 +19,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '2.1.5';
+  const VERSION = '2.2.0';
   const STORE_KEY = 'cb_desktop_mobile_comfort_v1';
   const ROOT_ID = 'zmc-root';
   const STYLE_ID = 'zmc-style';
@@ -30,6 +30,11 @@
     workshop: 'ziggy-suite:open-workshop',
     roomGrid: 'ziggy-suite:toggle-roomgrid',
     toggleRoom: 'ziggy-suite:toggle-current-room',
+  });
+  const CONTROL_EVENTS = Object.freeze({
+    openPanel: 'ziggy-mobile-clean-view:open-panel',
+    fullscreen: 'ziggy-mobile-clean-view:fullscreen',
+    pip: 'ziggy-mobile-clean-view:pip',
   });
   const BLOCKED_PATH = /^\/(?:accounts|security|auth|apps|api|b|billingsupport|purchase|tipping)(?:\/|$)/i;
   const ROOM_PATH_EXCLUSIONS = new Set([
@@ -178,6 +183,28 @@
     const touch = Number(navigator.maxTouchPoints || 0) > 0;
     const screenShort = Math.min(Number(screen?.width) || 9999, Number(screen?.height) || 9999);
     return mobileUa || (coarse && touch && screenShort <= 900);
+  }
+
+  function isNativeMobileSite() {
+    if (!isMobileDevice()) return false;
+    // Chaturbate's desktop application keeps this root even when its window is
+    // narrow or the browser is using a mobile user agent. Never apply Clean
+    // View to that layout (including "Desktop Site" on a phone).
+    if (document.getElementById('desktop-spa-header')) return false;
+    if (document.querySelector('[data-testid="header-nav-bar"], [data-testid="desktop-header"]')) return false;
+    const marker = document.querySelector([
+      '[data-testid="mobile-header"]',
+      '[data-testid="mobile-navigation"]',
+      '[data-testid="mobile-room-header"]',
+      '.MobileHeader',
+      '.evolve-header',
+      '[class*="MobileHeader"]',
+    ].join(','));
+    if (marker) return true;
+    // The native mobile shell does not expose one stable marker on every route.
+    // This fallback is used only on a real touch/mobile device after the desktop
+    // roots above have been ruled out.
+    return Math.min(Number(innerWidth) || 9999, Number(screen?.width) || 9999) <= 1100;
   }
 
   function isBlockedPage() {
@@ -517,6 +544,7 @@
       }
       html.zmc-active #zmc-root { display:block; }
       html.zmc-active[data-ziggy-suite-dock-open="1"] #zmc-root { display:none !important; }
+      html[data-ziggy-suite-available="1"] #zmc-root .zmc-launcher { display:none !important; }
       #zmc-root, #zmc-root * { box-sizing:border-box; }
       #zmc-root button, #zmc-root input, #zmc-root select { font:inherit; }
       .zmc-launcher {
@@ -1709,7 +1737,7 @@
   function syncEnvironment() {
     if (!document.body) return;
     createUi();
-    const supported = isMobileDevice() && !isBlockedPage();
+    const supported = isNativeMobileSite() && !isBlockedPage();
     const active = supported && settings.enabled;
     const room = active && isRoomPage();
     const browse = active && isBrowsePage();
@@ -1829,11 +1857,22 @@
   document.addEventListener('ziggy-mobile-clean-view:import-settings', event => {
     settings = sanitizeSettings(event.detail);
     writeStoredValue(JSON.stringify(settings));
-    if (isMobileDevice()) {
+    if (isNativeMobileSite()) {
       syncEnvironment();
       renderSettings();
       resetIdleTimer();
     }
+  });
+  document.addEventListener(CONTROL_EVENTS.openPanel, event => {
+    if (!isNativeMobileSite() || isBlockedPage()) return;
+    settingsOpen = event.detail?.view === 'settings';
+    setPanelOpen(true);
+  });
+  document.addEventListener(CONTROL_EVENTS.fullscreen, () => {
+    if (isNativeMobileSite() && !isBlockedPage()) enterVideoOnlyFullscreen();
+  });
+  document.addEventListener(CONTROL_EVENTS.pip, () => {
+    if (isNativeMobileSite() && !isBlockedPage()) togglePictureInPicture();
   });
 
   start();

@@ -72,6 +72,10 @@ for (const item of scripts) {
     if (!source.includes('mobileCleanView: captureMobileCleanViewSettings()')) failures.push(`${item.file}: Mobile Clean View backup component is missing`);
     if (!source.includes('onclick: openCurrentRoomRecu')) failures.push(`${item.file}: RoomGrid Recu.me button is missing`);
     if (!source.includes('https://recu.me/performer/${encodeURIComponent(currentRoom)}')) failures.push(`${item.file}: RoomGrid Recu.me URL is not tied to the current model`);
+    if (!source.includes('Integrated component: Ziggy Mobile Clean View')) failures.push(`${item.file}: integrated Mobile Clean View runtime is missing`);
+    if (!source.includes("const supported = isNativeMobileSite() && !isBlockedPage();")) failures.push(`${item.file}: integrated Mobile Clean View is not gated to native mobile`);
+    if (!source.includes("fullscreen: 'ziggy-mobile-clean-view:fullscreen'")) failures.push(`${item.file}: Suite-to-Clean-View fullscreen bridge is missing`);
+    if ((source.match(/^\/\/ ==UserScript==$/gm) || []).length !== 1) failures.push(`${item.file}: embedded component added an extra userscript metadata block`);
     const mobileStop = source.indexOf('if (!document.getElementById("desktop-spa-header")){return;}');
     const reloadedStyle = source.indexOf('    setgenstyle();', mobileStop);
     if (mobileStop < 0 || reloadedStyle < mobileStop) failures.push(`${item.file}: Reloaded desktop CSS is not isolated from native mobile`);
@@ -84,8 +88,8 @@ for (const item of scripts) {
     if (!source.includes('for (const selector of ORIGINAL_MOBILE_HIDE_CHAT_SELECTORS)')) {
       failures.push(`${item.file}: original mobile chat selectors are not integrated into hideChat`);
     }
-    if (!source.includes('const supported = isMobileDevice() && !isBlockedPage();')) {
-      failures.push(`${item.file}: Clean View behavior is not gated to mobile devices`);
+    if (!source.includes('const supported = isNativeMobileSite() && !isBlockedPage();')) {
+      failures.push(`${item.file}: Clean View behavior is not gated to native mobile`);
     }
   }
 

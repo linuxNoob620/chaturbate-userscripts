@@ -1,16 +1,18 @@
 # Ziggy's Chaturbate userscripts
 
-This repository publishes the stable update channel for two Tampermonkey userscripts:
+This repository publishes one stable Tampermonkey userscript for both desktop and mobile Chaturbate:
 
-- **Ziggy Chaturbate Suite** — RoomGrid MultiCam workstation, Cam ARNA, Reloaded tools, recording, split view, encrypted settings sync, and a native-mobile Reloaded entry in Chaturbate's hamburger menu.
-- **Ziggy Mobile Clean View** — native-mobile layout with chat hidden, video-only fullscreen with Fit/Fill, pinch zoom and pan, Picture-in-Picture, a compact room grid, and one shared tools dock.
+- **Ziggy Chaturbate Suite** — RoomGrid MultiCam workstation, Cam ARNA, Reloaded tools, recording, split view, encrypted settings sync, and native desktop/mobile integration.
+- On Chaturbate's **native mobile site only**, the Suite also enables Mobile Clean View: chat hiding, video-only fullscreen with Fit/Fill, pinch zoom and pan, Picture-in-Picture, a compact room grid, and Suite controls in the hamburger menu.
+- Desktop behavior stays desktop-only; Mobile Clean View is not activated by merely resizing a desktop page.
 
 ## Install
 
 - [Install Ziggy Chaturbate Suite](https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.user.js)
-- [Install Ziggy Mobile Clean View](https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20Desktop%20Mobile%20Comfort.user.js)
 
-Install each script from its link on every device. Tampermonkey will use the embedded `@updateURL` and `@downloadURL` values for later update checks.
+Install the Suite from the same link on every device. Tampermonkey will use its embedded `@updateURL` and `@downloadURL` values for later update checks.
+
+`Chaturbate Desktop Mobile Comfort.user.js` remains in the repository only as a legacy fallback. Do not install it alongside the Suite because its runtime is already embedded and duplicate instances are intentionally blocked.
 
 ## Encrypted settings backup
 

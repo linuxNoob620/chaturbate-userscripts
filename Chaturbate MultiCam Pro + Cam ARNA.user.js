@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.4.11
+// @version           16.4.12
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -88,7 +88,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.4.11');
+  instanceMarker.setAttribute('data-suite-version', '16.4.12');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1165,7 +1165,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.4.11',
+    version: '16.4.12',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3526,6 +3526,9 @@
     let desktopVideoFitBusy = false;
     let desktopVideoFitAttempts = 0;
     let desktopVideoFitCompleted = false;
+    let desktopVideoFitStartedAt = 0;
+    let desktopVideoFitStableSamples = 0;
+    let desktopVideoFitLastMeasurement = null;
     let desktopInitialRoomPositionTimer = 0;
     let desktopInitialRoomPositionAttempts = 0;
     let desktopInitialRoomPositioned = false;
@@ -3905,8 +3908,18 @@
 
     function applyDesktopVideoFit() {
       if (desktopVideoFitBusy || desktopVideoFitCompleted) return;
+      if (!desktopVideoFitStartedAt) desktopVideoFitStartedAt = Date.now();
+      const startupExpired = () => Date.now() - desktopVideoFitStartedAt >= 6000;
+      const retryStartupFit = (delay = 140) => {
+        if (startupExpired()) {
+          desktopVideoFitCompleted = true;
+          clearTimeout(desktopVideoFitTimer);
+          return;
+        }
+        scheduleDesktopVideoFit(delay);
+      };
       const nodes = desktopVideoFitNodes();
-      if (!nodes) return;
+      if (!nodes) { retryStartupFit(); return; }
       const { video, panel, handle, roomContents, topSection, anchor } = nodes;
 
       const viewportHeight = window.visualViewport?.height || window.innerHeight;
@@ -3914,7 +3927,37 @@
       const panelRect = panel.getBoundingClientRect();
       const handleRect = handle.getBoundingClientRect();
       const topRect = topSection.getBoundingClientRect();
-      if (!viewportHeight || panelRect.width < 1 || anchorRect.height < 1 || topRect.width < 1) return;
+      if (!viewportHeight || panelRect.width < 1 || anchorRect.height < 1 || topRect.width < 1
+        || video.readyState < 2 || video.videoWidth < 1 || video.videoHeight < 1) {
+        retryStartupFit();
+        return;
+      }
+
+      // Chaturbate assembles the player and action row in several asynchronous
+      // layout passes. Require two matching measurements before calculating the
+      // one-time fit, otherwise a temporary geometry is persisted until refresh.
+      const measurement = {
+        viewportHeight,
+        anchorBottom: anchorRect.bottom,
+        panelWidth: panelRect.width,
+        panelTop: panelRect.top,
+        topWidth: topRect.width,
+        handleWidth: handleRect.width,
+      };
+      const previous = desktopVideoFitLastMeasurement;
+      const measurementStable = previous
+        && Math.abs(previous.viewportHeight - measurement.viewportHeight) <= 1
+        && Math.abs(previous.anchorBottom - measurement.anchorBottom) <= 1
+        && Math.abs(previous.panelWidth - measurement.panelWidth) <= 1
+        && Math.abs(previous.panelTop - measurement.panelTop) <= 1
+        && Math.abs(previous.topWidth - measurement.topWidth) <= 1
+        && Math.abs(previous.handleWidth - measurement.handleWidth) <= 1;
+      desktopVideoFitLastMeasurement = measurement;
+      desktopVideoFitStableSamples = measurementStable ? desktopVideoFitStableSamples + 1 : 1;
+      if (desktopVideoFitStableSamples < 2) {
+        retryStartupFit();
+        return;
+      }
 
       const videoRect = video.getBoundingClientRect();
       let heightPerWidth = videoRect.width > 0 ? videoRect.height / videoRect.width : 0;
@@ -3935,6 +3978,7 @@
       ));
       if (!Number.isFinite(targetWidth) || Math.abs(targetWidth - panelRect.width) <= 3) {
         desktopVideoFitCompleted = true;
+        clearTimeout(desktopVideoFitTimer);
         return;
       }
 
@@ -3950,11 +3994,17 @@
           }
           const nextWidth = panel.getBoundingClientRect().width;
           const madeProgress = Math.abs(nextWidth - panelRect.width) > 1;
-          const needsAnotherStep = madeProgress
-            && Math.abs(nextWidth - targetWidth) > 3
-            && desktopVideoFitAttempts < 4;
-          if (needsAnotherStep) scheduleDesktopVideoFit(0);
-          else desktopVideoFitCompleted = true;
+          desktopVideoFitStableSamples = 0;
+          desktopVideoFitLastMeasurement = null;
+          // Re-measure the settled action row after every native drag. Some
+          // Chaturbate layouts accept only a partial drag step, and the next
+          // pass must calculate from the new persisted width.
+          if (!startupExpired() && desktopVideoFitAttempts < 6) {
+            scheduleDesktopVideoFit(madeProgress ? 140 : 220);
+          } else {
+            desktopVideoFitCompleted = true;
+            clearTimeout(desktopVideoFitTimer);
+          }
         }, 220);
       };
       desktopVideoFitAttempts += 1;

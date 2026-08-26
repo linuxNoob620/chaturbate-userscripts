@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.4.14
+// @version           16.4.15
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -88,7 +88,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.4.14');
+  instanceMarker.setAttribute('data-suite-version', '16.4.15');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -739,8 +739,6 @@
       addRoom: (n) => `Add ${n}`,
       alreadyAdded: (n) => ` ${n} already in workstation`,
       openWorkstation: 'Open workstation',
-      openWorkstationHere: 'Open here (replace page)',
-      openWorkstationHereConfirm: 'Replace this page with the workstation? You can go back via the browser.',
       memoryStat: (n) => `${n} rooms saved`,
       memoryView: 'View saved list',
       collapseFAB: 'Collapse dock',
@@ -751,7 +749,6 @@
       dockCurrentRoom: (n) => `Current: ${n}`,
       dockNoRoom: 'No room detected',
       dockOpen: 'Open workstation',
-      dockOpenHere: 'Open here',
       dockAdd: 'Add room',
       dockRemove: 'Remove room',
       dockRecord: 'Record in workstation',
@@ -1050,8 +1047,6 @@
       addRoom: (n) => `加入 ${n}`,
       alreadyAdded: (n) => ` ${n} 已在工作台`,
       openWorkstation: '打开工作台',
-      openWorkstationHere: '在当前页打开（覆盖）',
-      openWorkstationHereConfirm: '工作台将取代当前页面，需要时可用浏览器后退返回。继续？',
       memoryStat: (n) => `已记录 ${n} 个房间`,
       memoryView: '查看记忆列表',
       collapseFAB: '收起工具坞',
@@ -1062,7 +1057,6 @@
       dockCurrentRoom: (n) => `当前：${n}`,
       dockNoRoom: '未识别到房间',
       dockOpen: '打开工作台',
-      dockOpenHere: '当前页打开',
       dockAdd: '加入房间',
       dockRemove: '移除房间',
       dockRecord: '在工作台录制',
@@ -1165,7 +1159,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.4.14',
+    version: '16.4.15',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3143,13 +3137,6 @@
       stopAllPageMedia();
       openNoopener(buildWorkstationUrl());
     };
-    const openWorkstationHere = () => {
-      // 把工作台直接挂到当前页面（破坏性，但有用户要求）
-      // 实现：跳转到 ?multicam_mode=1 同 tab；跳转前先停掉当前页面媒体。
-      stopAllPageMedia();
-      location.href = buildWorkstationUrl();
-    };
-
     function findDesktopNavigationSlot(kind) {
       const nav = document.querySelector('[data-testid="header-nav-bar"]') || document.querySelector('#desktop-spa-header nav') || document.querySelector('header nav');
       if (!nav) return null;
@@ -3326,6 +3313,8 @@
       .roomgrid-dock-action { min-height:36px; border:1px solid #2d3e50; border-radius:4px; background:#17202a; color:#d7d7d7; cursor:pointer; font-size:12px; font-weight:500; text-align:left; padding:7px 9px; }
       .roomgrid-dock-action:hover { background:#253648; border-color:#3b5066; color:#fff; }
       .roomgrid-dock-action.primary { background:#0c6a93; border-color:#0c6a93; color:#fff; }
+      .roomgrid-dock-action.roomgrid-recu-action { background:#5b2b73; border-color:#8d55a5; color:#fff; }
+      .roomgrid-dock-action.roomgrid-recu-action:hover { background:#70388a; border-color:#a16abb; color:#fff; }
       .roomgrid-dock-action.success,.roomgrid-dock-action.warn { background:#17202a; border-color:#2d3e50; color:#d7d7d7; }
       .roomgrid-dock-setting { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:7px 8px; border:1px solid #2d3e50; border-radius:4px; background:#17202a; color:#b3b3b3; font-size:11px; }
       .roomgrid-dock-setting-control { display:flex; align-items:center; gap:5px; color:#94a3b8; white-space:nowrap; }
@@ -3455,6 +3444,9 @@
       .roomgrid-native-desktop .roomgrid-dock-action:hover,
       .roomgrid-native-desktop .roomgrid-dock-action:focus-visible { background:#253648; color:#fff; outline:none; }
       .roomgrid-native-desktop .roomgrid-dock-action.primary { background:#0c6a93; }
+      .roomgrid-native-desktop .roomgrid-dock-action.roomgrid-recu-action { background:#5b2b73; color:#fff; }
+      .roomgrid-native-desktop .roomgrid-dock-action.roomgrid-recu-action:hover,
+      .roomgrid-native-desktop .roomgrid-dock-action.roomgrid-recu-action:focus-visible { background:#70388a; color:#fff; }
       .roomgrid-native-desktop .roomgrid-dock-setting { margin:8px; }
       .roomgrid-native-desktop .roomgrid-dock-foot { padding:8px 12px; }
       .roomgrid-native-desktop .roomgrid-private-action { display:none; }
@@ -3522,6 +3514,7 @@
     let collapsed = true;
     localStorage.setItem('ryujo_fab_collapsed', '1');
     let dockAutoCollapseTimer = 0;
+    let dockPointerInside = false;
     let dragged = false, sx, sy, ox, oy;
     let nativeSendTipSource = null;
     let nativeDesktopRoomGridSource = null;
@@ -3554,7 +3547,7 @@
 
     const roomLine = $('div', { class: 'roomgrid-dock-room' }, t('dockNoRoom'));
     const addBtn = $('button', { class: 'roomgrid-dock-action success', onclick: () => toggleCurrentRoomSaved() }, t('dockAdd'));
-    const recuBtn = $('button', { class: 'roomgrid-dock-action', onclick: openCurrentRoomRecu }, t('dockRecu'));
+    const recuBtn = $('button', { class: 'roomgrid-dock-action roomgrid-recu-action', onclick: openCurrentRoomRecu }, t('dockRecu'));
     const sendTipMenuBtn = $('button', { class: 'roomgrid-dock-action roomgrid-send-tip-action', type: 'button', onclick: openNativeSendTip }, 'Send Tip');
     const privateMenuBtn = $('button', { class: 'roomgrid-dock-action roomgrid-private-action', type: 'button', onclick: openNativePrivateTab }, 'Private show options');
     const head = $('button', { class: 'roomgrid-dock-head', title: 'Alt+M / Alt+A / Shift+A', onclick: () => { if (!dragged) toggleDock(); } }, [
@@ -3582,13 +3575,12 @@
       roomLine,
       $('div', { class: 'roomgrid-dock-actions' }, [
         $('button', { class: 'roomgrid-dock-action primary', onclick: openWorkstationNew }, t('dockOpen')),
+        recuBtn,
         addBtn,
         $('button', { class: 'roomgrid-dock-action warn', onclick: queueCurrentRoomRecording }, t('dockRecord')),
         $('button', { class: 'roomgrid-dock-action', onclick: captureCurrentPageVideo }, t('dockScreenshot')),
         $('button', { class: 'roomgrid-dock-action', onclick: toggleCurrentPagePiP }, t('dockPip')),
         $('button', { class: 'roomgrid-dock-action', onclick: toggleCurrentPageMute }, t('dockMute')),
-        $('button', { class: 'roomgrid-dock-action', onclick: () => { if (confirm(t('openWorkstationHereConfirm'))) openWorkstationHere(); } }, t('dockOpenHere')),
-        recuBtn,
         sendTipMenuBtn,
         privateMenuBtn,
       ]),
@@ -3687,9 +3679,14 @@
       // The mobile RoomGrid is a native tab, not a transient popup. Keep it open
       // until the user chooses another native room tab.
       if (nativeMobilePage && mobileRoomGridOpen) return;
+      if (!nativeMobilePage && dockPointerInside) return;
       const seconds = getDockAutoCollapseSeconds();
       if (seconds <= 0) return;
-      dockAutoCollapseTimer = setTimeout(() => setDockCollapsed(true), seconds * 1000);
+      dockAutoCollapseTimer = setTimeout(() => {
+        dockAutoCollapseTimer = 0;
+        if (!nativeMobilePage && (dockPointerInside || root.matches(':hover'))) return;
+        setDockCollapsed(true);
+      }, seconds * 1000);
     }
 
     function setDockCollapsed(nextCollapsed, tabOnOpen = 'multicam') {
@@ -4626,6 +4623,14 @@
     for (const eventName of ['pointerdown', 'keydown', 'input', 'change']) {
       root.addEventListener(eventName, () => { if (!collapsed) scheduleDockAutoCollapse(); }, true);
     }
+    root.addEventListener('pointerenter', () => {
+      dockPointerInside = true;
+      clearDockAutoCollapseTimer();
+    });
+    root.addEventListener('pointerleave', () => {
+      dockPointerInside = false;
+      if (!collapsed) scheduleDockAutoCollapse();
+    });
 
     if (!nativeMobilePage) {
       head.addEventListener('mousedown', (e) => {

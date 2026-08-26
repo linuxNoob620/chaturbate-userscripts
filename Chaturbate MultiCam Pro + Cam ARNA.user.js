@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.4.13
+// @version           16.4.14
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -88,7 +88,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.4.13');
+  instanceMarker.setAttribute('data-suite-version', '16.4.14');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1165,7 +1165,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.4.13',
+    version: '16.4.14',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3430,7 +3430,7 @@
       /* Native room integration: the old floating launcher is never shown. */
       .roomgrid-dock { display:none !important; }
       .roomgrid-dock.roomgrid-native-desktop {
-        position:fixed !important; right:auto !important; bottom:auto !important; left:0; top:0;
+        position:absolute !important; right:auto !important; bottom:auto !important; left:0; top:0;
         z-index:2147483200; display:block !important; width:302px !important;
         max-width:calc(100vw - 16px); transform:none !important; opacity:1 !important;
         font-family:UbuntuRegular,Helvetica,Arial,sans-serif; user-select:none;
@@ -3821,13 +3821,15 @@
       if (nativeMobilePage || collapsed || !nativeRoomGridTrigger || !root.isConnected) return;
       const triggerRect = nativeRoomGridTrigger.getBoundingClientRect();
       const menuRect = root.getBoundingClientRect();
-      const left = Math.max(8, Math.min(innerWidth - menuRect.width - 8, triggerRect.right - menuRect.width));
+      const viewportLeft = window.scrollX || document.documentElement.scrollLeft || 0;
+      const viewportTop = window.scrollY || document.documentElement.scrollTop || 0;
+      const leftInViewport = Math.max(8, Math.min(innerWidth - menuRect.width - 8, triggerRect.right - menuRect.width));
       const spaceAbove = triggerRect.top - 8;
-      const top = spaceAbove >= menuRect.height
+      const topInViewport = spaceAbove >= menuRect.height
         ? triggerRect.top - menuRect.height - 6
         : Math.min(innerHeight - menuRect.height - 8, triggerRect.bottom + 6);
-      root.style.left = `${Math.round(left)}px`;
-      root.style.top = `${Math.max(8, Math.round(top))}px`;
+      root.style.left = `${Math.round(viewportLeft + leftInViewport)}px`;
+      root.style.top = `${Math.round(viewportTop + Math.max(8, topInViewport))}px`;
     }
 
     function removeDesktopRoomGridMount() {

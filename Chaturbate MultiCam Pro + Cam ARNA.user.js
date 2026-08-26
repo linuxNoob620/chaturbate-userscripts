@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.2.4
+// @version           16.3.0
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -88,7 +88,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.2.4');
+  instanceMarker.setAttribute('data-suite-version', '16.3.0');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1116,7 +1116,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.2.4',
+    version: '16.3.0',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3350,6 +3350,81 @@
       html:not(.ziggy-suite-mobile) .roomgrid-dock.is-collapsed .roomgrid-dock-head { border-radius:4px; }
       html:not(.ziggy-suite-mobile) .roomgrid-dock.is-collapsed .roomgrid-dock-head { width:44px; height:44px; padding:4px; }
       html:not(.ziggy-suite-mobile) .roomgrid-dock.is-collapsed .roomgrid-dock-head > span:not(.roomgrid-dock-mark) { display:none !important; }
+
+      /* Native room integration: the old floating launcher is never shown. */
+      .roomgrid-dock { display:none !important; }
+      .roomgrid-dock.roomgrid-native-desktop {
+        position:fixed !important; right:auto !important; bottom:auto !important; left:0; top:0;
+        z-index:2147483200; display:block !important; width:302px !important;
+        max-width:calc(100vw - 16px); transform:none !important; opacity:1 !important;
+        font-family:UbuntuRegular,Helvetica,Arial,sans-serif; user-select:none;
+      }
+      .roomgrid-dock.roomgrid-native-desktop.is-collapsed { display:none !important; }
+      .roomgrid-native-desktop .roomgrid-dock-card {
+        overflow:hidden; border:1px solid #2d3e50; border-radius:4px;
+        background:#17202a; box-shadow:0 8px 24px rgba(0,0,0,.34);
+      }
+      .roomgrid-native-desktop .roomgrid-dock-head { display:none !important; }
+      .roomgrid-native-desktop .roomgrid-dock-body { display:grid !important; gap:0; padding:0; border-top:0; }
+      .roomgrid-native-desktop .roomgrid-dock-tabs { gap:0; padding:4px; border-bottom:1px solid #2d3e50; border-radius:0; background:#202c39; }
+      .roomgrid-native-desktop .roomgrid-dock-tab { min-height:38px; }
+      .roomgrid-native-desktop .roomgrid-dock-pane { gap:0; }
+      .roomgrid-native-desktop .roomgrid-dock-room { padding:9px 12px; border-bottom:1px solid #2d3e50; color:#b3b3b3; }
+      .roomgrid-native-desktop .roomgrid-dock-actions { display:block; }
+      .roomgrid-native-desktop .roomgrid-dock-action {
+        display:flex; width:100%; min-height:40px; align-items:center; padding:9px 12px;
+        border:0; border-bottom:1px solid #2d3e50; border-radius:0; background:#17202a;
+        color:#f1f1f1; font:500 12px/1.3 UbuntuRegular,Helvetica,Arial,sans-serif;
+      }
+      .roomgrid-native-desktop .roomgrid-dock-action:hover,
+      .roomgrid-native-desktop .roomgrid-dock-action:focus-visible { background:#253648; color:#fff; outline:none; }
+      .roomgrid-native-desktop .roomgrid-dock-action.primary { background:#0c6a93; }
+      .roomgrid-native-desktop .roomgrid-dock-setting { margin:8px; }
+      .roomgrid-native-desktop .roomgrid-dock-foot { padding:8px 12px; }
+      .roomgrid-native-desktop .roomgrid-private-action { display:none; }
+      .roomgrid-native-trigger {
+        overflow:hidden; box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center;
+        height:24px; max-width:96px; margin:11px 4px 11px 0; padding:3px 10px;
+        border:1px solid #0c6a93; border-radius:3px; background:#0c6a93; color:#fff;
+        cursor:pointer; white-space:nowrap; text-overflow:ellipsis;
+        font:500 12px/1.4 UbuntuMedium,UbuntuRegular,Helvetica,Arial,sans-serif;
+      }
+      .roomgrid-native-trigger:hover,.roomgrid-native-trigger:focus-visible { border-color:#68b5f0; background:#0f7fab; outline:none; }
+      .roomgrid-native-send-tip-source { display:none !important; }
+
+      .roomgrid-mobile-panel {
+        box-sizing:border-box; width:100%; min-height:320px; padding:0 0 calc(76px + env(safe-area-inset-bottom));
+        border-top:1px solid #2d3e50; background:#202c39; color:#f1f1f1;
+        font-family:UbuntuRegular,Helvetica,Arial,sans-serif;
+      }
+      .BaseRoomTab.PrivateTab > .roomgrid-mobile-panel {
+        height:calc(100% - 68px); min-height:0; overflow-y:auto; overscroll-behavior:contain;
+        padding-bottom:env(safe-area-inset-bottom);
+      }
+      .roomgrid-mobile-panel[hidden] { display:none !important; }
+      .roomgrid-mobile-panel .roomgrid-dock-body { display:grid !important; gap:0; padding:0; border:0; }
+      .roomgrid-mobile-panel .roomgrid-dock-tabs { gap:0; padding:5px; border-radius:0; background:#17202a; }
+      .roomgrid-mobile-panel .roomgrid-dock-tab { min-height:44px; font-size:14px; }
+      .roomgrid-mobile-panel .roomgrid-dock-pane { gap:0; }
+      .roomgrid-mobile-panel .roomgrid-dock-room { padding:12px 16px; border-bottom:1px solid #2d3e50; color:#b3b3b3; font-size:14px; }
+      .roomgrid-mobile-panel .roomgrid-dock-actions { display:block; }
+      .roomgrid-mobile-panel .roomgrid-dock-action {
+        display:flex; width:100%; min-height:52px; align-items:center; padding:12px 16px;
+        border:0; border-bottom:1px solid #2d3e50; border-radius:0; background:#202c39;
+        color:#f1f1f1; font:500 16px/1.35 UbuntuRegular,Helvetica,Arial,sans-serif;
+        touch-action:manipulation;
+      }
+      .roomgrid-mobile-panel .roomgrid-dock-action:active,
+      .roomgrid-mobile-panel .roomgrid-dock-action:focus-visible { background:#253648; outline:none; }
+      .roomgrid-mobile-panel .roomgrid-dock-action.primary { background:#0c6a93; }
+      .roomgrid-mobile-panel .roomgrid-send-tip-action { display:none; }
+      .roomgrid-mobile-panel .roomgrid-dock-setting { margin:10px 12px; min-height:44px; }
+      .roomgrid-mobile-panel .roomgrid-dock-foot { padding:10px 16px; }
+      .roomgrid-mobile-native-hidden { display:none !important; }
+      .roomgrid-mobile-tab { cursor:pointer; touch-action:manipulation; }
+      .roomgrid-mobile-tab[aria-selected="true"],.roomgrid-mobile-tab.roomgrid-mobile-tab-active {
+        color:#68b5f0 !important; border-bottom-color:#68b5f0 !important;
+      }
     `)});
     document.head.appendChild(dockStyle);
 
@@ -3359,10 +3434,19 @@
     localStorage.setItem('ryujo_fab_collapsed', '1');
     let dockAutoCollapseTimer = 0;
     let dragged = false, sx, sy, ox, oy;
+    let nativeSendTipSource = null;
+    let nativeRoomGridTrigger = null;
+    let mobilePrivateTab = null;
+    let mobilePrivateBypass = false;
+    let mobilePrivateMode = false;
+    let mobileRoomGridOpen = false;
+    const mobileHiddenNodes = new Set();
 
     const roomLine = $('div', { class: 'roomgrid-dock-room' }, t('dockNoRoom'));
     const addBtn = $('button', { class: 'roomgrid-dock-action success', onclick: () => toggleCurrentRoomSaved() }, t('dockAdd'));
     const recuBtn = $('button', { class: 'roomgrid-dock-action', onclick: openCurrentRoomRecu }, t('dockRecu'));
+    const sendTipMenuBtn = $('button', { class: 'roomgrid-dock-action roomgrid-send-tip-action', type: 'button', onclick: openNativeSendTip }, 'Send Tip');
+    const privateMenuBtn = $('button', { class: 'roomgrid-dock-action roomgrid-private-action', type: 'button', onclick: openNativePrivateTab }, 'Private show options');
     const head = $('button', { class: 'roomgrid-dock-head', title: 'Alt+M / Alt+A / Shift+A', onclick: () => { if (!dragged) toggleDock(); } }, [
       $('span', { class: 'roomgrid-dock-mark' }, '▦'),
       $('span', {}, [
@@ -3395,6 +3479,8 @@
         $('button', { class: 'roomgrid-dock-action', onclick: toggleCurrentPageMute }, t('dockMute')),
         $('button', { class: 'roomgrid-dock-action', onclick: () => { if (confirm(t('openWorkstationHereConfirm'))) openWorkstationHere(); } }, t('dockOpenHere')),
         recuBtn,
+        sendTipMenuBtn,
+        privateMenuBtn,
       ]),
       dockAutoCollapseSetting,
       $('div', { class: 'roomgrid-dock-foot' }, [
@@ -3502,6 +3588,7 @@
         setDockTab(tabOnOpen === 'arna' ? 'arna' : 'multicam');
       }
       syncDock();
+      syncNativeRoomGridPlacement();
       if (!collapsed) scheduleDockAutoCollapse();
     }
 
@@ -3520,6 +3607,262 @@
       else setDockCollapsed(true);
     };
 
+    function visibleNode(node) {
+      if (!(node instanceof Element) || !node.isConnected) return false;
+      const rect = node.getBoundingClientRect();
+      const style = getComputedStyle(node);
+      return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+    }
+
+    function findNativeSendTipSource() {
+      const nodes = [
+        document.getElementById('sendTipButton'),
+        document.querySelector('[data-testid="send-tip-button"]'),
+      ].filter(Boolean);
+      return nodes.find(node => !node.classList.contains('roomgrid-native-trigger')) || null;
+    }
+
+    function openNativeSendTip() {
+      const source = nativeSendTipSource || findNativeSendTipSource();
+      setDockCollapsed(true);
+      if (!source) { toast('Send Tip is not available in this room'); return; }
+      source.click();
+    }
+
+    function positionDesktopRoomGridMenu() {
+      if (nativeMobilePage || collapsed || !nativeRoomGridTrigger || !root.isConnected) return;
+      const triggerRect = nativeRoomGridTrigger.getBoundingClientRect();
+      const menuRect = root.getBoundingClientRect();
+      const left = Math.max(8, Math.min(innerWidth - menuRect.width - 8, triggerRect.right - menuRect.width));
+      const spaceAbove = triggerRect.top - 8;
+      const top = spaceAbove >= menuRect.height
+        ? triggerRect.top - menuRect.height - 6
+        : Math.min(innerHeight - menuRect.height - 8, triggerRect.bottom + 6);
+      root.style.left = `${Math.round(left)}px`;
+      root.style.top = `${Math.max(8, Math.round(top))}px`;
+    }
+
+    function removeDesktopRoomGridMount() {
+      nativeRoomGridTrigger?.remove();
+      nativeRoomGridTrigger = null;
+      if (nativeSendTipSource) nativeSendTipSource.classList.remove('roomgrid-native-send-tip-source');
+      nativeSendTipSource = null;
+      root.classList.remove('roomgrid-native-desktop');
+      if (!nativeMobilePage) root.remove();
+    }
+
+    function mountDesktopRoomGrid() {
+      if (nativeMobilePage || !currentRoom) { removeDesktopRoomGridMount(); return false; }
+      const source = findNativeSendTipSource();
+      if (!source) { removeDesktopRoomGridMount(); return false; }
+      if (nativeSendTipSource !== source || !nativeRoomGridTrigger?.isConnected) {
+        removeDesktopRoomGridMount();
+        nativeSendTipSource = source;
+        source.classList.add('roomgrid-native-send-tip-source');
+        nativeRoomGridTrigger = $('span', {
+          id: 'roomgrid-native-trigger',
+          class: 'roomgrid-native-trigger',
+          role: 'button',
+          tabindex: '0',
+          title: 'Open RoomGrid tools',
+          'aria-label': 'Open RoomGrid tools',
+          'aria-haspopup': 'menu',
+          'aria-expanded': collapsed ? 'false' : 'true',
+        }, '▦ RoomGrid');
+        const activate = event => {
+          event.preventDefault();
+          event.stopPropagation();
+          toggleDock();
+        };
+        nativeRoomGridTrigger.addEventListener('click', activate);
+        nativeRoomGridTrigger.addEventListener('keydown', event => {
+          if (event.key === 'Enter' || event.key === ' ') activate(event);
+          else if (event.key === 'ArrowUp') { event.preventDefault(); setDockCollapsed(false, 'multicam'); }
+        });
+        source.insertAdjacentElement('afterend', nativeRoomGridTrigger);
+      }
+      root.classList.add('roomgrid-native-desktop');
+      root.setAttribute('role', 'menu');
+      root.setAttribute('aria-label', 'RoomGrid tools');
+      if (!root.isConnected) document.body.appendChild(root);
+      if (!collapsed) requestAnimationFrame(positionDesktopRoomGridMenu);
+      return true;
+    }
+
+    function mobileTabText(node) {
+      return String(node?.textContent || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function findMobilePrivateTab() {
+      const selectors = 'li,[role="tab"],button,a';
+      const candidates = [...document.querySelectorAll(selectors)].filter(node => {
+        if (!visibleNode(node) || node.closest('#scriptcontrols,#zmc-root,.roomgrid-mobile-panel')) return false;
+        const text = mobileTabText(node);
+        return text === 'Private' || (node.classList.contains('roomgrid-mobile-tab') && text === 'RoomGrid');
+      });
+      return candidates.sort((a, b) => {
+        const ar = a.getBoundingClientRect();
+        const br = b.getBoundingClientRect();
+        return (ar.width * ar.height) - (br.width * br.height);
+      })[0] || null;
+    }
+
+    function findMobileTabStrip(tab) {
+      let node = tab?.parentElement || null;
+      for (let depth = 0; node && depth < 5; depth += 1, node = node.parentElement) {
+        const text = mobileTabText(node);
+        const rect = node.getBoundingClientRect();
+        if (/Tokens/i.test(text) && /Bio/i.test(text) && /More Rooms/i.test(text) && rect.width >= innerWidth * 0.75 && rect.height < 180) return node;
+      }
+      return tab?.parentElement || null;
+    }
+
+    function restoreMobileNativeContent() {
+      for (const node of [...mobileHiddenNodes]) {
+        node.classList.remove('roomgrid-mobile-native-hidden');
+        mobileHiddenNodes.delete(node);
+      }
+    }
+
+    function hideMobileNativeContent(panel, tabStrip) {
+      restoreMobileNativeContent();
+      const parent = panel?.parentElement;
+      if (!parent) return;
+      if (parent.classList.contains('PrivateTab')) {
+        for (const node of [...parent.children]) {
+          if (node === panel || node.querySelector?.('#sendTipButton,[data-testid="send-tip-button"]')) continue;
+          node.classList.add('roomgrid-mobile-native-hidden');
+          mobileHiddenNodes.add(node);
+        }
+        return;
+      }
+      const stripRect = tabStrip?.getBoundingClientRect();
+      for (const node of [...parent.children]) {
+        if (node === panel || node === tabStrip || node.contains(tabStrip) || node.closest?.('#zmc-root')) continue;
+        if (node.querySelector?.('#sendTipButton,[data-testid="send-tip-button"]')) continue;
+        const rect = node.getBoundingClientRect();
+        if (rect.height < 1 || (stripRect && rect.bottom < stripRect.bottom - 2)) continue;
+        node.classList.add('roomgrid-mobile-native-hidden');
+        mobileHiddenNodes.add(node);
+      }
+    }
+
+    const mobilePanel = $('section', {
+      id: 'roomgrid-mobile-panel',
+      class: 'roomgrid-mobile-panel',
+      role: 'tabpanel',
+      'aria-label': 'RoomGrid',
+      hidden: true,
+    });
+
+    function setMobileRoomGridOpen(open) {
+      mobileRoomGridOpen = !!open && !!currentRoom;
+      mobilePanel.hidden = !mobileRoomGridOpen;
+      if (mobilePrivateTab) {
+        mobilePrivateTab.classList.toggle('roomgrid-mobile-tab-active', mobileRoomGridOpen);
+        mobilePrivateTab.setAttribute('aria-selected', mobileRoomGridOpen ? 'true' : 'false');
+        mobilePrivateTab.setAttribute('aria-expanded', mobileRoomGridOpen ? 'true' : 'false');
+      }
+      if (mobileRoomGridOpen) {
+        const strip = findMobileTabStrip(mobilePrivateTab);
+        hideMobileNativeContent(mobilePanel, strip);
+        mobilePanel.scrollIntoView?.({ block: 'nearest' });
+      } else {
+        restoreMobileNativeContent();
+      }
+    }
+
+    function handleMobileRoomGridClick(event) {
+      if (mobilePrivateBypass || mobilePrivateMode) return;
+      setTimeout(() => {
+        if (collapsed || !mobileRoomGridOpen) setDockCollapsed(false, 'multicam');
+        else setDockCollapsed(true);
+      }, 0);
+    }
+
+    function openNativePrivateTab() {
+      if (!nativeMobilePage || !mobilePrivateTab) return;
+      collapsed = true;
+      mobilePrivateMode = true;
+      syncDock();
+      setMobileRoomGridOpen(false);
+      mobilePrivateBypass = true;
+      mobilePrivateTab.textContent = 'Private';
+      mobilePrivateTab.classList.remove('roomgrid-mobile-tab');
+      mobilePrivateTab.removeAttribute('aria-label');
+      mobilePrivateTab.click();
+      setTimeout(() => {
+        mobilePrivateBypass = false;
+      }, 0);
+    }
+
+    function restoreMobilePrivateTab() {
+      setMobileRoomGridOpen(false);
+      if (mobilePrivateTab) {
+        mobilePrivateTab.removeEventListener('click', handleMobileRoomGridClick, true);
+        mobilePrivateTab.textContent = 'Private';
+        mobilePrivateTab.classList.remove('roomgrid-mobile-tab', 'roomgrid-mobile-tab-active');
+        mobilePrivateTab.removeAttribute('aria-label');
+        mobilePrivateTab.removeAttribute('aria-expanded');
+      }
+      mobilePrivateTab = null;
+      mobilePrivateMode = false;
+      mobilePanel.remove();
+    }
+
+    function mountMobileRoomGrid() {
+      if (!nativeMobilePage || !currentRoom) { restoreMobilePrivateTab(); return false; }
+      if (mobilePrivateMode) return false;
+      const tab = findMobilePrivateTab();
+      if (!tab) return false;
+      if (mobilePrivateTab !== tab) {
+        if (mobilePrivateTab) {
+          mobilePrivateTab.removeEventListener('click', handleMobileRoomGridClick, true);
+          mobilePrivateTab.classList.remove('roomgrid-mobile-tab', 'roomgrid-mobile-tab-active');
+        }
+        mobilePrivateTab = tab;
+        tab.addEventListener('click', handleMobileRoomGridClick, true);
+      }
+      tab.textContent = 'RoomGrid';
+      tab.classList.add('roomgrid-mobile-tab');
+      tab.setAttribute('role', 'tab');
+      tab.setAttribute('aria-label', 'RoomGrid tools');
+      tab.setAttribute('aria-controls', mobilePanel.id);
+      const tabStrip = findMobileTabStrip(tab);
+      if (!tabStrip) return false;
+      const privateSlot = document.querySelector('#portrait-contents .BaseRoomTab.PrivateTab,.BaseRoomTab.PrivateTab');
+      if (privateSlot) {
+        const actionBar = [...privateSlot.children].find(node => node.querySelector?.('#sendTipButton,[data-testid="send-tip-button"]')) || null;
+        privateSlot.insertBefore(mobilePanel, actionBar);
+      } else {
+        tabStrip.insertAdjacentElement('afterend', mobilePanel);
+      }
+      if (body.parentElement !== mobilePanel) mobilePanel.appendChild(body);
+      setMobileRoomGridOpen(!collapsed && mobileRoomGridOpen);
+      return true;
+    }
+
+    function syncNativeRoomGridPlacement() {
+      if (!currentRoom) {
+        collapsed = true;
+        removeDesktopRoomGridMount();
+        restoreMobilePrivateTab();
+        syncDock();
+        return;
+      }
+      if (nativeMobilePage) {
+        removeDesktopRoomGridMount();
+        if (!collapsed) mobilePrivateMode = false;
+        mountMobileRoomGrid();
+        setMobileRoomGridOpen(!collapsed);
+      } else {
+        restoreMobilePrivateTab();
+        mountDesktopRoomGrid();
+        nativeRoomGridTrigger?.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        if (!collapsed) requestAnimationFrame(positionDesktopRoomGridMenu);
+      }
+    }
+
     document.addEventListener('ziggy-suite:open-workshop', openWorkstationNew);
     document.addEventListener('ziggy-suite:toggle-roomgrid', event => setDockCollapsed(false, event.detail?.tab === 'arna' ? 'arna' : 'multicam'));
     document.addEventListener('ziggy-suite:toggle-current-room', () => {
@@ -3534,8 +3877,8 @@
       delete document.documentElement.dataset.ziggySuiteDockOpen;
     });
 
-    root.appendChild($('div', { class: 'roomgrid-dock-card' }, [head, body]));
-    document.body.appendChild(root);
+    const dockCard = $('div', { class: 'roomgrid-dock-card' }, [head, body]);
+    root.appendChild(dockCard);
     if (!nativeMobilePage) {
       ensureWorkshopHeaderButton();
       const ensureWorkshopHeaderButtonSoon = debounce(ensureWorkshopHeaderButton, 120);
@@ -3549,6 +3892,40 @@
     updateDockRoom();
     setDockTab('multicam');
     syncDock();
+    syncNativeRoomGridPlacement();
+
+    const syncNativeRoomGridPlacementSoon = debounce(syncNativeRoomGridPlacement, 100);
+    currentRoomSubs.add(syncNativeRoomGridPlacementSoon);
+    try {
+      const nativeRoomGridMo = new MutationObserver(syncNativeRoomGridPlacementSoon);
+      nativeRoomGridMo.observe(document.body, { childList: true, subtree: true });
+    } catch (_) {}
+    addEventListener('resize', () => {
+      if (!nativeMobilePage && !collapsed) positionDesktopRoomGridMenu();
+      else syncNativeRoomGridPlacementSoon();
+    }, { passive: true });
+    document.addEventListener('pointerdown', event => {
+      if (collapsed || nativeMobilePage) return;
+      if (root.contains(event.target) || nativeRoomGridTrigger?.contains(event.target)) return;
+      setDockCollapsed(true);
+    }, true);
+    document.addEventListener('keydown', event => {
+      if (event.key !== 'Escape' || collapsed) return;
+      setDockCollapsed(true);
+      nativeRoomGridTrigger?.focus?.();
+    });
+    document.addEventListener('click', event => {
+      if (!nativeMobilePage || !mobileRoomGridOpen || !mobilePrivateTab) return;
+      const strip = findMobileTabStrip(mobilePrivateTab);
+      const selected = event.target?.closest?.('li,[role="tab"],button,a');
+      if (selected && strip?.contains(selected) && selected !== mobilePrivateTab && !selected.contains(mobilePrivateTab)) {
+        collapsed = true;
+        mobilePrivateMode = false;
+        syncDock();
+        setMobileRoomGridOpen(false);
+        setTimeout(syncNativeRoomGridPlacementSoon, 0);
+      }
+    }, true);
 
     // Treat clicks, typing, and control changes as activity and restart the inactivity countdown.
     for (const eventName of ['pointerdown', 'keydown', 'input', 'change']) {
@@ -15169,7 +15546,7 @@
     for (const selector of CHAT_TAB_SELECTORS) {
       try { document.querySelectorAll(selector).forEach(node => found.add(node)); } catch (_) {}
     }
-    document.querySelectorAll('button,a,[role="tab"]').forEach(node => {
+    document.querySelectorAll('button,a,li,[role="tab"]').forEach(node => {
       if (node.closest('#zmc-root')) return;
       const text = String(node.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
       if (text === 'chat') found.add(node);
@@ -15183,11 +15560,12 @@
     const activeChat = chatTabs.find(tab =>
       tab.getAttribute('aria-selected') === 'true'
       || tab.classList.contains('active')
+      || tab.classList.contains('activeTab')
       || tab.classList.contains('selected')
     );
     if (!activeChat) return;
     const scope = activeChat.parentElement || document;
-    const replacement = [...scope.querySelectorAll('button,a,[role="tab"]')].find(node => {
+    const replacement = [...scope.querySelectorAll('button,a,li,[role="tab"]')].find(node => {
       const text = String(node.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
       return text === 'bio' || text === 'watch';
     });

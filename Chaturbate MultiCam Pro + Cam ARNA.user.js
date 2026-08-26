@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.4.8
+// @version           16.4.9
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -88,7 +88,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.4.8');
+  instanceMarker.setAttribute('data-suite-version', '16.4.9');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1165,7 +1165,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.4.8',
+    version: '16.4.9',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3527,6 +3527,13 @@
     let desktopVideoFitObserver = null;
     let desktopVideoFitPanel = null;
     let desktopVideoFitAnchor = null;
+    let desktopInitialRoomPositionTimer = 0;
+    let desktopInitialRoomPositionAttempts = 0;
+    let desktopInitialRoomPositioned = false;
+    // Only a document that initially loaded as a desktop room page qualifies.
+    // SPA navigation into a room later must not unexpectedly move the page.
+    let desktopInitialRoomPositionCancelled = nativeMobilePage || !currentRoom;
+    let desktopInitialRoomInputCancel = null;
     let mobilePrivateTab = null;
     let mobilePrivateBypass = false;
     let mobilePrivateMode = false;
@@ -4003,8 +4010,61 @@
     }
 
     function scheduleDesktopVideoFit(delay = 120) {
+      if (!desktopInitialRoomPositioned && !desktopInitialRoomPositionCancelled) {
+        scheduleDesktopInitialRoomPosition(Math.min(delay, 160));
+        return;
+      }
       clearTimeout(desktopVideoFitTimer);
       desktopVideoFitTimer = setTimeout(applyDesktopVideoFit, delay);
+    }
+
+    function clearDesktopInitialRoomPositionTimer() {
+      clearTimeout(desktopInitialRoomPositionTimer);
+      desktopInitialRoomPositionTimer = 0;
+    }
+
+    function removeDesktopInitialRoomInputListeners() {
+      if (!desktopInitialRoomInputCancel) return;
+      for (const eventName of ['wheel', 'touchstart', 'pointerdown', 'keydown']) {
+        document.removeEventListener(eventName, desktopInitialRoomInputCancel, true);
+      }
+      desktopInitialRoomInputCancel = null;
+    }
+
+    function cancelDesktopInitialRoomPosition() {
+      desktopInitialRoomPositionCancelled = true;
+      clearDesktopInitialRoomPositionTimer();
+      removeDesktopInitialRoomInputListeners();
+    }
+
+    function applyDesktopInitialRoomPosition() {
+      desktopInitialRoomPositionTimer = 0;
+      if (desktopInitialRoomPositioned || desktopInitialRoomPositionCancelled) return;
+      if (nativeMobilePage || isWorkstation || !currentRoom || document.fullscreenElement) {
+        cancelDesktopInitialRoomPosition();
+        return;
+      }
+      const nodes = desktopVideoFitNodes();
+      if (!nodes) {
+        desktopInitialRoomPositionAttempts += 1;
+        if (desktopInitialRoomPositionAttempts < 24) scheduleDesktopInitialRoomPosition(180);
+        else cancelDesktopInitialRoomPosition();
+        return;
+      }
+
+      const panelRect = nodes.panel.getBoundingClientRect();
+      if (!Number.isFinite(panelRect.top)) return;
+      const targetTop = Math.max(0, Math.round(window.scrollY + panelRect.top));
+      desktopInitialRoomPositioned = true;
+      clearDesktopInitialRoomPositionTimer();
+      removeDesktopInitialRoomInputListeners();
+      window.scrollTo({ top: targetTop, left: window.scrollX, behavior: 'auto' });
+      requestAnimationFrame(() => requestAnimationFrame(() => scheduleDesktopVideoFit(0)));
+    }
+
+    function scheduleDesktopInitialRoomPosition(delay = 160) {
+      if (desktopInitialRoomPositioned || desktopInitialRoomPositionCancelled || desktopInitialRoomPositionTimer) return;
+      desktopInitialRoomPositionTimer = setTimeout(applyDesktopInitialRoomPosition, delay);
     }
 
     function mobileTabText(node) {
@@ -4235,6 +4295,7 @@
       if (!currentRoom) {
         collapsed = true;
         clearTimeout(desktopVideoFitTimer);
+        clearDesktopInitialRoomPositionTimer();
         disconnectDesktopVideoFitObserver();
         removeDesktopRoomGridMount();
         restoreMobilePrivateTab();
@@ -4243,6 +4304,7 @@
       }
       if (nativeMobilePage) {
         clearTimeout(desktopVideoFitTimer);
+        cancelDesktopInitialRoomPosition();
         disconnectDesktopVideoFitObserver();
         removeDesktopRoomGridMount();
         if (!collapsed) mobilePrivateMode = false;
@@ -4253,7 +4315,8 @@
         mountDesktopRoomGrid();
         nativeRoomGridTrigger?.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
         if (!collapsed) requestAnimationFrame(positionDesktopRoomGridMenu);
-        scheduleDesktopVideoFit();
+        scheduleDesktopInitialRoomPosition();
+        if (desktopInitialRoomPositioned) scheduleDesktopVideoFit();
       }
     }
 
@@ -4288,6 +4351,16 @@
 
     const syncNativeRoomGridPlacementSoon = debounce(syncNativeRoomGridPlacement, 100);
     currentRoomSubs.add(syncNativeRoomGridPlacementSoon);
+    if (!desktopInitialRoomPositionCancelled) {
+      desktopInitialRoomInputCancel = event => {
+        if (desktopInitialRoomPositioned || desktopInitialRoomPositionCancelled) return;
+        if (event.type === 'keydown' && !['PageDown', 'PageUp', 'Home', 'End', 'ArrowDown', 'ArrowUp', ' '].includes(event.key)) return;
+        cancelDesktopInitialRoomPosition();
+      };
+      for (const eventName of ['wheel', 'touchstart', 'pointerdown', 'keydown']) {
+        document.addEventListener(eventName, desktopInitialRoomInputCancel, { capture: true, passive: true });
+      }
+    }
     try {
       const nativeRoomGridMo = new MutationObserver(syncNativeRoomGridPlacementSoon);
       nativeRoomGridMo.observe(document.body, { childList: true, subtree: true });

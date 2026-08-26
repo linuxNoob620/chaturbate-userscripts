@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.4.4
+// @version           16.4.5
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -88,7 +88,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.4.4');
+  instanceMarker.setAttribute('data-suite-version', '16.4.5');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -96,6 +96,54 @@
     return;
   }
   window[INSTANCE_KEY] = true;
+
+  /* Integrated room-tab titles. Workshop always has one canonical URL/title. */
+  const WORKSHOP_TAB_TITLE = 'Ziggy Room Suite';
+  const ROOM_TAB_RESERVED_PATHS = new Set([
+    'accounts', 'affiliate', 'affiliates', 'apps', 'auth', 'blog', 'contest',
+    'contests', 'couple-cams', 'discover', 'female-cams', 'followed-cams',
+    'following', 'jobs', 'male-cams', 'my_collection', 'photo_videos',
+    'privacy', 'rooms', 'search', 'security', 'support', 'tags', 'terms',
+    'trans-cams', 'verify',
+  ]);
+  const isWorkshopRoute = () => new URLSearchParams(location.search).get('multicam_mode') === '1';
+
+  function canonicalWorkshopUrl() {
+    const url = new URL('/', location.origin);
+    url.searchParams.set('multicam_mode', '1');
+    return url.toString();
+  }
+
+  function canonicalizeWorkshopRoute() {
+    if (!isWorkshopRoute()) return;
+    const canonical = canonicalWorkshopUrl();
+    if (location.href !== canonical) history.replaceState(history.state, '', canonical);
+  }
+
+  function roomNameForTabTitle() {
+    const match = String(location.pathname || '').match(/^\/([A-Za-z0-9_-]+)\/?$/);
+    if (!match) return '';
+    let roomName = '';
+    try { roomName = decodeURIComponent(match[1]); } catch (_) { roomName = match[1]; }
+    return ROOM_TAB_RESERVED_PATHS.has(roomName.toLowerCase()) ? '' : roomName;
+  }
+
+  function enforceSuiteTabTitle() {
+    const roomName = roomNameForTabTitle();
+    const wantedTitle = isWorkshopRoute() ? WORKSHOP_TAB_TITLE : (roomName ? `${roomName}'s Room` : '');
+    if (wantedTitle && document.title !== wantedTitle) document.title = wantedTitle;
+  }
+
+  canonicalizeWorkshopRoute();
+  window.__ziggySuiteTabRenamerIntegrated = true;
+  const suiteTitleObserver = new MutationObserver(enforceSuiteTabTitle);
+  suiteTitleObserver.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+  for (const eventName of ['readystatechange', 'DOMContentLoaded', 'pageshow', 'popstate', 'hashchange']) {
+    const target = ['pageshow', 'popstate', 'hashchange'].includes(eventName) ? window : document;
+    target.addEventListener(eventName, () => { canonicalizeWorkshopRoute(); enforceSuiteTabTitle(); });
+  }
+  setInterval(enforceSuiteTabTitle, 750);
+  enforceSuiteTabTitle();
 
   /* Core utilities */
   const $ = (tag, props = {}, children = []) => {
@@ -1115,7 +1163,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.4.4',
+    version: '16.4.5',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3087,12 +3135,7 @@
       routeMo.observe(document.body, { childList: true, subtree: true });
     } catch (_) {}
 
-    const buildWorkstationUrl = () => {
-      const u = new URL(location.href);
-      u.searchParams.set('multicam_mode', '1');
-      u.hash = '';
-      return u.toString();
-    };
+    const buildWorkstationUrl = () => canonicalWorkshopUrl();
     const openWorkstationNew = () => {
       // 新开工作台前静音并停止当前页面媒体，避免“新工作台已开但旧页面还在出声”。
       stopAllPageMedia();
@@ -3133,18 +3176,43 @@
       if (document.getElementById('roomgrid-workshop-button')) return;
       const privateSlot = findDesktopNavigationSlot('private');
       if (privateSlot) {
-        privateSlot.id = 'roomgrid-workshop-button';
-        privateSlot.classList.add('roomgrid-workshop-nav-link');
-        privateSlot.setAttribute('href', buildWorkstationUrl());
-        privateSlot.setAttribute('aria-label', 'Open MultiCam Workshop');
-        privateSlot.setAttribute('title', 'Open MultiCam Workshop');
-        const label = privateSlot.querySelector('.HeaderNavBar__link-text,[class*="link-text"],[class*="LinkText"]') || privateSlot;
+        const nav = privateSlot.closest('nav') || privateSlot.parentElement;
+        const nativeCandidates = [...(nav?.querySelectorAll('a[href]') || [])].filter(node =>
+          node !== privateSlot
+          && !node.hasAttribute('disabled')
+          && node.getAttribute('aria-disabled') !== 'true'
+          && node.getAttribute('aria-current') !== 'page'
+        );
+        const nativeColorCounts = new Map();
+        for (const node of nativeCandidates) {
+          const color = getComputedStyle(node).color;
+          nativeColorCounts.set(color, (nativeColorCounts.get(color) || 0) + 1);
+        }
+        const nativeTemplate = nativeCandidates.sort((a, b) =>
+          (nativeColorCounts.get(getComputedStyle(b).color) || 0) - (nativeColorCounts.get(getComputedStyle(a).color) || 0)
+        )[0];
+        const button = nativeTemplate?.cloneNode(true) || privateSlot.cloneNode(true);
+        button.querySelectorAll?.('[id]').forEach(node => node.removeAttribute('id'));
+        button.id = 'roomgrid-workshop-button';
+        button.classList.add('roomgrid-workshop-nav-link');
+        button.removeAttribute('disabled');
+        button.removeAttribute('aria-disabled');
+        button.removeAttribute('aria-current');
+        button.removeAttribute('aria-selected');
+        button.removeAttribute('data-state');
+        button.setAttribute('href', buildWorkstationUrl());
+        button.setAttribute('aria-label', 'Open MultiCam Workshop');
+        button.setAttribute('title', 'Open MultiCam Workshop');
+        const label = button.querySelector('.HeaderNavBar__link-text,[class*="link-text"],[class*="LinkText"]')
+          || [...button.querySelectorAll('span')].find(node => !node.children.length && node.textContent.trim())
+          || button;
         label.textContent = 'WORKSHOP';
-        privateSlot.addEventListener('click', event => {
+        button.addEventListener('click', event => {
           event.preventDefault();
           event.stopPropagation();
           openWorkstationNew();
         });
+        privateSlot.replaceWith(button);
         return;
       }
       const nav = document.querySelector('[data-testid="header-nav-bar"]') || document.querySelector('#desktop-spa-header nav') || document.querySelector('header nav');
@@ -3337,9 +3405,6 @@
       @media (max-width:560px) { .roomgrid-dock.arna-active { right:8px; width:calc(100vw - 16px); } .roomgrid-arna-grid { grid-template-columns:1fr; } }
       @media (orientation:landscape) and (max-height:650px) { html.cmc-active body.cmc-room.cmc-has-bottom-nav:not(.cmc-controls-hidden):not(.cmc-chat-open):not(.cmc-fullscreen) .roomgrid-dock:not(.roomgrid-user-positioned) { bottom:calc(var(--cmc-nav-h,52px) + env(safe-area-inset-bottom) + 10px); } }
       /* Native Chaturbate treatment: flat surfaces, native blue, compact collapsed control. */
-      html:not(.ziggy-suite-mobile) .roomgrid-workshop-nav-link { color:inherit !important; font-family:UbuntuMedium,UbuntuRegular,Arial,sans-serif !important; }
-      html:not(.ziggy-suite-mobile) .roomgrid-workshop-nav-link[aria-current="page"],
-      html:not(.ziggy-suite-mobile) .roomgrid-workshop-nav-link:hover { color:#68b5f0 !important; }
       html:not(.ziggy-suite-mobile) .roomgrid-dock { width:300px; font-family:UbuntuRegular,Arial,sans-serif; }
       html:not(.ziggy-suite-mobile) .roomgrid-dock-card { border:1px solid #2d3e50; border-radius:4px; background:#202c39; box-shadow:0 8px 24px rgba(0,0,0,.28); backdrop-filter:none; -webkit-backdrop-filter:none; }
       html:not(.ziggy-suite-mobile) .roomgrid-dock-head { min-height:44px; padding:5px 8px; background:#202c39; }

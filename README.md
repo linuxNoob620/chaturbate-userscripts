@@ -2,17 +2,19 @@
 
 This repository publishes one stable Tampermonkey userscript for both desktop and mobile Chaturbate:
 
-- **Ziggy Chaturbate Suite** — RoomGrid MultiCam workstation, Cam ARNA, Reloaded tools, recording, split view, encrypted settings sync, and native desktop/mobile integration.
+- **Ziggy Chaturbate Suite** — RoomGrid MultiCam workstation, Cam ARNA, Reloaded tools, room-tab naming, recording, split view, encrypted settings sync, and native desktop/mobile integration.
 - On Chaturbate's **native mobile site only**, the Suite also enables Mobile Clean View: chat hiding, video-only fullscreen with Fit/Fill, pinch zoom and pan, Picture-in-Picture, a compact room grid, and Suite controls in the hamburger menu.
 - Desktop behavior stays desktop-only; Mobile Clean View is not activated by merely resizing a desktop page.
 
 ## Install
 
-- [Install Ziggy Chaturbate Suite](https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.user.js)
+- [Install Ziggy Chaturbate Suite](https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.user.js)
 
 Install the Suite from the same link on every device. Tampermonkey will use its embedded `@updateURL` and `@downloadURL` values for later update checks.
 
 `Chaturbate Desktop Mobile Comfort.user.js` remains in the repository only as a legacy fallback. Do not install it alongside the Suite because its runtime is already embedded and duplicate instances are intentionally blocked.
+
+`Chaturbate Room Tab Renamer.user.js` is also legacy: its model-room titles are integrated into the Suite, and Workshop always uses the unique `Ziggy Room Suite` title.
 
 ## Encrypted settings backup
 

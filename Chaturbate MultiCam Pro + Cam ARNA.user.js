@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.4.9
+// @version           16.4.10
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -88,7 +88,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.4.9');
+  instanceMarker.setAttribute('data-suite-version', '16.4.10');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1165,7 +1165,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.4.9',
+    version: '16.4.10',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3524,9 +3524,8 @@
     let nativeRoomGridTrigger = null;
     let desktopVideoFitTimer = 0;
     let desktopVideoFitBusy = false;
-    let desktopVideoFitObserver = null;
-    let desktopVideoFitPanel = null;
-    let desktopVideoFitAnchor = null;
+    let desktopVideoFitAttempts = 0;
+    let desktopVideoFitCompleted = false;
     let desktopInitialRoomPositionTimer = 0;
     let desktopInitialRoomPositionAttempts = 0;
     let desktopInitialRoomPositioned = false;
@@ -3876,13 +3875,6 @@
       return true;
     }
 
-    function disconnectDesktopVideoFitObserver() {
-      desktopVideoFitObserver?.disconnect?.();
-      desktopVideoFitObserver = null;
-      desktopVideoFitPanel = null;
-      desktopVideoFitAnchor = null;
-    }
-
     function desktopVideoFitNodes() {
       if (nativeMobilePage || !currentRoom || document.fullscreenElement || isWorkstation) return null;
       const video = getPrimaryPageVideo();
@@ -3911,23 +3903,11 @@
       return { video, panel, handle, roomContents, topSection, anchor };
     }
 
-    function bindDesktopVideoFitObserver(panel, anchor) {
-      if (desktopVideoFitPanel === panel && desktopVideoFitAnchor === anchor && desktopVideoFitObserver) return;
-      disconnectDesktopVideoFitObserver();
-      desktopVideoFitPanel = panel;
-      desktopVideoFitAnchor = anchor;
-      if (typeof ResizeObserver !== 'function') return;
-      desktopVideoFitObserver = new ResizeObserver(() => scheduleDesktopVideoFit(140));
-      desktopVideoFitObserver.observe(panel);
-      if (anchor !== panel) desktopVideoFitObserver.observe(anchor);
-    }
-
     function applyDesktopVideoFit() {
-      if (desktopVideoFitBusy) return;
+      if (desktopVideoFitBusy || desktopVideoFitCompleted) return;
       const nodes = desktopVideoFitNodes();
       if (!nodes) return;
       const { video, panel, handle, roomContents, topSection, anchor } = nodes;
-      bindDesktopVideoFitObserver(panel, anchor);
 
       const viewportHeight = window.visualViewport?.height || window.innerHeight;
       const anchorRect = anchor.getBoundingClientRect();
@@ -3953,7 +3933,10 @@
         nativeMinimumVideoWidth,
         Math.min(maximumWidth, panelRect.width + (heightDelta / heightPerWidth)),
       ));
-      if (!Number.isFinite(targetWidth) || Math.abs(targetWidth - panelRect.width) <= 3) return;
+      if (!Number.isFinite(targetWidth) || Math.abs(targetWidth - panelRect.width) <= 3) {
+        desktopVideoFitCompleted = true;
+        return;
+      }
 
       const handleX = handleRect.left + (handleRect.width / 2);
       const targetX = panelRect.left + targetWidth + (handleRect.width / 2);
@@ -3961,12 +3944,20 @@
         if (!desktopVideoFitBusy) return;
         desktopVideoFitBusy = false;
         setTimeout(() => {
-          if (!panel.isConnected) return;
+          if (!panel.isConnected) {
+            desktopVideoFitCompleted = true;
+            return;
+          }
           const nextWidth = panel.getBoundingClientRect().width;
           const madeProgress = Math.abs(nextWidth - panelRect.width) > 1;
-          if (madeProgress && Math.abs(nextWidth - targetWidth) > 3) scheduleDesktopVideoFit(0);
+          const needsAnotherStep = madeProgress
+            && Math.abs(nextWidth - targetWidth) > 3
+            && desktopVideoFitAttempts < 4;
+          if (needsAnotherStep) scheduleDesktopVideoFit(0);
+          else desktopVideoFitCompleted = true;
         }, 220);
       };
+      desktopVideoFitAttempts += 1;
       desktopVideoFitBusy = true;
       try {
         handle.dispatchEvent(new MouseEvent('mousedown', {
@@ -4010,6 +4001,7 @@
     }
 
     function scheduleDesktopVideoFit(delay = 120) {
+      if (desktopVideoFitCompleted) return;
       if (!desktopInitialRoomPositioned && !desktopInitialRoomPositionCancelled) {
         scheduleDesktopInitialRoomPosition(Math.min(delay, 160));
         return;
@@ -4296,7 +4288,6 @@
         collapsed = true;
         clearTimeout(desktopVideoFitTimer);
         clearDesktopInitialRoomPositionTimer();
-        disconnectDesktopVideoFitObserver();
         removeDesktopRoomGridMount();
         restoreMobilePrivateTab();
         syncDock();
@@ -4305,7 +4296,6 @@
       if (nativeMobilePage) {
         clearTimeout(desktopVideoFitTimer);
         cancelDesktopInitialRoomPosition();
-        disconnectDesktopVideoFitObserver();
         removeDesktopRoomGridMount();
         if (!collapsed) mobilePrivateMode = false;
         mountMobileRoomGrid();
@@ -4316,7 +4306,6 @@
         nativeRoomGridTrigger?.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
         if (!collapsed) requestAnimationFrame(positionDesktopRoomGridMenu);
         scheduleDesktopInitialRoomPosition();
-        if (desktopInitialRoomPositioned) scheduleDesktopVideoFit();
       }
     }
 
@@ -4368,15 +4357,7 @@
     addEventListener('resize', () => {
       if (!nativeMobilePage && !collapsed) positionDesktopRoomGridMenu();
       else syncNativeRoomGridPlacementSoon();
-      if (!nativeMobilePage) scheduleDesktopVideoFit(160);
     }, { passive: true });
-    window.visualViewport?.addEventListener('resize', () => scheduleDesktopVideoFit(160), { passive: true });
-    document.addEventListener('fullscreenchange', () => scheduleDesktopVideoFit(180));
-    for (const eventName of ['mouseup', 'touchend', 'pointerup']) {
-      document.addEventListener(eventName, () => {
-        if (!nativeMobilePage && !desktopVideoFitBusy) scheduleDesktopVideoFit(180);
-      }, true);
-    }
     document.addEventListener('pointerdown', event => {
       if (collapsed || nativeMobilePage) return;
       if (root.contains(event.target) || nativeRoomGridTrigger?.contains(event.target)) return;

@@ -80,6 +80,10 @@ for (const item of scripts) {
     if (!source.includes("#portrait-contents .BaseRoomTab.PrivateTab")) failures.push(`${item.file}: native mobile RoomGrid tab panel mount is missing`);
     if (!source.includes("document.querySelectorAll('button,a,li,[role=\"tab\"]')")) failures.push(`${item.file}: mobile Chat tab removal does not cover native list-item tabs`);
     if (source.includes("root.appendChild($('div', { class: 'roomgrid-dock-card'")) failures.push(`${item.file}: legacy floating RoomGrid dock mount is still present`);
+    if (!source.includes("target: '_blank'")) failures.push(`${item.file}: Workshop model-name new-tab link is missing`);
+    if (!source.includes("class: 'card-ops-menu-backdrop'")) failures.push(`${item.file}: mobile Workshop card-menu backdrop is missing`);
+    if (!source.includes('body.rg-phone-mode.rg-card-menu-open .grid.view-phone')) failures.push(`${item.file}: mobile Workshop menu scroll isolation is missing`);
+    if (!source.includes('if (!isMobileDevice() || isBlockedPage()) return;')) failures.push(`${item.file}: Mobile Clean View still starts on blocked Workshop routes`);
     if ((source.match(/^\/\/ ==UserScript==$/gm) || []).length !== 1) failures.push(`${item.file}: embedded component added an extra userscript metadata block`);
     const mobileStop = source.indexOf('if (!document.getElementById("desktop-spa-header")){return;}');
     const reloadedStyle = source.indexOf('    setgenstyle();', mobileStop);

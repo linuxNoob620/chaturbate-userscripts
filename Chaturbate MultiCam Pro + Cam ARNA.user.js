@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.3.0
+// @version           16.3.1
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -88,7 +88,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.3.0');
+  instanceMarker.setAttribute('data-suite-version', '16.3.1');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1116,7 +1116,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.3.0',
+    version: '16.3.1',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -5652,7 +5652,7 @@
         .cam-card { display:flex!important; flex-direction:column!important; overflow:hidden!important; }
         .cam-media { position:relative; min-width:0; min-height:0; flex:1; overflow:hidden; background:#000; }
         .cam-info { box-sizing:border-box; min-height:48px; display:flex; align-items:center; gap:8px; padding:6px 8px; border-top:1px solid #2d3e50; background:#202c39; }
-        .cam-info-copy { min-width:0; flex:1; }.cam-info-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#68b5f0; font:500 12px/1.2 UbuntuMedium,UbuntuRegular,Arial,sans-serif; }.cam-info-meta { margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#b3b3b3; font-size:10px; }
+        .cam-info-copy { min-width:0; flex:1; }.cam-info-name { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#68b5f0; font:500 12px/1.2 UbuntuMedium,UbuntuRegular,Arial,sans-serif; text-decoration:none; }.cam-info-name:hover,.cam-info-name:focus-visible{color:#8bc9f7;text-decoration:underline;outline:none}.cam-info-meta { margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#b3b3b3; font-size:10px; }
         .cam-info-actions { display:flex; align-items:center; gap:4px; }.cam-info-actions .icon-btn { position:static!important; width:28px!important; height:28px!important; border-radius:3px!important; background:#17202a!important; border:1px solid #2d3e50!important; color:#d7d7d7!important; }
         .cam-info-actions .icon-btn:hover { background:#253648!important;color:#fff!important; }
         .cam-info-actions .favorite-toggle,
@@ -5677,16 +5677,26 @@
         body.rg-phone-mode .rg-native-logo-source img { max-width:112px; }
         body.rg-phone-mode .rg-native-logo { font-size:18px; }.rg-phone-mode .rg-native-brand-title { padding-left:8px; font-size:11px; }.rg-phone-mode .rg-native-header-center { grid-column:1/-1; display:none; }.rg-phone-mode .rg-native-header-actions .ctrl-btn { width:36px; min-width:36px; padding:0!important; overflow:hidden; font-size:0; }
         body.rg-phone-mode .app-shell { height:calc(100dvh - 52px)!important; }
-        body.rg-phone-mode .rg-native-nav { height:44px; min-height:44px!important; padding-left:46px!important; overflow-x:auto!important; overflow-y:hidden!important; scrollbar-width:none; }
+        body.rg-phone-mode .rg-native-nav { height:44px; min-height:44px!important; padding:0 4px 0 46px!important; gap:4px!important; overflow:hidden!important; scrollbar-width:none; }
         body.rg-phone-mode .rg-native-nav::-webkit-scrollbar { display:none; }
         body.rg-phone-mode .rg-native-nav > .toolbar-group:first-child { display:flex!important; flex:0 0 auto!important; grid-template-columns:none!important; }
         body.rg-phone-mode .rg-mobile-only { display:flex!important; }
-        body.rg-phone-mode input.rg-mobile-only { display:block!important; flex:0 0 126px; width:126px!important; max-width:126px!important; }
-        body.rg-phone-mode .rg-visible-count { margin-left:4px; }
+        body.rg-phone-mode input.rg-mobile-only { display:block!important; flex:1 1 82px; width:auto!important; min-width:72px!important; max-width:108px!important; }
+        body.rg-phone-mode .rg-native-nav .roomgrid-compact-select { flex:0 0 68px!important; width:68px!important; min-width:68px!important; max-width:68px!important; }
+        body.rg-phone-mode .rg-native-nav .ctrl-btn:not(.sidebar-toggle-btn):not(.rg-mobile-only) { display:none!important; }
+        body.rg-phone-mode .rg-visible-count { display:none!important; }
+        body.rg-phone-mode .grid.view-phone { grid-template-columns:minmax(0,1fr)!important; }
+        body.rg-phone-mode.rg-card-menu-open .grid.view-phone { overflow:hidden!important; overscroll-behavior:none!important; touch-action:none!important; }
+        .card-ops-menu-backdrop { position:fixed; inset:0; z-index:2147483650; display:flex; align-items:flex-end; box-sizing:border-box; padding-top:calc(96px + env(safe-area-inset-top)); background:rgba(0,0,0,.56); overscroll-behavior:none; touch-action:none; }
+        body.rg-phone-mode .card-ops-menu-backdrop .card-ops-menu-pop { position:relative!important; inset:auto!important; box-sizing:border-box; width:100%!important; min-width:0!important; max-height:calc(100dvh - 96px - env(safe-area-inset-top))!important; margin:0!important; padding:6px 6px max(8px,env(safe-area-inset-bottom))!important; overflow-x:hidden!important; overflow-y:auto!important; overscroll-behavior:contain!important; -webkit-overflow-scrolling:touch; touch-action:pan-y; border-right:0!important; border-bottom:0!important; border-left:0!important; border-radius:0!important; }
         body.rg-phone-mode .cam-info { min-height:46px; }.rg-phone-mode .cam-info-name{font-size:12px}.rg-phone-mode .cam-info-actions .icon-btn{width:32px!important;height:32px!important}
         body.rg-phone-mode .rg-control-drawer { width:100vw; border-left:0; }
         .shell-controls { top:72px!important; right:auto!important; left:8px!important; }
         body.rg-phone-mode .shell-controls { top:56px!important; left:max(4px,env(safe-area-inset-left))!important; }
+        @media (orientation:landscape) and (max-height:600px) {
+          body.rg-phone-mode .grid.view-phone { grid-template-columns:repeat(2,minmax(0,1fr))!important; }
+          body.rg-phone-mode .card-ops-menu-backdrop .card-ops-menu-pop { max-height:calc(100dvh - 90px - env(safe-area-inset-top))!important; }
+        }
         @media (prefers-reduced-motion: reduce) {
           .cam-card, .ctrl-btn, .icon-btn, .group-tab, .menu-pop, .mc-tooltip { transition:none !important; animation:none !important; }
         }
@@ -6928,7 +6938,17 @@
       // 状态文字（中央覆盖层）
       const statusEl = $('div', { class: 'status-layer' });
       const media = $('div', { class: 'cam-media' }, [badge, name, statusEl]);
-      const infoName = $('div', { class: 'cam-info-name' }, room.displayName || room.id);
+      const infoNameTag = isLikelyUsername(room.id) ? 'a' : 'div';
+      const infoName = $(infoNameTag, {
+        class: 'cam-info-name',
+        ...(infoNameTag === 'a' ? {
+          href: location.origin + '/' + encodeURIComponent(room.id) + '/',
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          title: t('opOpenRoom'),
+          onclick: (event) => event.stopPropagation(),
+        } : {}),
+      }, room.displayName || room.id);
       const infoMeta = $('div', { class: 'cam-info-meta' }, statusMeta(room.lastStatus).label);
       const infoActions = $('div', { class: 'cam-info-actions' });
       if (favoriteBtn) infoActions.appendChild(favoriteBtn);
@@ -8115,10 +8135,17 @@
     }
 
     /* ---- 卡片"更多"操作菜单（PiP / 全屏 / 移动到分组 / 主屏聚焦）---- */
+    let cardOpsMenuCleanup = null;
+    function closeCardOpsMenu() {
+      if (typeof cardOpsMenuCleanup === 'function') cardOpsMenuCleanup();
+      cardOpsMenuCleanup = null;
+      document.body?.classList.remove('rg-card-menu-open');
+    }
+
     function openCardOpsMenu(e, roomId, card) {
       // 关闭已有的卡片菜单
       const existing = document.querySelector('.card-ops-menu-pop');
-      if (existing) { existing.remove(); return; }
+      if (existing) { closeCardOpsMenu(); return; }
       const rect = e.currentTarget?.getBoundingClientRect?.() || card?.getBoundingClientRect?.() || { left: e.clientX || 0, right: e.clientX || 0, bottom: e.clientY || 0 };
       const usePointer = Number.isFinite(e.clientX) && Number.isFinite(e.clientY) && !e.currentTarget?.classList?.contains('icon-btn');
       const menuStyle = usePointer
@@ -8128,7 +8155,7 @@
 
       const item = (icon, label, onclick) => setElementHint($('button', {
         title: label,
-        onclick: () => { menu.remove(); onclick(); },
+        onclick: () => { closeCardOpsMenu(); onclick(); },
       }, label), label);
 
       // 主屏切换（focus 模式专属）
@@ -8185,14 +8212,30 @@
       menu.appendChild(item('', t('opMoveGroup'), () => openMoveMenu(e, roomId)));
       menu.appendChild(item('', t('opDeleteRoom'), () => { stopCardRecording(roomId, true); service.stop(roomId); store.removeRoom(roomId); }));
 
-      document.body.appendChild(menu);
-      const close = (ev) => {
-        if (!menu.contains(ev.target)) {
+      if (phoneEnvironment || store.state.settings.viewMode === 'phone') {
+        const backdrop = $('div', { class: 'card-ops-menu-backdrop', role: 'presentation' });
+        const closeOnEscape = (event) => { if (event.key === 'Escape') closeCardOpsMenu(); };
+        cardOpsMenuCleanup = () => {
+          menu.remove();
+          backdrop.remove();
+          document.removeEventListener('keydown', closeOnEscape);
+          document.body?.classList.remove('rg-card-menu-open');
+        };
+        backdrop.appendChild(menu);
+        backdrop.addEventListener('click', event => { if (event.target === backdrop) closeCardOpsMenu(); });
+        document.body.appendChild(backdrop);
+        document.body.classList.add('rg-card-menu-open');
+        document.addEventListener('keydown', closeOnEscape);
+        menu.querySelector('button')?.focus({ preventScroll: true });
+      } else {
+        const close = (event) => { if (!menu.contains(event.target)) closeCardOpsMenu(); };
+        cardOpsMenuCleanup = () => {
           menu.remove();
           document.removeEventListener('click', close);
-        }
-      };
-      setTimeout(() => document.addEventListener('click', close), 0);
+        };
+        document.body.appendChild(menu);
+        setTimeout(() => document.addEventListener('click', close), 0);
+      }
     }
 
     /* ---- 拖拽落点写回 store ---- */
@@ -16444,7 +16487,7 @@
   }
 
   function start() {
-    if (!isMobileDevice()) return;
+    if (!isMobileDevice() || isBlockedPage()) return;
     injectViewport();
     installStyle();
     const ready = () => {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.4.7
+// @version           16.4.8
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -88,7 +88,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.4.7');
+  instanceMarker.setAttribute('data-suite-version', '16.4.8');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1165,7 +1165,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.4.7',
+    version: '16.4.8',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3460,7 +3460,8 @@
       .roomgrid-native-desktop .roomgrid-private-action { display:none; }
       .roomgrid-native-trigger {
         overflow:hidden; box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center;
-        height:34px; max-width:118px; margin:0 4px; padding:6px 12px;
+        position:relative; top:-4px; float:right; width:84px; min-width:84px; max-width:84px; height:22px;
+        margin:0; padding:3px 8px 2px;
         border:1px solid #0c6a93; border-radius:3px; background:#0c6a93; color:#fff;
         cursor:pointer; white-space:nowrap; text-overflow:ellipsis;
         font:500 12px/1.4 UbuntuMedium,UbuntuRegular,Helvetica,Arial,sans-serif;
@@ -3733,6 +3734,8 @@
       const direct = [
         document.getElementById('joinFanClubButton'),
         document.getElementById('join_fan_club_button'),
+        document.querySelector('[data-testid="fanclub-button"]'),
+        document.querySelector('.fanclubButton'),
         document.querySelector('[data-testid="join-fan-club-button"]'),
         document.querySelector('[data-testid*="fan-club" i]'),
       ].filter(Boolean);
@@ -3763,6 +3766,30 @@
         return /^(?:FOLLOW|UNFOLLOW|FOLLOWING)(?:\s|$)/.test(text);
       });
       return candidates.sort((a, b) => b.getBoundingClientRect().top - a.getBoundingClientRect().top)[0] || null;
+    }
+
+    function syncDesktopRoomGridTriggerSize(reference = findNativeRoomActionFallback()) {
+      if (!nativeRoomGridTrigger || !visibleNode(reference)) return;
+      const rect = reference.getBoundingClientRect();
+      const style = getComputedStyle(reference);
+      if (rect.width < 20 || rect.height < 12) return;
+      Object.assign(nativeRoomGridTrigger.style, {
+        boxSizing: 'border-box',
+        width: `${rect.width}px`,
+        minWidth: `${rect.width}px`,
+        maxWidth: `${rect.width}px`,
+        height: `${rect.height}px`,
+        margin: style.margin,
+        padding: style.padding,
+        position: style.position === 'static' ? 'relative' : style.position,
+        top: style.top,
+        cssFloat: style.cssFloat,
+        fontFamily: style.fontFamily,
+        fontSize: style.fontSize,
+        fontWeight: style.fontWeight,
+        lineHeight: style.lineHeight,
+        borderRadius: style.borderRadius,
+      });
     }
 
     function openNativeSendTip() {
@@ -3818,7 +3845,7 @@
           'aria-label': 'Open RoomGrid tools',
           'aria-haspopup': 'menu',
           'aria-expanded': collapsed ? 'false' : 'true',
-        }, '▦ RoomGrid');
+        }, 'ROOMGRID');
         const activate = event => {
           event.preventDefault();
           event.stopPropagation();
@@ -3832,6 +3859,7 @@
         if (replacesSource) source.insertAdjacentElement('afterend', nativeRoomGridTrigger);
         else source.insertAdjacentElement('beforebegin', nativeRoomGridTrigger);
       }
+      syncDesktopRoomGridTriggerSize(findNativeRoomActionFallback() || source);
       nativeSendTipSource = findNativeSendTipSource();
       root.classList.add('roomgrid-native-desktop');
       root.setAttribute('role', 'menu');
@@ -3894,9 +3922,6 @@
       const { video, panel, handle, roomContents, topSection, anchor } = nodes;
       bindDesktopVideoFitObserver(panel, anchor);
 
-      // Do not resize the room in response to an unrelated page scroll. The
-      // controller owns the initial/top-of-room layout and browser resizes.
-      if (Math.abs(window.scrollY || 0) > 32) return;
       const viewportHeight = window.visualViewport?.height || window.innerHeight;
       const anchorRect = anchor.getBoundingClientRect();
       const panelRect = panel.getBoundingClientRect();
@@ -3925,28 +3950,56 @@
 
       const handleX = handleRect.left + (handleRect.width / 2);
       const targetX = panelRect.left + targetWidth + (handleRect.width / 2);
+      const releaseDesktopVideoFit = () => {
+        if (!desktopVideoFitBusy) return;
+        desktopVideoFitBusy = false;
+        setTimeout(() => {
+          if (!panel.isConnected) return;
+          const nextWidth = panel.getBoundingClientRect().width;
+          const madeProgress = Math.abs(nextWidth - panelRect.width) > 1;
+          if (madeProgress && Math.abs(nextWidth - targetWidth) > 3) scheduleDesktopVideoFit(0);
+        }, 220);
+      };
       desktopVideoFitBusy = true;
-      handle.dispatchEvent(new MouseEvent('mousedown', {
-        bubbles: true, cancelable: true, view: window,
-        clientX: handleX, clientY: handleRect.top + (handleRect.height / 2),
-        button: 0, buttons: 1,
-      }));
-      requestAnimationFrame(() => {
-        roomContents.dispatchEvent(new MouseEvent('mousemove', {
-          bubbles: true, cancelable: true, view: window,
-          clientX: targetX, clientY: handleRect.top + (handleRect.height / 2),
+      try {
+        handle.dispatchEvent(new MouseEvent('mousedown', {
+          bubbles: true, cancelable: true,
+          clientX: handleX, clientY: handleRect.top + (handleRect.height / 2),
           button: 0, buttons: 1,
         }));
         requestAnimationFrame(() => {
+          try {
+            roomContents.dispatchEvent(new MouseEvent('mousemove', {
+              bubbles: true, cancelable: true,
+              clientX: targetX, clientY: handleRect.top + (handleRect.height / 2),
+              button: 0, buttons: 1,
+            }));
+          } catch (_) {
+            releaseDesktopVideoFit();
+            return;
+          }
+          requestAnimationFrame(() => {
+            try {
+              roomContents.dispatchEvent(new MouseEvent('mouseup', {
+                bubbles: true, cancelable: true,
+                clientX: targetX, clientY: handleRect.top + (handleRect.height / 2),
+                button: 0, buttons: 0,
+              }));
+            } finally {
+              releaseDesktopVideoFit();
+            }
+          });
+        });
+      } catch (_) {
+        try {
           roomContents.dispatchEvent(new MouseEvent('mouseup', {
-            bubbles: true, cancelable: true, view: window,
+            bubbles: true, cancelable: true,
             clientX: targetX, clientY: handleRect.top + (handleRect.height / 2),
             button: 0, buttons: 0,
           }));
-          desktopVideoFitBusy = false;
-          scheduleDesktopVideoFit(220);
-        });
-      });
+        } catch (_) {}
+        releaseDesktopVideoFit();
+      }
     }
 
     function scheduleDesktopVideoFit(delay = 120) {

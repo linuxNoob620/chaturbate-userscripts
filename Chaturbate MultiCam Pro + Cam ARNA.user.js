@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.3.1
+// @version           16.4.0
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -88,7 +88,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.3.1');
+  instanceMarker.setAttribute('data-suite-version', '16.4.0');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -473,6 +473,13 @@
       notifyOnline: 'Online alerts',
       notifyFavoritesOnly: 'Alerts for favorites only',
       startOnOnlineFavorites: 'Open on Online Favorites at startup',
+      startupSettings: 'Startup view and group',
+      startupSettingsHint: 'Choose what the Workshop shows when it opens. Changes apply on the next Workshop load.',
+      startupViewLabel: 'Startup layout',
+      startupGroupLabel: 'Startup group',
+      startupLastUsed: 'Last used',
+      startupAutomatic: 'Automatic for this device',
+      startupWindowFirst: 'Window first',
       notifyTitle: 'Desktop notification + card flash when a model goes online',
       collapseSidebar: '',
       viewGrid: 'Grid',
@@ -798,6 +805,13 @@
       notifyOnline: '上线提醒',
       notifyFavoritesOnly: '仅提醒收藏的房间',
       startOnOnlineFavorites: '启动时打开在线收藏',
+      startupSettings: '启动视图和分组',
+      startupSettingsHint: '选择工作台打开时显示的布局和分组。更改会在下次打开工作台时生效。',
+      startupViewLabel: '启动布局',
+      startupGroupLabel: '启动分组',
+      startupLastUsed: '上次使用',
+      startupAutomatic: '根据设备自动选择',
+      startupWindowFirst: '窗口优先',
       notifyTitle: '主播上线时桌面通知 + 卡片闪烁',
       collapseSidebar: '',
       viewGrid: '平铺',
@@ -1116,7 +1130,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.3.1',
+    version: '16.4.0',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -1258,6 +1272,8 @@
       notifyOnline: true,
       notifyFavoritesOnly: true,
       startOnOnlineFavorites: true,
+      startupView: 'last',        // 'last' | 'auto' | 'grid' | 'focus' | 'phone' | 'viewer'
+      startupGroup: ONLINE_FAVORITES_GROUP_ID, // 'last' or a valid group id
       activeGroup: 'all',
       searchQuery: '',
       pureMode: false,
@@ -1504,6 +1520,14 @@
     out.settings.notifyOnline = out.settings.notifyOnline !== false;
     out.settings.notifyFavoritesOnly = out.settings.notifyFavoritesOnly !== false;
     out.settings.startOnOnlineFavorites = out.settings.startOnOnlineFavorites !== false;
+    out.settings.startupView = ['last', 'auto', 'grid', 'focus', 'phone', 'viewer'].includes(st.startupView)
+      ? st.startupView
+      : def.settings.startupView;
+    const legacyStartupGroup = st.startOnOnlineFavorites === false ? 'last' : ONLINE_FAVORITES_GROUP_ID;
+    const requestedStartupGroup = Object.prototype.hasOwnProperty.call(st, 'startupGroup') ? String(st.startupGroup || '') : legacyStartupGroup;
+    out.settings.startupGroup = requestedStartupGroup === 'last' || out.groups.some(g => g.id === requestedStartupGroup)
+      ? requestedStartupGroup
+      : legacyStartupGroup;
     reconcileSplitState(out);
     out.settings.pollMs = { ...def.settings.pollMs, ...(st.pollMs && typeof st.pollMs === 'object' ? st.pollMs : {}) };
     for (const [k, fallback] of Object.entries(def.settings.pollMs)) {
@@ -2224,10 +2248,6 @@
    * ============================================================= */
   function createStore() {
     let state = Storage.load();
-    if (state.settings.startOnOnlineFavorites) {
-      state.settings.activeGroup = ONLINE_FAVORITES_GROUP_ID;
-      state.settings.pageIndex = 0;
-    }
     const subs = new Set();
     const persistDebounced = debounce(() => Storage.save(state), 800);
 
@@ -3106,14 +3126,23 @@
       location.href = buildWorkstationUrl();
     };
 
-    function findMerchNavigationSlot() {
+    function findDesktopNavigationSlot(kind) {
       const nav = document.querySelector('[data-testid="header-nav-bar"]') || document.querySelector('#desktop-spa-header nav') || document.querySelector('header nav');
       if (!nav) return null;
       return [...nav.querySelectorAll('a[href],button')].find(node => {
         const label = `${node.textContent || ''} ${node.getAttribute('aria-label') || ''}`.replace(/\s+/g, ' ').trim();
         const href = node.getAttribute('href') || '';
+        if (kind === 'private') return /^PRIVATE SHOWS?$/i.test(label) || /(?:^|\/)private-shows?(?:\/|$|\?)/i.test(href);
         return /^(?:MERCH|SHOP)$/i.test(label) || /(?:^|\/)merch(?:andise)?(?:\/|$|\?)/i.test(href);
       }) || null;
+    }
+
+    function hideMerchNavigationItem() {
+      const merch = findDesktopNavigationSlot('merch');
+      if (!merch || merch.id === 'roomgrid-workshop-button') return;
+      merch.hidden = true;
+      merch.setAttribute('aria-hidden', 'true');
+      merch.classList.add('roomgrid-hidden-merch-nav');
     }
 
     function ensureWorkshopHeaderButton() {
@@ -3121,17 +3150,18 @@
         document.getElementById('roomgrid-workshop-button')?.remove();
         return;
       }
+      hideMerchNavigationItem();
       if (document.getElementById('roomgrid-workshop-button')) return;
-      const merchSlot = findMerchNavigationSlot();
-      if (merchSlot) {
-        merchSlot.id = 'roomgrid-workshop-button';
-        merchSlot.classList.add('roomgrid-workshop-nav-link');
-        merchSlot.setAttribute('href', buildWorkstationUrl());
-        merchSlot.setAttribute('aria-label', 'Open MultiCam Workshop');
-        merchSlot.setAttribute('title', 'Open MultiCam Workshop');
-        const label = merchSlot.querySelector('.HeaderNavBar__link-text,[class*="link-text"],[class*="LinkText"]') || merchSlot;
+      const privateSlot = findDesktopNavigationSlot('private');
+      if (privateSlot) {
+        privateSlot.id = 'roomgrid-workshop-button';
+        privateSlot.classList.add('roomgrid-workshop-nav-link');
+        privateSlot.setAttribute('href', buildWorkstationUrl());
+        privateSlot.setAttribute('aria-label', 'Open MultiCam Workshop');
+        privateSlot.setAttribute('title', 'Open MultiCam Workshop');
+        const label = privateSlot.querySelector('.HeaderNavBar__link-text,[class*="link-text"],[class*="LinkText"]') || privateSlot;
         label.textContent = 'WORKSHOP';
-        merchSlot.addEventListener('click', event => {
+        privateSlot.addEventListener('click', event => {
           event.preventDefault();
           event.stopPropagation();
           openWorkstationNew();
@@ -3420,6 +3450,7 @@
       .roomgrid-mobile-panel .roomgrid-send-tip-action { display:none; }
       .roomgrid-mobile-panel .roomgrid-dock-setting { margin:10px 12px; min-height:44px; }
       .roomgrid-mobile-panel .roomgrid-dock-foot { padding:10px 16px; }
+      .roomgrid-mobile-panel .roomgrid-dock-collapse-link { display:none !important; }
       .roomgrid-mobile-native-hidden { display:none !important; }
       .roomgrid-mobile-tab { cursor:pointer; touch-action:manipulation; }
       .roomgrid-mobile-tab[aria-selected="true"],.roomgrid-mobile-tab.roomgrid-mobile-tab-active {
@@ -3485,7 +3516,7 @@
       dockAutoCollapseSetting,
       $('div', { class: 'roomgrid-dock-foot' }, [
         $('button', { class: 'roomgrid-dock-link', onclick: () => { const s = Storage.load(); toast(t('memoryStat', s.rooms.length), 2500); } }, t('memoryView')),
-        $('button', { class: 'roomgrid-dock-link', onclick: () => setDockCollapsed(true) }, t('collapseFAB')),
+        $('button', { class: 'roomgrid-dock-link roomgrid-dock-collapse-link', onclick: () => setDockCollapsed(true) }, t('collapseFAB')),
       ]),
     ]);
     const arnaPane = $('div', { class: 'roomgrid-dock-pane roomgrid-arna-pane', hidden: true });
@@ -3574,6 +3605,9 @@
     function scheduleDockAutoCollapse() {
       clearDockAutoCollapseTimer();
       if (collapsed) return;
+      // The mobile RoomGrid is a native tab, not a transient popup. Keep it open
+      // until the user chooses another native room tab.
+      if (nativeMobilePage && mobileRoomGridOpen) return;
       const seconds = getDockAutoCollapseSeconds();
       if (seconds <= 0) return;
       dockAutoCollapseTimer = setTimeout(() => setDockCollapsed(true), seconds * 1000);
@@ -3774,10 +3808,16 @@
 
     function handleMobileRoomGridClick(event) {
       if (mobilePrivateBypass || mobilePrivateMode) return;
+      event.preventDefault();
+      event.stopPropagation();
       setTimeout(() => {
         if (collapsed || !mobileRoomGridOpen) setDockCollapsed(false, 'multicam');
-        else setDockCollapsed(true);
       }, 0);
+    }
+
+    function handleMobileRoomGridKeydown(event) {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      handleMobileRoomGridClick(event);
     }
 
     function openNativePrivateTab() {
@@ -3800,10 +3840,13 @@
       setMobileRoomGridOpen(false);
       if (mobilePrivateTab) {
         mobilePrivateTab.removeEventListener('click', handleMobileRoomGridClick, true);
+        mobilePrivateTab.removeEventListener('keydown', handleMobileRoomGridKeydown, true);
         mobilePrivateTab.textContent = 'Private';
         mobilePrivateTab.classList.remove('roomgrid-mobile-tab', 'roomgrid-mobile-tab-active');
         mobilePrivateTab.removeAttribute('aria-label');
         mobilePrivateTab.removeAttribute('aria-expanded');
+        mobilePrivateTab.removeAttribute('aria-controls');
+        mobilePrivateTab.removeAttribute('tabindex');
       }
       mobilePrivateTab = null;
       mobilePrivateMode = false;
@@ -3818,16 +3861,19 @@
       if (mobilePrivateTab !== tab) {
         if (mobilePrivateTab) {
           mobilePrivateTab.removeEventListener('click', handleMobileRoomGridClick, true);
+          mobilePrivateTab.removeEventListener('keydown', handleMobileRoomGridKeydown, true);
           mobilePrivateTab.classList.remove('roomgrid-mobile-tab', 'roomgrid-mobile-tab-active');
         }
         mobilePrivateTab = tab;
         tab.addEventListener('click', handleMobileRoomGridClick, true);
+        tab.addEventListener('keydown', handleMobileRoomGridKeydown, true);
       }
       tab.textContent = 'RoomGrid';
       tab.classList.add('roomgrid-mobile-tab');
       tab.setAttribute('role', 'tab');
       tab.setAttribute('aria-label', 'RoomGrid tools');
       tab.setAttribute('aria-controls', mobilePanel.id);
+      tab.setAttribute('tabindex', '0');
       const tabStrip = findMobileTabStrip(tab);
       if (!tabStrip) return false;
       const privateSlot = document.querySelector('#portrait-contents .BaseRoomTab.PrivateTab,.BaseRoomTab.PrivateTab');
@@ -3883,9 +3929,7 @@
       ensureWorkshopHeaderButton();
       const ensureWorkshopHeaderButtonSoon = debounce(ensureWorkshopHeaderButton, 120);
       try {
-        const workshopButtonMo = new MutationObserver(() => {
-          if (!document.getElementById('roomgrid-workshop-button')) ensureWorkshopHeaderButtonSoon();
-        });
+        const workshopButtonMo = new MutationObserver(ensureWorkshopHeaderButtonSoon);
         workshopButtonMo.observe(document.body, { childList: true, subtree: true });
       } catch (_) {}
     }
@@ -4814,13 +4858,31 @@
     const store = createStore();
     const phoneEnvironment = isPhoneLikeDevice();
     document.body.classList.toggle('rg-phone-device', phoneEnvironment);
-    if (phoneEnvironment && store.state.settings.phoneModeAuto) {
-      store.patchSettings({ viewMode: 'phone', sidebarCollapsed: true });
+    const startupPatch = { pageIndex: 0 };
+    const startupGroup = String(store.state.settings.startupGroup || 'last');
+    if (startupGroup !== 'last' && store.state.groups.some(group => group.id === startupGroup)) {
+      startupPatch.activeGroup = startupGroup;
+    }
+    const startupView = String(store.state.settings.startupView || 'last');
+    if (startupView === 'auto') {
+      startupPatch.viewMode = phoneEnvironment ? 'phone' : 'grid';
+      startupPatch.viewerMode = false;
+    } else if (startupView === 'viewer') {
+      startupPatch.viewMode = phoneEnvironment ? 'phone' : 'grid';
+      startupPatch.viewerMode = true;
+    } else if (['grid', 'focus', 'phone'].includes(startupView)) {
+      startupPatch.viewMode = startupView;
+      startupPatch.viewerMode = false;
+    } else if (phoneEnvironment && store.state.settings.phoneModeAuto) {
+      startupPatch.viewMode = 'phone';
     } else if (!phoneEnvironment && store.state.settings.viewMode === 'phone') {
       // Phone mode is a device presentation choice, not a cloud-synced desktop layout.
       // A backup restored from a phone should therefore reopen as the normal desktop grid.
-      store.patchSettings({ viewMode: 'grid', sidebarCollapsed: false });
+      startupPatch.viewMode = 'grid';
     }
+    if (startupPatch.viewMode === 'phone' || phoneEnvironment) startupPatch.sidebarCollapsed = true;
+    else if (startupPatch.viewMode === 'grid') startupPatch.sidebarCollapsed = false;
+    store.patchSettings(startupPatch);
     const service = createRoomService(store);
     Notify.init();
 
@@ -5315,10 +5377,10 @@
         .grid.view-focus .resizer.dragging::before { background:var(--accent); opacity:1; }
         .grid.view-focus .thumbs-row { display:none !important; }
 
-        body.rg-viewer-mode { background:#f3f1ea !important; }
-        body.rg-viewer-mode .app-shell { padding:0 !important; gap:0 !important; background:#f3f1ea !important; }
-        body.rg-viewer-mode main { background:#f3f1ea !important; }
-        body.rg-viewer-mode .grid { background:#ece9df !important; padding:8px !important; }
+        body.rg-viewer-mode { background:#050607 !important; }
+        body.rg-viewer-mode .app-shell { padding:0 !important; gap:0 !important; background:#050607 !important; }
+        body.rg-viewer-mode main { background:#050607 !important; }
+        body.rg-viewer-mode .grid { background:#050607 !important; padding:4px !important; }
         body.rg-viewer-mode .sidebar,
         body.rg-viewer-mode header,
         body.rg-viewer-mode .top-accent { display:none !important; }
@@ -5642,12 +5704,12 @@
         .rg-control-drawer { position:absolute; top:0; right:0; width:min(360px,92vw); height:100dvh; box-sizing:border-box; display:flex; flex-direction:column; overflow:hidden; background:#202c39; color:#f1f1f1; border-left:1px solid #2d3e50; box-shadow:-12px 0 32px rgba(0,0,0,.34); }
         .rg-control-drawer-head { display:flex; align-items:center; justify-content:space-between; min-height:58px; padding:0 12px; border-bottom:1px solid #2d3e50; }
         .rg-control-drawer-head strong { font-size:15px; }.rg-control-drawer-close { width:34px; height:34px; border:1px solid #2d3e50; border-radius:4px; background:#17202a; color:#fff; font-size:20px; }
-        .rg-control-drawer-body { flex:1; overflow-y:auto; overscroll-behavior:contain; padding:8px; }
+        .rg-control-drawer-body { flex:1 1 auto; min-height:0; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; touch-action:pan-y; padding:8px 8px max(8px,env(safe-area-inset-bottom)); }
         .rg-drawer-section { padding:7px 0; border-bottom:1px solid #2d3e50; }.rg-drawer-section:last-child{border-bottom:0}
         .rg-drawer-title { padding:3px 8px 6px; color:#b3b3b3; font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
         .rg-drawer-control { display:grid; grid-template-columns:minmax(0,1fr) minmax(110px,150px); align-items:center; gap:10px; min-height:42px; padding:5px 8px; color:#d7d7d7; font-size:12px; }
         .rg-drawer-control > select,.rg-drawer-control > input { width:100%!important; box-sizing:border-box; }
-        .rg-control-drawer .menu-pop { position:static!important; inset:auto!important; display:block!important; width:auto!important; min-width:0!important; max-height:none!important; padding:0!important; border:0!important; border-radius:0!important; box-shadow:none!important; background:transparent!important; }
+        .rg-control-drawer .menu-pop { position:static!important; inset:auto!important; display:block!important; width:100%!important; min-width:0!important; max-height:none!important; overflow:visible!important; padding:0!important; border:0!important; border-radius:0!important; box-shadow:none!important; background:transparent!important; }
         .rg-control-drawer .menu-pop button { width:100%; min-height:38px; border-radius:3px!important; }
         .cam-card { display:flex!important; flex-direction:column!important; overflow:hidden!important; }
         .cam-media { position:relative; min-width:0; min-height:0; flex:1; overflow:hidden; background:#000; }
@@ -5675,14 +5737,14 @@
         body.rg-phone-mode .rg-native-logo-source,
         body.rg-phone-mode .rg-native-logo-source svg,
         body.rg-phone-mode .rg-native-logo-source img { max-width:112px; }
-        body.rg-phone-mode .rg-native-logo { font-size:18px; }.rg-phone-mode .rg-native-brand-title { padding-left:8px; font-size:11px; }.rg-phone-mode .rg-native-header-center { grid-column:1/-1; display:none; }.rg-phone-mode .rg-native-header-actions .ctrl-btn { width:36px; min-width:36px; padding:0!important; overflow:hidden; font-size:0; }
+        body.rg-phone-mode .rg-native-logo { font-size:18px; }.rg-phone-mode .rg-native-brand-title { padding-left:8px; font-size:11px; }.rg-phone-mode .rg-native-header-center { grid-column:1/-1; display:none; }.rg-phone-mode .rg-native-header-actions .ctrl-btn { width:44px!important; min-width:44px!important; height:44px!important; min-height:44px!important; padding:0!important; overflow:hidden; font-size:0; }
         body.rg-phone-mode .app-shell { height:calc(100dvh - 52px)!important; }
         body.rg-phone-mode .rg-native-nav { height:44px; min-height:44px!important; padding:0 4px 0 46px!important; gap:4px!important; overflow:hidden!important; scrollbar-width:none; }
         body.rg-phone-mode .rg-native-nav::-webkit-scrollbar { display:none; }
         body.rg-phone-mode .rg-native-nav > .toolbar-group:first-child { display:flex!important; flex:0 0 auto!important; grid-template-columns:none!important; }
         body.rg-phone-mode .rg-mobile-only { display:flex!important; }
         body.rg-phone-mode input.rg-mobile-only { display:block!important; flex:1 1 82px; width:auto!important; min-width:72px!important; max-width:108px!important; }
-        body.rg-phone-mode .rg-native-nav .roomgrid-compact-select { flex:0 0 68px!important; width:68px!important; min-width:68px!important; max-width:68px!important; }
+        body.rg-phone-mode .rg-native-nav .roomgrid-compact-select { flex:0 0 86px!important; width:86px!important; min-width:86px!important; max-width:86px!important; }
         body.rg-phone-mode .rg-native-nav .ctrl-btn:not(.sidebar-toggle-btn):not(.rg-mobile-only) { display:none!important; }
         body.rg-phone-mode .rg-visible-count { display:none!important; }
         body.rg-phone-mode .grid.view-phone { grid-template-columns:minmax(0,1fr)!important; }
@@ -5691,10 +5753,21 @@
         body.rg-phone-mode .card-ops-menu-backdrop .card-ops-menu-pop { position:relative!important; inset:auto!important; box-sizing:border-box; width:100%!important; min-width:0!important; max-height:calc(100dvh - 96px - env(safe-area-inset-top))!important; margin:0!important; padding:6px 6px max(8px,env(safe-area-inset-bottom))!important; overflow-x:hidden!important; overflow-y:auto!important; overscroll-behavior:contain!important; -webkit-overflow-scrolling:touch; touch-action:pan-y; border-right:0!important; border-bottom:0!important; border-left:0!important; border-radius:0!important; }
         body.rg-phone-mode .cam-info { min-height:46px; }.rg-phone-mode .cam-info-name{font-size:12px}.rg-phone-mode .cam-info-actions .icon-btn{width:32px!important;height:32px!important}
         body.rg-phone-mode .rg-control-drawer { width:100vw; border-left:0; }
+        body.rg-control-drawer-open .grid { overflow:hidden!important; overscroll-behavior:none!important; touch-action:none!important; }
+        body.rg-viewer-mode { background:#050607!important; }
+        body.rg-viewer-mode .app-shell,
+        body.rg-viewer-mode main,
+        body.rg-viewer-mode .grid { background:#050607!important; }
+        body.rg-viewer-mode.rg-phone-mode .app-shell,
+        body.rg-viewer-mode.rg-phone-mode main { width:100vw!important; height:100dvh!important; min-height:0!important; padding:0!important; border:0!important; border-radius:0!important; }
+        body.rg-viewer-mode.rg-phone-mode .grid.view-phone { grid-template-columns:minmax(0,1fr)!important; padding:4px!important; gap:4px!important; background:#050607!important; }
+        .sidebar .group-tab.new-group-tab { color:#f1f1f1!important; border-color:#3b5066!important; }
+        .sidebar .group-tab.new-group-tab:hover,.sidebar .group-tab.new-group-tab:focus-visible { background:#253648!important; color:#fff!important; }
         .shell-controls { top:72px!important; right:auto!important; left:8px!important; }
         body.rg-phone-mode .shell-controls { top:56px!important; left:max(4px,env(safe-area-inset-left))!important; }
         @media (orientation:landscape) and (max-height:600px) {
           body.rg-phone-mode .grid.view-phone { grid-template-columns:repeat(2,minmax(0,1fr))!important; }
+          body.rg-viewer-mode.rg-phone-mode .grid.view-phone { grid-template-columns:repeat(2,minmax(0,1fr))!important; }
           body.rg-phone-mode .card-ops-menu-backdrop .card-ops-menu-pop { max-height:calc(100dvh - 90px - env(safe-area-inset-top))!important; }
         }
         @media (prefers-reduced-motion: reduce) {
@@ -5892,7 +5965,9 @@
       const on = !!store.state.settings.pureMode;
       const viewerOn = !!store.state.settings.viewerMode && !on;
       const splitOn = !!store.state.settings.splitViewActive && !on && !viewerOn;
-      const phoneOn = store.state.settings.viewMode === 'phone' && !on && !viewerOn && !splitOn;
+      // Window-first hides the shell but must retain Phone mode's responsive
+      // one-column/two-column grid on small screens.
+      const phoneOn = store.state.settings.viewMode === 'phone' && !on && !splitOn;
       const focusOn = store.state.settings.viewMode === 'focus' && !on && !viewerOn && !splitOn;
       const thumbsCollapsed = !!store.state.settings.focusThumbsCollapsed;
       const videoFit = store.state.settings.videoFit === 'cover' ? 'cover' : 'contain';
@@ -6631,7 +6706,7 @@
         .forEach(renderGroup);
 
       sidebar.appendChild($('button', {
-        class: 'group-tab',
+        class: 'group-tab new-group-tab',
         title: t('hintNewGroup'),
         style: { color: 'var(--text-secondary)', marginTop: '8px', justifyContent: 'center', borderStyle: 'dashed' },
         onclick: () => {
@@ -7877,7 +7952,6 @@
         const thumb = $('input', { class: 'ctrl-input', type: 'number', min: '96', max: '260', value: String(store.state.settings.focusThumbSize || 150) });
         const notify = $('input', { type: 'checkbox', checked: !!store.state.settings.notifyOnline });
         const notifyFavoritesOnly = $('input', { type: 'checkbox', checked: !!store.state.settings.notifyFavoritesOnly, disabled: !store.state.settings.notifyOnline });
-        const startOnOnlineFavorites = $('input', { type: 'checkbox', checked: !!store.state.settings.startOnOnlineFavorites });
         const phoneModeAuto = $('input', { type: 'checkbox', checked: store.state.settings.phoneModeAuto !== false });
         notify.addEventListener('change', () => { notifyFavoritesOnly.disabled = !notify.checked; });
         body.append(
@@ -7891,7 +7965,6 @@
           $('label', { class: 'toggle', style: { marginTop: '10px' } }, [phoneModeAuto, t('phoneAutoMode')]),
           $('label', { class: 'toggle', style: { marginTop: '10px' } }, [notify, t('notifyOnline')]),
           $('label', { class: 'toggle', style: { marginTop: '8px' } }, [notifyFavoritesOnly, t('notifyFavoritesOnly')]),
-          $('label', { class: 'toggle', style: { marginTop: '8px' } }, [startOnOnlineFavorites, t('startOnOnlineFavorites')]),
           $('div', { class: 'roomgrid-modal-actions' }, [
             $('button', { class: 'ctrl-btn', onclick: close }, t('importReviewCancel')),
             $('button', { class: 'ctrl-btn primary', onclick: async () => {
@@ -7906,7 +7979,56 @@
                 focusThumbSize: clampInt(thumb.value, 96, 260, 150),
                 notifyOnline: !!notify.checked,
                 notifyFavoritesOnly: !!notifyFavoritesOnly.checked,
-                startOnOnlineFavorites: !!startOnOnlineFavorites.checked,
+              });
+              close();
+            } }, t('saveSettings')),
+          ]),
+        );
+      });
+    }
+
+    function openStartupSettings() {
+      openToolPanel(t('startupSettings'), (body, close) => {
+        const view = $('select', { class: 'ctrl-input' }, [
+          $('option', { value: 'last' }, t('startupLastUsed')),
+          $('option', { value: 'auto' }, t('startupAutomatic')),
+          $('option', { value: 'grid' }, t('viewGrid')),
+          $('option', { value: 'focus' }, t('viewFocus')),
+          $('option', { value: 'phone' }, t('viewPhone')),
+          $('option', { value: 'viewer' }, t('startupWindowFirst')),
+        ]);
+        view.value = store.state.settings.startupView || 'last';
+
+        const groupLabel = group => {
+          if (group.name === '__library__') return t('groupLibrary');
+          if (group.name === '__all__') return t('groupAll');
+          if (group.name === '__online_favorites__') return t('groupOnlineFav');
+          if (group.name === '__online__') return t('groupOnline');
+          if (group.name === '__fav__') return t('groupFav');
+          return group.name;
+        };
+        const group = $('select', { class: 'ctrl-input' }, [
+          $('option', { value: 'last' }, t('startupLastUsed')),
+          ...[...store.state.groups]
+            .sort((a, b) => numeric(a.order, 999) - numeric(b.order, 999))
+            .map(item => $('option', { value: item.id }, groupLabel(item))),
+        ]);
+        group.value = store.state.settings.startupGroup || 'last';
+        if (!group.value) group.value = 'last';
+
+        body.append(
+          $('div', { class: 'roomgrid-modal-hint' }, t('startupSettingsHint')),
+          $('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: '10px' } }, [
+            $('label', { style: { display: 'grid', gap: '5px', fontSize: '12px', color: 'var(--text-muted)' } }, [t('startupViewLabel'), view]),
+            $('label', { style: { display: 'grid', gap: '5px', fontSize: '12px', color: 'var(--text-muted)' } }, [t('startupGroupLabel'), group]),
+          ]),
+          $('div', { class: 'roomgrid-modal-actions' }, [
+            $('button', { class: 'ctrl-btn', onclick: close }, t('importReviewCancel')),
+            $('button', { class: 'ctrl-btn primary', onclick: () => {
+              store.patchSettings({
+                startupView: view.value,
+                startupGroup: group.value,
+                startOnOnlineFavorites: group.value === ONLINE_FAVORITES_GROUP_ID,
               });
               close();
             } }, t('saveSettings')),
@@ -8029,6 +8151,7 @@
         body.append(
           $('div', { class: 'roomgrid-modal-hint' }, t('settingsOnlyHint')),
           $('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '9px' } }, [
+            action(t('startupSettings'), () => openStartupSettings()),
             action(t('layoutSettings'), () => openLayoutSettings()),
             action(t('playbackSettingsTitle'), () => openPlaybackSettingsPanel()),
             action(t('recordingSettingsTitle'), () => openRecordingSettingsPanel()),
@@ -8314,6 +8437,7 @@
       const existing = document.querySelector('.rg-control-backdrop');
       if (existing) {
         existing.remove();
+        document.body.classList.remove('rg-control-drawer-open');
         _moreMenuClose = null;
         return;
       }
@@ -8323,7 +8447,11 @@
       const menu = $('div', {
         class: 'menu-pop more-menu-pop',
       });
-      const closeDrawer = () => { backdrop.remove(); _moreMenuClose = null; };
+      const closeDrawer = () => {
+        backdrop.remove();
+        document.body.classList.remove('rg-control-drawer-open');
+        _moreMenuClose = null;
+      };
       const closeButton = $('button', { class: 'rg-control-drawer-close', type: 'button', 'aria-label': 'Close controls', onclick: closeDrawer }, '×');
       drawer.append(
         $('div', { class: 'rg-control-drawer-head' }, [$('strong', {}, LANG === 'zh' ? '工作台控制' : 'Workshop controls'), closeButton]),
@@ -8522,6 +8650,7 @@
       }, { danger: true }));
 
       document.body.appendChild(backdrop);
+      document.body.classList.add('rg-control-drawer-open');
       _moreMenuClose = closeDrawer;
       closeButton.focus();
     }

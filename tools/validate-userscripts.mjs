@@ -83,6 +83,11 @@ for (const item of scripts) {
     if (!source.includes("target: '_blank'")) failures.push(`${item.file}: Workshop model-name new-tab link is missing`);
     if (!source.includes("class: 'card-ops-menu-backdrop'")) failures.push(`${item.file}: mobile Workshop card-menu backdrop is missing`);
     if (!source.includes('body.rg-phone-mode.rg-card-menu-open .grid.view-phone')) failures.push(`${item.file}: mobile Workshop menu scroll isolation is missing`);
+    if (!source.includes("if (nativeMobilePage && mobileRoomGridOpen) return;")) failures.push(`${item.file}: native mobile RoomGrid tab can still auto-collapse`);
+    if (!source.includes("const phoneOn = store.state.settings.viewMode === 'phone' && !on && !splitOn;")) failures.push(`${item.file}: Window-first still disables the phone grid layout`);
+    if (!source.includes("startupView: 'last'") || !source.includes('function openStartupSettings()')) failures.push(`${item.file}: Workshop startup view/group settings are missing`);
+    if (!source.includes("findDesktopNavigationSlot('private')")) failures.push(`${item.file}: desktop Workshop navigation does not replace Private Shows`);
+    if (!source.includes('document.body.classList.add(\'rg-control-drawer-open\')')) failures.push(`${item.file}: Workshop drawer scroll isolation is missing`);
     if (!source.includes('if (!isMobileDevice() || isBlockedPage()) return;')) failures.push(`${item.file}: Mobile Clean View still starts on blocked Workshop routes`);
     if ((source.match(/^\/\/ ==UserScript==$/gm) || []).length !== 1) failures.push(`${item.file}: embedded component added an extra userscript metadata block`);
     const mobileStop = source.indexOf('if (!document.getElementById("desktop-spa-header")){return;}');

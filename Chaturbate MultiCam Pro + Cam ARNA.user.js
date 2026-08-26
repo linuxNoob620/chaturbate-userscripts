@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.4.0
+// @version           16.4.1
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -88,7 +88,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.4.0');
+  instanceMarker.setAttribute('data-suite-version', '16.4.1');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1130,7 +1130,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.4.0',
+    version: '16.4.1',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3816,8 +3816,13 @@
     }
 
     function handleMobileRoomGridKeydown(event) {
-      if (event.key !== 'Enter' && event.key !== ' ') return;
-      handleMobileRoomGridClick(event);
+      const activationKey = event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar' || event.code === 'Space';
+      if (!activationKey || mobilePrivateBypass || mobilePrivateMode) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+      if (collapsed || !mobileRoomGridOpen) setDockCollapsed(false, 'multicam');
+      else setMobileRoomGridOpen(true);
     }
 
     function openNativePrivateTab() {
@@ -4854,7 +4859,17 @@
     if (nativeLogoNode instanceof Element) nativeLogoNode.classList.add('rg-native-logo-source');
     // 在当前页打开工作台时，先停止原页面自带的 video/audio，避免页面清空后仍有声音。
     stopAllPageMedia();
-    document.body.replaceChildren();
+    // Keep Chaturbate's native mount nodes alive so its delayed startup code can
+    // still find them. Moving the nodes preserves references and listeners while
+    // removing the original page from the Workshop's visual and focus trees.
+    const nativePageHost = document.createElement('div');
+    nativePageHost.id = 'rg-native-page-host';
+    nativePageHost.hidden = true;
+    nativePageHost.setAttribute('aria-hidden', 'true');
+    nativePageHost.setAttribute('inert', '');
+    nativePageHost.style.setProperty('display', 'none', 'important');
+    while (document.body.firstChild) nativePageHost.appendChild(document.body.firstChild);
+    document.body.appendChild(nativePageHost);
     const store = createStore();
     const phoneEnvironment = isPhoneLikeDevice();
     document.body.classList.toggle('rg-phone-device', phoneEnvironment);
@@ -5753,6 +5768,7 @@
         body.rg-phone-mode .card-ops-menu-backdrop .card-ops-menu-pop { position:relative!important; inset:auto!important; box-sizing:border-box; width:100%!important; min-width:0!important; max-height:calc(100dvh - 96px - env(safe-area-inset-top))!important; margin:0!important; padding:6px 6px max(8px,env(safe-area-inset-bottom))!important; overflow-x:hidden!important; overflow-y:auto!important; overscroll-behavior:contain!important; -webkit-overflow-scrolling:touch; touch-action:pan-y; border-right:0!important; border-bottom:0!important; border-left:0!important; border-radius:0!important; }
         body.rg-phone-mode .cam-info { min-height:46px; }.rg-phone-mode .cam-info-name{font-size:12px}.rg-phone-mode .cam-info-actions .icon-btn{width:32px!important;height:32px!important}
         body.rg-phone-mode .rg-control-drawer { width:100vw; border-left:0; }
+        body.rg-phone-mode .rg-control-drawer .menu-pop.more-menu-pop { position:static!important; inset:auto!important; width:100%!important; min-width:0!important; max-height:none!important; overflow:visible!important; border-radius:0!important; box-shadow:none!important; }
         body.rg-control-drawer-open .grid { overflow:hidden!important; overscroll-behavior:none!important; touch-action:none!important; }
         body.rg-viewer-mode { background:#050607!important; }
         body.rg-viewer-mode .app-shell,
@@ -5760,6 +5776,13 @@
         body.rg-viewer-mode .grid { background:#050607!important; }
         body.rg-viewer-mode.rg-phone-mode .app-shell,
         body.rg-viewer-mode.rg-phone-mode main { width:100vw!important; height:100dvh!important; min-height:0!important; padding:0!important; border:0!important; border-radius:0!important; }
+        body.rg-viewer-mode > .rg-native-header,
+        body.rg-viewer-mode .rg-native-nav,
+        body.rg-viewer-mode .sidebar,
+        body.rg-viewer-mode.rg-phone-mode > .rg-native-header,
+        body.rg-viewer-mode.rg-phone-mode .rg-native-nav,
+        body.rg-viewer-mode.rg-phone-mode .sidebar { display:none!important; }
+        body.rg-viewer-mode .app-shell { width:100vw!important; height:100dvh!important; min-height:0!important; padding:0!important; gap:0!important; }
         body.rg-viewer-mode.rg-phone-mode .grid.view-phone { grid-template-columns:minmax(0,1fr)!important; padding:4px!important; gap:4px!important; background:#050607!important; }
         .sidebar .group-tab.new-group-tab { color:#f1f1f1!important; border-color:#3b5066!important; }
         .sidebar .group-tab.new-group-tab:hover,.sidebar .group-tab.new-group-tab:focus-visible { background:#253648!important; color:#fff!important; }
@@ -6594,6 +6617,14 @@
 
     // ---- 侧边栏渲染 ----
     function renderSidebar() {
+      const shellHidesSidebar = !!store.state.settings.pureMode
+        || !!store.state.settings.viewerMode
+        || !!store.state.settings.splitViewActive
+        || store.state.settings.viewMode === 'focus';
+      if (shellHidesSidebar) {
+        sidebar.style.setProperty('display', 'none', 'important');
+        return;
+      }
       sidebar.replaceChildren();
       const collapsed = !!store.state.settings.sidebarCollapsed;
       sidebar.dataset.collapsed = collapsed ? 'true' : 'false';

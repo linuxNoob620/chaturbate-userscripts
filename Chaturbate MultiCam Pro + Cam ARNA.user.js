@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.4.1
+// @version           16.4.2
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -88,7 +88,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.4.1');
+  instanceMarker.setAttribute('data-suite-version', '16.4.2');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -238,7 +238,6 @@
       gridView: 'g',
       focusView: 'f',
       pureMode: 'alt+p',
-      viewerMode: 'alt+v',
       focusThumbs: 'alt+t',
       recordingCenter: 'alt+shift+c',
       recordPage: 'alt+shift+r',
@@ -479,7 +478,6 @@
       startupGroupLabel: 'Startup group',
       startupLastUsed: 'Last used',
       startupAutomatic: 'Automatic for this device',
-      startupWindowFirst: 'Window first',
       notifyTitle: 'Desktop notification + card flash when a model goes online',
       collapseSidebar: '',
       viewGrid: 'Grid',
@@ -494,10 +492,6 @@
       pureModeOn: 'Clean mode on',
       pureModeOff: 'Exit clean mode',
       pureModeHint: 'Temporarily hide all controls and overlays. Shortcut: Alt+P / Alt+C. Press Esc to exit.',
-      viewerMode: 'Window first',
-      viewerModeOn: 'Window-first mode on',
-      viewerModeOff: 'Exit window-first',
-      viewerModeHint: 'Hide the app shell and keep room windows visible. Shortcut: Alt+V.',
       focusThumbsShow: 'Show thumbnails',
       focusThumbsHide: 'Hide thumbnails',
       focusThumbsHint: 'Show or hide the thumbnail rail in Focus mode. Shortcut: Alt+T.',
@@ -667,7 +661,6 @@
       shortcutGridView: 'Grid view',
       shortcutFocusView: 'Focus view',
       shortcutPureMode: 'Clean mode',
-      shortcutViewerMode: 'Window-first mode',
       shortcutFocusThumbs: 'Toggle thumbnails',
       shortcutRecordingCenter: 'Recording center',
       shortcutRecordPage: 'Record visible models',
@@ -760,7 +753,6 @@
       menuShareWorkspace: 'Share workspace',
       menuShortcutPanel: 'Shortcut panel',
       menuPureMode: 'Clean mode',
-      menuViewerMode: 'Window-first mode',
       menuToggleThumbs: 'Toggle thumbnails',
       menuToggleFit: 'Toggle video fit',
       menuShortcutHelp: 'Shortcuts / hints',
@@ -811,7 +803,6 @@
       startupGroupLabel: '启动分组',
       startupLastUsed: '上次使用',
       startupAutomatic: '根据设备自动选择',
-      startupWindowFirst: '窗口优先',
       notifyTitle: '主播上线时桌面通知 + 卡片闪烁',
       collapseSidebar: '',
       viewGrid: '平铺',
@@ -826,10 +817,6 @@
       pureModeOn: '已进入纯净模式',
       pureModeOff: '退出纯净模式',
       pureModeHint: '暂时隐藏所有工具栏、按钮和覆盖层。快捷键：Alt+P / Alt+C；按 Esc 退出。',
-      viewerMode: '窗口优先',
-      viewerModeOn: '已进入窗口优先模式',
-      viewerModeOff: '退出窗口优先',
-      viewerModeHint: '隐藏应用外壳，尽量把空间留给房间窗口。快捷键：Alt+V。',
       focusThumbsShow: '显示缩略图',
       focusThumbsHide: '隐藏缩略图',
       focusThumbsHint: '显示或隐藏主屏模式的缩略图栏。快捷键：Alt+T。',
@@ -997,7 +984,6 @@
       shortcutGridView: '平铺视图',
       shortcutFocusView: '主屏视图',
       shortcutPureMode: '纯净模式',
-      shortcutViewerMode: '窗口优先模式',
       shortcutFocusThumbs: '显示 / 隐藏缩略图',
       shortcutRecordingCenter: '录制管理中心',
       shortcutRecordPage: '录制当前可见主播',
@@ -1074,7 +1060,6 @@
       menuShareWorkspace: '分享工作台',
       menuShortcutPanel: '快捷键面板',
       menuPureMode: '纯净模式',
-      menuViewerMode: '窗口优先模式',
       menuToggleThumbs: '显示 / 隐藏缩略图',
       menuToggleFit: '切换画面适应',
       menuShortcutHelp: '快捷键 / 提示说明',
@@ -1130,7 +1115,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.4.1',
+    version: '16.4.2',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -1272,12 +1257,11 @@
       notifyOnline: true,
       notifyFavoritesOnly: true,
       startOnOnlineFavorites: true,
-      startupView: 'last',        // 'last' | 'auto' | 'grid' | 'focus' | 'phone' | 'viewer'
+      startupView: 'last',        // 'last' | 'auto' | 'grid' | 'focus' | 'phone'
       startupGroup: ONLINE_FAVORITES_GROUP_ID, // 'last' or a valid group id
       activeGroup: 'all',
       searchQuery: '',
       pureMode: false,
-      viewerMode: false,
       focusThumbsCollapsed: false,
       videoFit: 'contain',
       freeZoom: true,
@@ -1502,7 +1486,6 @@
     out.settings.activeGroup = out.groups.some(g => g.id === out.settings.activeGroup) ? out.settings.activeGroup : DEFAULT_GROUP_ID;
     out.settings.searchQuery = normalizeUsername(out.settings.searchQuery || '');
     out.settings.pureMode = false;
-    out.settings.viewerMode = !!out.settings.viewerMode;
     out.settings.focusThumbsCollapsed = !!out.settings.focusThumbsCollapsed;
     out.settings.videoFit = out.settings.videoFit === 'cover' ? 'cover' : 'contain';
     out.settings.freeZoom = out.settings.freeZoom !== false;
@@ -1520,7 +1503,7 @@
     out.settings.notifyOnline = out.settings.notifyOnline !== false;
     out.settings.notifyFavoritesOnly = out.settings.notifyFavoritesOnly !== false;
     out.settings.startOnOnlineFavorites = out.settings.startOnOnlineFavorites !== false;
-    out.settings.startupView = ['last', 'auto', 'grid', 'focus', 'phone', 'viewer'].includes(st.startupView)
+    out.settings.startupView = ['last', 'auto', 'grid', 'focus', 'phone'].includes(st.startupView)
       ? st.startupView
       : def.settings.startupView;
     const legacyStartupGroup = st.startOnOnlineFavorites === false ? 'last' : ONLINE_FAVORITES_GROUP_ID;
@@ -1736,7 +1719,6 @@
       focusedRoomId: null,
       searchQuery: '',
       pureMode: false,
-      viewerMode: false,
       showRecordingOnly: false,
     };
     return {
@@ -2154,7 +2136,6 @@
         }).settings;
       }
       nextSettings.pureMode = false;
-      nextSettings.viewerMode = false;
       nextSettings.activeGroup = DEFAULT_GROUP_ID;
       nextSettings.pageIndex = 0;
       nextSettings.focusedRoomId = null;
@@ -2471,7 +2452,6 @@
           s.settings.splitViewActive = s.settings.splitRoomIds.length === 2;
           if (s.settings.splitViewActive) {
             s.settings.pureMode = false;
-            s.settings.viewerMode = false;
           }
           reconcileSplitState(s);
           changed = true;
@@ -2486,7 +2466,6 @@
           s.settings.splitViewActive = next;
           if (next) {
             s.settings.pureMode = false;
-            s.settings.viewerMode = false;
           }
         }, 'settings:splitViewActive');
       },
@@ -3471,6 +3450,7 @@
     let mobilePrivateBypass = false;
     let mobilePrivateMode = false;
     let mobileRoomGridOpen = false;
+    let mobilePrivateActivationId = 0;
     const mobileHiddenNodes = new Set();
 
     const roomLine = $('div', { class: 'roomgrid-dock-room' }, t('dockNoRoom'));
@@ -3806,13 +3786,59 @@
       }
     }
 
+    function invokeNativeMobilePrivateTab(tab) {
+      if (!tab) return false;
+      try {
+        const view = tab.ownerDocument?.defaultView || window;
+        const nativeClick = view.HTMLElement?.prototype?.click;
+        if (typeof nativeClick === 'function' && tab instanceof view.HTMLElement) {
+          nativeClick.call(tab);
+          return true;
+        }
+      } catch (_) {}
+      try {
+        tab.dispatchEvent(new MouseEvent('click', {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          view: window,
+        }));
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function activateMobileRoomGrid() {
+      if (!nativeMobilePage || !mobilePrivateTab || mobilePrivateMode) return false;
+      const activationId = ++mobilePrivateActivationId;
+      const tab = mobilePrivateTab;
+      mobilePrivateBypass = true;
+      const nativeActivated = invokeNativeMobilePrivateTab(tab);
+      const finishActivation = () => {
+        if (activationId !== mobilePrivateActivationId) return;
+        mobilePrivateBypass = false;
+        if (!nativeMobilePage || mobilePrivateMode) return;
+        setDockCollapsed(false, 'multicam');
+        mountMobileRoomGrid();
+        setMobileRoomGridOpen(true);
+        requestAnimationFrame(() => {
+          if (activationId !== mobilePrivateActivationId || mobilePrivateMode) return;
+          mountMobileRoomGrid();
+          setMobileRoomGridOpen(true);
+        });
+      };
+      if (nativeActivated) setTimeout(finishActivation, 0);
+      else finishActivation();
+      return true;
+    }
+
     function handleMobileRoomGridClick(event) {
       if (mobilePrivateBypass || mobilePrivateMode) return;
       event.preventDefault();
       event.stopPropagation();
-      setTimeout(() => {
-        if (collapsed || !mobileRoomGridOpen) setDockCollapsed(false, 'multicam');
-      }, 0);
+      event.stopImmediatePropagation?.();
+      activateMobileRoomGrid();
     }
 
     function handleMobileRoomGridKeydown(event) {
@@ -3821,8 +3847,7 @@
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation?.();
-      if (collapsed || !mobileRoomGridOpen) setDockCollapsed(false, 'multicam');
-      else setMobileRoomGridOpen(true);
+      activateMobileRoomGrid();
     }
 
     function openNativePrivateTab() {
@@ -3835,7 +3860,7 @@
       mobilePrivateTab.textContent = 'Private';
       mobilePrivateTab.classList.remove('roomgrid-mobile-tab');
       mobilePrivateTab.removeAttribute('aria-label');
-      mobilePrivateTab.click();
+      invokeNativeMobilePrivateTab(mobilePrivateTab);
       setTimeout(() => {
         mobilePrivateBypass = false;
       }, 0);
@@ -4881,13 +4906,8 @@
     const startupView = String(store.state.settings.startupView || 'last');
     if (startupView === 'auto') {
       startupPatch.viewMode = phoneEnvironment ? 'phone' : 'grid';
-      startupPatch.viewerMode = false;
-    } else if (startupView === 'viewer') {
-      startupPatch.viewMode = phoneEnvironment ? 'phone' : 'grid';
-      startupPatch.viewerMode = true;
     } else if (['grid', 'focus', 'phone'].includes(startupView)) {
       startupPatch.viewMode = startupView;
-      startupPatch.viewerMode = false;
     } else if (phoneEnvironment && store.state.settings.phoneModeAuto) {
       startupPatch.viewMode = 'phone';
     } else if (!phoneEnvironment && store.state.settings.viewMode === 'phone') {
@@ -5108,19 +5128,10 @@
         .mc-tooltip.show { opacity:1; transform:translateY(0); }
 
 
-        /* —— Window-first：把空间留给窗口，所有操作只在需要时出现 —— */
         .app-shell { display:flex; height:100vh; gap:10px; padding:10px; }
         .grid { background:linear-gradient(180deg, rgba(255,255,255,.34), rgba(255,255,255,.14)); }
         body.rg-video-cover .cam-video { object-fit:cover !important; }
         body.rg-video-contain .cam-video { object-fit:contain !important; }
-        body.rg-viewer-mode { background:#050607; }
-        body.rg-viewer-mode .sidebar,
-        body.rg-viewer-mode header,
-        body.rg-viewer-mode .top-accent { display:none !important; }
-        body.rg-viewer-mode .app-shell { padding:0 !important; gap:0 !important; }
-        body.rg-viewer-mode main { width:100vw !important; height:100vh !important; border:0 !important; border-radius:0 !important; box-shadow:none !important; background:#050607 !important; }
-        body.rg-viewer-mode .grid { padding:8px !important; background:#050607 !important; }
-        body.rg-viewer-mode .grid.view-grid { gap:8px !important; }
 
         .cam-card:not(.compact) .mc-hover-ui { opacity:0 !important; pointer-events:none !important; }
         .cam-card:hover .mc-hover-ui,
@@ -5267,13 +5278,6 @@
         .status-layer { color:#cbd5e1 !important; background:linear-gradient(180deg,rgba(15,23,42,.10),rgba(15,23,42,.24)) !important; }
         .status-layer .status-chip { background:rgba(255,255,255,.06) !important; color:#e5e7eb !important; border-color:rgba(255,255,255,.10) !important; }
 
-        body.rg-viewer-mode .app-shell { padding:0 !important; gap:0 !important; }
-        body.rg-viewer-mode .sidebar,
-        body.rg-viewer-mode header,
-        body.rg-viewer-mode .top-accent { display:none !important; }
-        body.rg-viewer-mode main { width:100vw !important; height:100vh !important; border:0 !important; border-radius:0 !important; }
-        body.rg-viewer-mode .grid.view-grid { padding:4px !important; gap:4px !important; }
-
         body.rg-focus-mode { background:#000 !important; }
         body.rg-focus-mode .app-shell { padding:0 !important; gap:0 !important; }
         body.rg-focus-mode .sidebar,
@@ -5391,14 +5395,6 @@
         .grid.view-focus .resizer:hover::before,
         .grid.view-focus .resizer.dragging::before { background:var(--accent); opacity:1; }
         .grid.view-focus .thumbs-row { display:none !important; }
-
-        body.rg-viewer-mode { background:#050607 !important; }
-        body.rg-viewer-mode .app-shell { padding:0 !important; gap:0 !important; background:#050607 !important; }
-        body.rg-viewer-mode main { background:#050607 !important; }
-        body.rg-viewer-mode .grid { background:#050607 !important; padding:4px !important; }
-        body.rg-viewer-mode .sidebar,
-        body.rg-viewer-mode header,
-        body.rg-viewer-mode .top-accent { display:none !important; }
 
         /* v15.1 repairs: reliable collapsed sidebar, wheel-safe controls and readable group contrast */
         .app-shell { display:flex !important; min-width:0 !important; min-height:0 !important; }
@@ -5550,10 +5546,8 @@
         .app-shell { min-height:640px !important; }
         .grid.view-grid { overflow:auto !important; overscroll-behavior:contain; }
         body.rg-pure-mode,
-        body.rg-viewer-mode,
         body.rg-focus-mode { overflow:hidden !important; }
         body.rg-pure-mode .app-shell,
-        body.rg-viewer-mode .app-shell,
         body.rg-focus-mode .app-shell { height:100vh !important; min-height:0 !important; }
         .grid.view-focus .focus-side-row .cam-card,
         .grid.view-focus .focus-bottom-row .cam-card { cursor:pointer; transition:border-color .12s ease, transform .12s ease, opacity .12s ease; }
@@ -5770,27 +5764,12 @@
         body.rg-phone-mode .rg-control-drawer { width:100vw; border-left:0; }
         body.rg-phone-mode .rg-control-drawer .menu-pop.more-menu-pop { position:static!important; inset:auto!important; width:100%!important; min-width:0!important; max-height:none!important; overflow:visible!important; border-radius:0!important; box-shadow:none!important; }
         body.rg-control-drawer-open .grid { overflow:hidden!important; overscroll-behavior:none!important; touch-action:none!important; }
-        body.rg-viewer-mode { background:#050607!important; }
-        body.rg-viewer-mode .app-shell,
-        body.rg-viewer-mode main,
-        body.rg-viewer-mode .grid { background:#050607!important; }
-        body.rg-viewer-mode.rg-phone-mode .app-shell,
-        body.rg-viewer-mode.rg-phone-mode main { width:100vw!important; height:100dvh!important; min-height:0!important; padding:0!important; border:0!important; border-radius:0!important; }
-        body.rg-viewer-mode > .rg-native-header,
-        body.rg-viewer-mode .rg-native-nav,
-        body.rg-viewer-mode .sidebar,
-        body.rg-viewer-mode.rg-phone-mode > .rg-native-header,
-        body.rg-viewer-mode.rg-phone-mode .rg-native-nav,
-        body.rg-viewer-mode.rg-phone-mode .sidebar { display:none!important; }
-        body.rg-viewer-mode .app-shell { width:100vw!important; height:100dvh!important; min-height:0!important; padding:0!important; gap:0!important; }
-        body.rg-viewer-mode.rg-phone-mode .grid.view-phone { grid-template-columns:minmax(0,1fr)!important; padding:4px!important; gap:4px!important; background:#050607!important; }
         .sidebar .group-tab.new-group-tab { color:#f1f1f1!important; border-color:#3b5066!important; }
         .sidebar .group-tab.new-group-tab:hover,.sidebar .group-tab.new-group-tab:focus-visible { background:#253648!important; color:#fff!important; }
         .shell-controls { top:72px!important; right:auto!important; left:8px!important; }
         body.rg-phone-mode .shell-controls { top:56px!important; left:max(4px,env(safe-area-inset-left))!important; }
         @media (orientation:landscape) and (max-height:600px) {
           body.rg-phone-mode .grid.view-phone { grid-template-columns:repeat(2,minmax(0,1fr))!important; }
-          body.rg-viewer-mode.rg-phone-mode .grid.view-phone { grid-template-columns:repeat(2,minmax(0,1fr))!important; }
           body.rg-phone-mode .card-ops-menu-backdrop .card-ops-menu-pop { max-height:calc(100dvh - 90px - env(safe-area-inset-top))!important; }
         }
         @media (prefers-reduced-motion: reduce) {
@@ -5976,7 +5955,7 @@
     document.body.appendChild(shellControls);
     function syncShellControls() {
       if (!shellControls) return;
-      const hidden = !!store.state.settings.pureMode || !!store.state.settings.viewerMode || !!store.state.settings.splitViewActive;
+      const hidden = !!store.state.settings.pureMode || !!store.state.settings.splitViewActive;
       shellControls.style.display = !hidden && !!store.state.settings.toolbarCollapsed ? 'flex' : 'none';
     }
 
@@ -5986,25 +5965,21 @@
     }
     function applyPureModeState() {
       const on = !!store.state.settings.pureMode;
-      const viewerOn = !!store.state.settings.viewerMode && !on;
-      const splitOn = !!store.state.settings.splitViewActive && !on && !viewerOn;
-      // Window-first hides the shell but must retain Phone mode's responsive
-      // one-column/two-column grid on small screens.
+      const splitOn = !!store.state.settings.splitViewActive && !on;
       const phoneOn = store.state.settings.viewMode === 'phone' && !on && !splitOn;
-      const focusOn = store.state.settings.viewMode === 'focus' && !on && !viewerOn && !splitOn;
+      const focusOn = store.state.settings.viewMode === 'focus' && !on && !splitOn;
       const thumbsCollapsed = !!store.state.settings.focusThumbsCollapsed;
       const videoFit = store.state.settings.videoFit === 'cover' ? 'cover' : 'contain';
       document.body.classList.toggle('rg-pure-mode', on);
-      document.body.classList.toggle('rg-viewer-mode', viewerOn);
-      document.body.classList.toggle('rg-toolbar-collapsed', !!store.state.settings.toolbarCollapsed && !on && !viewerOn);
-      document.body.classList.toggle('rg-sidebar-collapsed', !!store.state.settings.sidebarCollapsed && !on && !viewerOn);
+      document.body.classList.toggle('rg-toolbar-collapsed', !!store.state.settings.toolbarCollapsed && !on);
+      document.body.classList.toggle('rg-sidebar-collapsed', !!store.state.settings.sidebarCollapsed && !on);
       document.body.classList.toggle('rg-focus-thumbs-collapsed', thumbsCollapsed);
       document.body.classList.toggle('rg-video-cover', videoFit === 'cover');
       document.body.classList.toggle('rg-video-contain', videoFit !== 'cover');
       document.body.classList.toggle('rg-focus-mode', focusOn);
       document.body.classList.toggle('rg-phone-mode', phoneOn);
       document.body.classList.toggle('rg-split-mode', splitOn);
-      const hideSidebar = splitOn || on || viewerOn || focusOn || !!store.state.settings.sidebarCollapsed;
+      const hideSidebar = splitOn || on || focusOn || !!store.state.settings.sidebarCollapsed;
       sidebar.style.setProperty('display', hideSidebar ? 'none' : 'flex', 'important');
       if (splitOn) requestAnimationFrame(() => window.scrollTo(0, 0));
       syncShellControls?.();
@@ -6015,11 +5990,6 @@
         setTrustedHtml(pureModeBtn, trustedHtml(iconLabel('clean', on ? t('pureModeOff') : t('pureMode'))));
         pureModeBtn.classList.toggle('primary', on);
         setElementHint(pureModeBtn, on ? t('pureModeOff') + ' · Alt+P/C' : t('pureModeHint'));
-      }
-      if (typeof viewerModeBtn !== 'undefined' && viewerModeBtn) {
-        setTrustedHtml(viewerModeBtn, trustedHtml(iconLabel('focus', viewerOn ? t('viewerModeOff') : t('viewerMode'))));
-        viewerModeBtn.classList.toggle('primary', viewerOn);
-        setElementHint(viewerModeBtn, viewerOn ? t('viewerModeOff') + ' · Alt+V' : t('viewerModeHint'));
       }
       if (typeof focusThumbToggleBtn !== 'undefined' && focusThumbToggleBtn) {
         setTrustedHtml(focusThumbToggleBtn, trustedHtml(iconLabel('grid', thumbsCollapsed ? t('focusThumbsShow') : t('focusThumbsHide'))));
@@ -6040,7 +6010,6 @@
       if (on) toast(t('pureModeOn') + ' · Alt+P/C / Esc');
     }
     function togglePureMode() { setPureMode(!store.state.settings.pureMode); }
-    function toggleViewerMode() { store.patchSettings({ viewerMode: !store.state.settings.viewerMode }); }
     function toggleFocusThumbs() { store.patchSettings({ focusThumbsCollapsed: !store.state.settings.focusThumbsCollapsed }); }
     function toggleVideoFit() { store.patchSettings({ videoFit: store.state.settings.videoFit === 'cover' ? 'contain' : 'cover' }); }
     function bumpPureCursor() {
@@ -6286,14 +6255,6 @@
         applyGridSize();
       },
       onchange: (e) => store.patchSettings({ focusThumbSize: parseInt(e.target.value, 10) }),
-    });
-
-    const viewerModeBtn = $('button', {
-      class: 'ctrl-btn',
-      title: t('viewerModeHint'),
-      style: { cursor: 'pointer' },
-      onclick: () => toggleViewerMode(),
-      html: trustedHtml(iconLabel('focus', t('viewerMode'))),
     });
 
     const focusThumbToggleBtn = $('button', {
@@ -6618,7 +6579,6 @@
     // ---- 侧边栏渲染 ----
     function renderSidebar() {
       const shellHidesSidebar = !!store.state.settings.pureMode
-        || !!store.state.settings.viewerMode
         || !!store.state.settings.splitViewActive
         || store.state.settings.viewMode === 'focus';
       if (shellHidesSidebar) {
@@ -7752,7 +7712,6 @@
           pageIndex: 0,
           focusedRoomId: null,
           pureMode: false,
-          viewerMode: false,
           toolbarCollapsed: false,
           sidebarCollapsed: false,
           showRecordingOnly: false,
@@ -8026,7 +7985,6 @@
           $('option', { value: 'grid' }, t('viewGrid')),
           $('option', { value: 'focus' }, t('viewFocus')),
           $('option', { value: 'phone' }, t('viewPhone')),
-          $('option', { value: 'viewer' }, t('startupWindowFirst')),
         ]);
         view.value = store.state.settings.startupView || 'last';
 
@@ -8205,7 +8163,6 @@
           ['gridView', t('shortcutGridView')],
           ['focusView', t('shortcutFocusView')],
           ['pureMode', t('shortcutPureMode')],
-          ['viewerMode', t('shortcutViewerMode')],
           ['focusThumbs', t('shortcutFocusThumbs')],
           ['recordingCenter', t('shortcutRecordingCenter')],
           ['recordPage', t('shortcutRecordPage')],
@@ -8538,7 +8495,6 @@
         item(store.state.settings.sidebarCollapsed ? sectionLabel('显示左侧分组', 'Show groups') : sectionLabel('收起左侧分组', 'Collapse groups'), () => {
           { const v = !store.state.settings.sidebarCollapsed; document.body.classList.toggle('rg-sidebar-collapsed', v); sidebar.classList.toggle('is-collapsed', v); store.patchSettings({ sidebarCollapsed: v }); }
         }),
-        item(t('menuViewerMode'), () => toggleViewerMode(), { title: t('viewerModeHint') }),
         item(t('menuPureMode'), () => togglePureMode(), { title: t('pureModeHint') }),
       ]);
 
@@ -9600,7 +9556,7 @@
         applyPureModeState();
         if (hasSetting('maxStreamHeight')) service.refreshQuality();
         if (hasSetting('videoTransforms')) applyAllVideoTransforms();
-        if (needsGrid || hasSetting('toolbarCollapsed', 'sidebarCollapsed', 'viewerMode', 'pureMode')) scheduleFocusSizing();
+        if (needsGrid || hasSetting('toolbarCollapsed', 'sidebarCollapsed', 'pureMode')) scheduleFocusSizing();
       }
       if (path && path.startsWith('room:')) {
         const id = path.slice(5);
@@ -9710,7 +9666,6 @@
       const key = String(e.key || '').toLowerCase();
       if (e.key === 'Escape') closeTransientUi();
       if (shortcutMatches(e, 'pureMode') || (e.altKey && key === 'c')) { e.preventDefault(); togglePureMode(); return; }
-      if (shortcutMatches(e, 'viewerMode')) { e.preventDefault(); toggleViewerMode(); return; }
       if (shortcutMatches(e, 'focusThumbs')) { e.preventDefault(); toggleFocusThumbs(); return; }
       if (e.key === 'Escape' && store.state.settings.pureMode) { e.preventDefault(); setPureMode(false); return; }
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;

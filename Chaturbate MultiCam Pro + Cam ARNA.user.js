@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.4.2
+// @version           16.4.3
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -88,7 +88,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.4.2');
+  instanceMarker.setAttribute('data-suite-version', '16.4.3');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1115,7 +1115,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.4.2',
+    version: '16.4.3',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3404,14 +3404,20 @@
       .roomgrid-mobile-panel {
         box-sizing:border-box; width:100%; min-height:320px; padding:0 0 calc(76px + env(safe-area-inset-bottom));
         border-top:1px solid #2d3e50; background:#202c39; color:#f1f1f1;
-        font-family:UbuntuRegular,Helvetica,Arial,sans-serif;
+        overflow-x:hidden; overflow-anchor:none; overscroll-behavior:contain; touch-action:pan-y;
+        -webkit-overflow-scrolling:touch; font-family:UbuntuRegular,Helvetica,Arial,sans-serif;
       }
       .BaseRoomTab.PrivateTab > .roomgrid-mobile-panel {
-        height:calc(100% - 68px); min-height:0; overflow-y:auto; overscroll-behavior:contain;
+        height:calc(100% - 68px); min-height:0; overflow-x:hidden; overflow-y:auto;
+        overscroll-behavior:contain; touch-action:pan-y; -webkit-overflow-scrolling:touch;
         padding-bottom:env(safe-area-inset-bottom);
       }
       .roomgrid-mobile-panel[hidden] { display:none !important; }
       .roomgrid-mobile-panel .roomgrid-dock-body { display:grid !important; gap:0; padding:0; border:0; }
+      .roomgrid-mobile-panel .roomgrid-dock-body,
+      .roomgrid-mobile-panel .roomgrid-dock-pane { touch-action:pan-y; }
+      .roomgrid-mobile-panel .roomgrid-arna-pane,
+      .roomgrid-mobile-panel .roomgrid-arna-sites { max-height:none; overflow:visible; }
       .roomgrid-mobile-panel .roomgrid-dock-tabs { gap:0; padding:5px; border-radius:0; background:#17202a; }
       .roomgrid-mobile-panel .roomgrid-dock-tab { min-height:44px; font-size:14px; }
       .roomgrid-mobile-panel .roomgrid-dock-pane { gap:0; }
@@ -3770,6 +3776,8 @@
     });
 
     function setMobileRoomGridOpen(open) {
+      const wasOpen = mobileRoomGridOpen && !mobilePanel.hidden;
+      const savedScrollTop = mobilePanel.scrollTop;
       mobileRoomGridOpen = !!open && !!currentRoom;
       mobilePanel.hidden = !mobileRoomGridOpen;
       if (mobilePrivateTab) {
@@ -3780,7 +3788,8 @@
       if (mobileRoomGridOpen) {
         const strip = findMobileTabStrip(mobilePrivateTab);
         hideMobileNativeContent(mobilePanel, strip);
-        mobilePanel.scrollIntoView?.({ block: 'nearest' });
+        if (!wasOpen) mobilePanel.scrollIntoView?.({ block: 'nearest' });
+        else if (mobilePanel.scrollTop !== savedScrollTop) mobilePanel.scrollTop = savedScrollTop;
       } else {
         restoreMobileNativeContent();
       }
@@ -3909,9 +3918,15 @@
       const privateSlot = document.querySelector('#portrait-contents .BaseRoomTab.PrivateTab,.BaseRoomTab.PrivateTab');
       if (privateSlot) {
         const actionBar = [...privateSlot.children].find(node => node.querySelector?.('#sendTipButton,[data-testid="send-tip-button"]')) || null;
-        privateSlot.insertBefore(mobilePanel, actionBar);
+        const alreadyPlaced = mobilePanel.parentElement === privateSlot
+          && (actionBar ? mobilePanel.nextSibling === actionBar : mobilePanel === privateSlot.lastElementChild);
+        if (!alreadyPlaced) {
+          const savedScrollTop = mobilePanel.scrollTop;
+          privateSlot.insertBefore(mobilePanel, actionBar);
+          mobilePanel.scrollTop = savedScrollTop;
+        }
       } else {
-        tabStrip.insertAdjacentElement('afterend', mobilePanel);
+        if (mobilePanel.previousElementSibling !== tabStrip) tabStrip.insertAdjacentElement('afterend', mobilePanel);
       }
       if (body.parentElement !== mobilePanel) mobilePanel.appendChild(body);
       setMobileRoomGridOpen(!collapsed && mobileRoomGridOpen);

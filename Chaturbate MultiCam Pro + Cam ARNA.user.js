@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.4.12
+// @version           16.4.13
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -88,7 +88,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.4.12');
+  instanceMarker.setAttribute('data-suite-version', '16.4.13');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1165,7 +1165,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.4.12',
+    version: '16.4.13',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3509,6 +3509,11 @@
       .roomgrid-mobile-tab[aria-selected="true"],.roomgrid-mobile-tab.roomgrid-mobile-tab-active {
         color:#68b5f0 !important; border-bottom-color:#68b5f0 !important;
       }
+      .roomgrid-mobile-token-source { display:none !important; }
+      .roomgrid-mobile-tokens-menu-item {
+        box-sizing:border-box; width:100%; min-height:44px; cursor:pointer;
+        color:inherit; font:inherit; text-align:left;
+      }
     `)});
     document.head.appendChild(dockStyle);
 
@@ -3541,6 +3546,10 @@
     let mobilePrivateMode = false;
     let mobileRoomGridOpen = false;
     let mobilePrivateActivationId = 0;
+    let mobileTokensTab = null;
+    let mobileTokensSlot = null;
+    let mobileOverflowControl = null;
+    let mobileTokensMenuItem = null;
     const mobileHiddenNodes = new Set();
 
     const roomLine = $('div', { class: 'roomgrid-dock-room' }, t('dockNoRoom'));
@@ -4137,6 +4146,184 @@
       return tab?.parentElement || null;
     }
 
+    function findMobileTabByLabel(tabStrip, label) {
+      if (!tabStrip) return null;
+      const candidates = [...tabStrip.querySelectorAll('li,[role="tab"],button,a')].filter(node => {
+        if (node.closest('#scriptcontrols,#zmc-root,.roomgrid-mobile-panel')) return false;
+        return mobileTabText(node).toLowerCase() === label.toLowerCase();
+      });
+      return candidates.sort((a, b) => {
+        const ar = a.getBoundingClientRect();
+        const br = b.getBoundingClientRect();
+        return (ar.width * ar.height) - (br.width * br.height);
+      })[0] || null;
+    }
+
+    function mobileTabSlot(tabStrip, tab) {
+      let slot = tab || null;
+      while (slot?.parentElement && slot.parentElement !== tabStrip) slot = slot.parentElement;
+      return slot?.parentElement === tabStrip ? slot : tab;
+    }
+
+    function findMobileOverflowControl(tabStrip) {
+      if (!tabStrip) return null;
+      const controls = [...tabStrip.querySelectorAll('li,[role="tab"],button,a')];
+      const candidates = controls.filter(node => {
+        const text = mobileTabText(node);
+        const label = `${node.getAttribute('aria-label') || ''} ${node.getAttribute('title') || ''}`.trim();
+        if (/^More Rooms$/i.test(text)) return false;
+        return /^(?:⋮|…|\.\.\.)$/.test(text)
+          || /(?:options|more tabs|overflow|\bmenu\b)/i.test(label);
+      });
+      const fallback = controls.filter(node => {
+        const text = mobileTabText(node);
+        const rect = node.getBoundingClientRect();
+        return visibleNode(node) && rect.width > 0 && rect.width <= 100
+          && !/^(?:Chat|Private|RoomGrid|Tokens|Bio|More Rooms)$/i.test(text);
+      }).sort((a, b) => b.getBoundingClientRect().right - a.getBoundingClientRect().right);
+      if (!candidates.length) return fallback[0] || null;
+      return candidates.sort((a, b) => {
+        const ar = a.getBoundingClientRect();
+        const br = b.getBoundingClientRect();
+        return (ar.width * ar.height) - (br.width * br.height);
+      })[0] || null;
+    }
+
+    function findOpenMobileOverflowMenu(tabStrip, overflowControl) {
+      if (!overflowControl) return null;
+      const overflowRect = overflowControl.getBoundingClientRect();
+      const selectors = '[role="menu"],[role="listbox"],[data-testid*="menu" i],[class*="Menu"],[class*="menu"]';
+      const candidates = [...new Set(document.querySelectorAll(selectors))].filter(node => {
+        if (!visibleNode(node) || node === tabStrip || node.contains(tabStrip) || tabStrip?.contains(node)) return false;
+        if (node.closest('#scriptcontrols,#zmc-root,.roomgrid-mobile-panel')) return false;
+        const rect = node.getBoundingClientRect();
+        if (rect.width < 70 || rect.height < 32 || rect.width > innerWidth || rect.height > innerHeight * 0.9) return false;
+        return !!node.querySelector('button,a,[role="menuitem"]');
+      });
+      return candidates.sort((a, b) => {
+        const score = node => {
+          const rect = node.getBoundingClientRect();
+          const style = getComputedStyle(node);
+          const roleBonus = node.getAttribute('role') === 'menu' ? 1000 : 0;
+          const positionBonus = /fixed|absolute/.test(style.position) ? 500 : 0;
+          const distance = Math.abs(rect.right - overflowRect.right) + Math.abs(rect.top - overflowRect.bottom);
+          return roleBonus + positionBonus - distance;
+        };
+        return score(b) - score(a);
+      })[0] || null;
+    }
+
+    function activateMobileTokensFromMenu(event) {
+      event?.preventDefault?.();
+      const source = mobileTokensTab;
+      if (!source) return;
+      collapsed = true;
+      mobilePrivateMode = false;
+      syncDock();
+      setMobileRoomGridOpen(false);
+      invokeNativeMobilePrivateTab(source);
+      setTimeout(() => {
+        mobileTokensMenuItem?.remove();
+        mobileTokensMenuItem = null;
+        try {
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+        } catch (_) {}
+      }, 0);
+    }
+
+    function mountMobileTokensMenuItem(tabStrip) {
+      if (!nativeMobilePage || !mobileTokensTab || !mobileOverflowControl) return false;
+      if (mobileTokensMenuItem?.isConnected) return true;
+      const menu = findOpenMobileOverflowMenu(tabStrip, mobileOverflowControl);
+      if (!menu) return false;
+      const reference = [...menu.querySelectorAll('button,a,[role="menuitem"]')].find(node => {
+        if (!visibleNode(node) || node.classList.contains('roomgrid-mobile-tokens-menu-item')) return false;
+        return !node.closest('#scriptcontrols,#zmc-root,.roomgrid-mobile-panel');
+      });
+      let template = reference;
+      let host = reference?.parentElement || menu;
+      if (reference && host !== menu) {
+        const siblingActions = [...host.children].filter(node => node.matches?.('button,a,[role="menuitem"]')
+          || node.querySelector?.('button,a,[role="menuitem"]'));
+        if (siblingActions.length === 1 && host.parentElement) {
+          template = host;
+          host = host.parentElement;
+        }
+      }
+      const item = template ? template.cloneNode(true) : document.createElement('button');
+      const action = item.matches?.('button,a,[role="menuitem"]')
+        ? item
+        : item.querySelector?.('button,a,[role="menuitem"]') || item;
+      for (const node of [item, ...(item.querySelectorAll?.('[id]') || [])]) node.removeAttribute?.('id');
+      action.removeAttribute('href');
+      action.removeAttribute('data-testid');
+      action.removeAttribute('aria-selected');
+      action.removeAttribute('disabled');
+      if (action.tagName === 'BUTTON') action.type = 'button';
+      item.classList.add('roomgrid-mobile-tokens-menu-item');
+      action.setAttribute('role', 'menuitem');
+      action.setAttribute('aria-label', 'Tokens');
+      action.textContent = 'Tokens';
+      action.addEventListener('click', activateMobileTokensFromMenu);
+      host.appendChild(item);
+      mobileTokensMenuItem = item;
+      return true;
+    }
+
+    function scheduleMobileTokensMenuMount() {
+      const tabStrip = findMobileTabStrip(mobilePrivateTab);
+      for (const delay of [0, 80, 180]) {
+        setTimeout(() => mountMobileTokensMenuItem(tabStrip), delay);
+      }
+    }
+
+    function handleMobileOverflowClick() {
+      scheduleMobileTokensMenuMount();
+    }
+
+    function syncMobileRoomTabOrder(tabStrip) {
+      if (!nativeMobilePage || !tabStrip || !mobilePrivateTab) return;
+      const bioTab = findMobileTabByLabel(tabStrip, 'Bio');
+      const tokensTab = findMobileTabByLabel(tabStrip, 'Tokens');
+      const moreRoomsTab = findMobileTabByLabel(tabStrip, 'More Rooms');
+      const overflowControl = findMobileOverflowControl(tabStrip);
+      const nextTokensSlot = mobileTabSlot(tabStrip, tokensTab);
+      if (mobileTokensSlot && mobileTokensSlot !== nextTokensSlot) mobileTokensSlot.classList.remove('roomgrid-mobile-token-source');
+      mobileTokensTab = tokensTab || mobileTokensTab;
+      mobileTokensSlot = nextTokensSlot || mobileTokensSlot;
+      mobileTokensSlot?.classList.add('roomgrid-mobile-token-source');
+
+      if (mobileOverflowControl !== overflowControl) {
+        mobileOverflowControl?.removeEventListener('click', handleMobileOverflowClick, true);
+        mobileOverflowControl = overflowControl;
+        mobileOverflowControl?.addEventListener('click', handleMobileOverflowClick, true);
+        mobileTokensMenuItem?.remove();
+        mobileTokensMenuItem = null;
+      }
+
+      const desiredSlots = [
+        mobileTabSlot(tabStrip, bioTab),
+        mobileTabSlot(tabStrip, mobilePrivateTab),
+        mobileTabSlot(tabStrip, moreRoomsTab),
+        mobileTabSlot(tabStrip, overflowControl),
+      ].filter((slot, index, list) => slot?.parentElement === tabStrip && list.indexOf(slot) === index);
+      const currentOrder = [...tabStrip.children].filter(node => desiredSlots.includes(node));
+      if (desiredSlots.length >= 3 && desiredSlots.some((slot, index) => currentOrder[index] !== slot)) {
+        desiredSlots.forEach(slot => tabStrip.appendChild(slot));
+      }
+      mountMobileTokensMenuItem(tabStrip);
+    }
+
+    function restoreMobileRoomTabOrder() {
+      mobileTokensSlot?.classList.remove('roomgrid-mobile-token-source');
+      mobileTokensMenuItem?.remove();
+      mobileOverflowControl?.removeEventListener('click', handleMobileOverflowClick, true);
+      mobileTokensTab = null;
+      mobileTokensSlot = null;
+      mobileOverflowControl = null;
+      mobileTokensMenuItem = null;
+    }
+
     function restoreMobileNativeContent() {
       for (const node of [...mobileHiddenNodes]) {
         node.classList.remove('roomgrid-mobile-native-hidden');
@@ -4277,6 +4464,7 @@
 
     function restoreMobilePrivateTab() {
       setMobileRoomGridOpen(false);
+      restoreMobileRoomTabOrder();
       if (mobilePrivateTab) {
         mobilePrivateTab.removeEventListener('click', handleMobileRoomGridClick, true);
         mobilePrivateTab.removeEventListener('keydown', handleMobileRoomGridKeydown, true);
@@ -4315,6 +4503,7 @@
       tab.setAttribute('tabindex', '0');
       const tabStrip = findMobileTabStrip(tab);
       if (!tabStrip) return false;
+      syncMobileRoomTabOrder(tabStrip);
       const privateSlot = document.querySelector('#portrait-contents .BaseRoomTab.PrivateTab,.BaseRoomTab.PrivateTab');
       if (privateSlot) {
         const actionBar = [...privateSlot.children].find(node => node.querySelector?.('#sendTipButton,[data-testid="send-tip-button"]')) || null;

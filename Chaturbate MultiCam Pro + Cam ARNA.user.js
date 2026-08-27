@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.4.15
+// @version           16.5.0
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -16,6 +16,7 @@
 // @grant             GM_getValue
 // @grant             GM_setValue
 // @grant             GM_download
+// @grant             GM_openInTab
 // @grant             window.focus
 // @connect           archivebate.com
 // @connect           recu.me
@@ -88,7 +89,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.4.15');
+  instanceMarker.setAttribute('data-suite-version', '16.5.0');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -99,6 +100,7 @@
 
   /* Integrated room-tab titles. Workshop always has one canonical URL/title. */
   const WORKSHOP_TAB_TITLE = 'Ziggy Room Suite';
+  const RECORDER_TAB_TITLE = 'Ziggy Recorder Hub';
   const ROOM_TAB_RESERVED_PATHS = new Set([
     'accounts', 'affiliate', 'affiliates', 'apps', 'auth', 'blog', 'contest',
     'contests', 'couple-cams', 'discover', 'female-cams', 'followed-cams',
@@ -107,10 +109,17 @@
     'trans-cams', 'verify',
   ]);
   const isWorkshopRoute = () => new URLSearchParams(location.search).get('multicam_mode') === '1';
+  const isRecorderHubRoute = () => new URLSearchParams(location.search).get('multicam_recorder') === '1';
 
   function canonicalWorkshopUrl() {
     const url = new URL('/', location.origin);
     url.searchParams.set('multicam_mode', '1');
+    return url.toString();
+  }
+
+  function canonicalRecorderHubUrl() {
+    const url = new URL('/', location.origin);
+    url.searchParams.set('multicam_recorder', '1');
     return url.toString();
   }
 
@@ -130,7 +139,7 @@
 
   function enforceSuiteTabTitle() {
     const roomName = roomNameForTabTitle();
-    const wantedTitle = isWorkshopRoute() ? WORKSHOP_TAB_TITLE : (roomName ? `${roomName}'s Room` : '');
+    const wantedTitle = isRecorderHubRoute() ? RECORDER_TAB_TITLE : (isWorkshopRoute() ? WORKSHOP_TAB_TITLE : (roomName ? `${roomName}'s Room` : ''));
     if (wantedTitle && document.title !== wantedTitle) document.title = wantedTitle;
   }
 
@@ -267,6 +276,7 @@
   const DEFAULT_GROUP_ID = 'all';
   const ONLINE_GROUP_ID = 'online';
   const ONLINE_FAVORITES_GROUP_ID = 'online-favorites';
+  const ONLINE_FOLLOWING_GROUP_ID = 'online-following';
   const FAVORITE_GROUP_ID = 'fav';
 
   // v15.5: 稳定状态。多工作台/多窗口同时轮询时，不再用 loading / transient error 覆盖
@@ -465,6 +475,16 @@
     return w;
   }
 
+  function openBackgroundTab(url) {
+    const targetUrl = String(url || 'about:blank');
+    try {
+      if (typeof GM_openInTab === 'function') {
+        return GM_openInTab(targetUrl, { active: false, insert: true, setParent: true });
+      }
+    } catch (_) {}
+    return openNoopener(targetUrl);
+  }
+
   function safeFilePart(v) {
     return String(v || 'room').replace(/[^a-z0-9_-]+/gi, '_').slice(0, 48) || 'room';
   }
@@ -566,6 +586,7 @@
       hintThumbSize: 'Thumbnail width in Focus mode',
       hintGroupTab: (n) => `Switch to ${n}. Drag rooms here to add them to this group.`,
       hintOnlineFavoritesTab: 'Show favorite rooms that are online now.',
+      hintOnlineFollowingTab: 'Live rooms you follow. This view refreshes automatically, stays alphabetical, and streams at up to 480p.',
       hintLibraryTab: 'Show every saved room. The remove button deletes globally in this view.',
       hintNewGroup: 'Create an isolated group',
       hintMoreMenu: 'More tools and maintenance',
@@ -577,6 +598,7 @@
       groupAll: 'Default',
       groupOnline: 'Online now',
       groupOnlineFav: 'Online Favorites',
+      groupOnlineFollowing: 'Online Following',
       groupFav: 'Favorites',
       newGroup: 'New group',
       newGroupPrompt: 'New group name:',
@@ -751,14 +773,31 @@
       dockOpen: 'Open workstation',
       dockAdd: 'Add room',
       dockRemove: 'Remove room',
-      dockRecord: 'Record in workstation',
+      dockFavoriteAdd: 'Add favorite',
+      dockFavoriteRemove: 'Remove favorite',
+      dockRecord: 'Record model',
       dockScreenshot: 'Screenshot video',
       dockPip: 'Picture-in-Picture',
       dockPause: 'Play / pause',
       dockMute: 'Mute / unmute',
       dockRecu: 'Recu.me profile',
       dockVideoMissing: 'No playable video found on this page',
-      dockRecordQueued: 'Recording intent queued in workstation',
+      dockRecordQueued: 'Recording started in Recorder Hub',
+      recorderHub: 'Recorder Hub',
+      recorderConnecting: 'Connecting',
+      recorderReconnecting: 'Reconnecting',
+      recorderPrivate: 'Paused for private/secret show',
+      recorderOffline: 'Offline',
+      recorderFinalizing: 'Finalizing',
+      recorderSaving: 'Saving file',
+      recorderSaved: 'Download started',
+      recorderAudioOn: 'Audio recorded',
+      recorderAudioOff: 'No audio track',
+      recorderWaitingTime: 'Waiting',
+      recorderEstimatedSize: 'Size',
+      recorderOpenHub: 'Open Recorder Hub',
+      recorderHubWarning: 'Keep this tab open while recording. Workshop and room tabs may be closed.',
+      recorderQualityPolicy: 'Source quality up to 1080p, with 192 kbps audio when available. Private/secret/group/password shows are omitted; offline rooms stop and save after 10 minutes.',
       added: 'Added',
       exists: 'Already exists',
       addFailed: 'Failed',
@@ -899,6 +938,7 @@
       groupAll: '默认',
       groupOnline: '在线',
       groupOnlineFav: '在线收藏',
+      groupOnlineFollowing: '正在直播的关注',
       groupFav: '收藏',
       newGroup: '新建分组',
       newGroupPrompt: '新分组名称：',
@@ -1059,6 +1099,8 @@
       dockOpen: '打开工作台',
       dockAdd: '加入房间',
       dockRemove: '移除房间',
+      dockFavoriteAdd: '加入收藏',
+      dockFavoriteRemove: '移出收藏',
       dockRecord: '在工作台录制',
       dockScreenshot: '截图当前视频',
       dockPip: '画中画',
@@ -1159,7 +1201,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.4.15',
+    version: '16.5.0',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -1273,8 +1315,9 @@
       { id: LIBRARY_GROUP_ID, name: '__library__', order: 0, system: true },
       { id: DEFAULT_GROUP_ID, name: '__all__', order: 1, system: true },
       { id: ONLINE_FAVORITES_GROUP_ID, name: '__online_favorites__', order: 2, system: true },
-      { id: ONLINE_GROUP_ID, name: '__online__', order: 3, system: true },
-      { id: FAVORITE_GROUP_ID, name: '__fav__', order: 4, system: true },
+      { id: ONLINE_FOLLOWING_GROUP_ID, name: '__online_following__', order: 3, system: true },
+      { id: ONLINE_GROUP_ID, name: '__online__', order: 4, system: true },
+      { id: FAVORITE_GROUP_ID, name: '__fav__', order: 5, system: true },
     ],
     settings: {
       volume: 0,
@@ -1331,8 +1374,9 @@
       { id: LIBRARY_GROUP_ID, name: '__library__', order: 0, system: true },
       { id: DEFAULT_GROUP_ID, name: '__all__', order: 1, system: true },
       { id: ONLINE_FAVORITES_GROUP_ID, name: '__online_favorites__', order: 2, system: true },
-      { id: ONLINE_GROUP_ID, name: '__online__', order: 3, system: true },
-      { id: FAVORITE_GROUP_ID, name: '__fav__', order: 4, system: true },
+      { id: ONLINE_FOLLOWING_GROUP_ID, name: '__online_following__', order: 3, system: true },
+      { id: ONLINE_GROUP_ID, name: '__online__', order: 4, system: true },
+      { id: FAVORITE_GROUP_ID, name: '__fav__', order: 5, system: true },
     ];
     for (const g of wanted) {
       const found = state.groups.find(x => x.id === g.id);
@@ -1388,7 +1432,7 @@
     const groups = Array.isArray(room?.groups) ? room.groups.slice() : [];
     if (room?.group) groups.push(room.group);
     // v12: all/default is a real group; only library is an aggregate view and is never stored as membership.
-    return uniq(groups.filter(g => g && g !== LIBRARY_GROUP_ID && g !== ONLINE_GROUP_ID && g !== ONLINE_FAVORITES_GROUP_ID));
+    return uniq(groups.filter(g => g && g !== LIBRARY_GROUP_ID && g !== ONLINE_GROUP_ID && g !== ONLINE_FAVORITES_GROUP_ID && g !== ONLINE_FOLLOWING_GROUP_ID));
   }
   function normalizeRoom(room, fallbackOrder = 0) {
     const r = room && typeof room === 'object' ? room : { id: String(room || '') };
@@ -1471,11 +1515,11 @@
       out.groups.push({
         id, name,
         order: clampInt(g.order, 0, 10000, idx),
-        system: !!g.system && [LIBRARY_GROUP_ID, DEFAULT_GROUP_ID, ONLINE_GROUP_ID, ONLINE_FAVORITES_GROUP_ID, FAVORITE_GROUP_ID].includes(id),
+        system: !!g.system && [LIBRARY_GROUP_ID, DEFAULT_GROUP_ID, ONLINE_GROUP_ID, ONLINE_FAVORITES_GROUP_ID, ONLINE_FOLLOWING_GROUP_ID, FAVORITE_GROUP_ID].includes(id),
       });
     });
     ensureSystemGroups(out);
-    const validGroupIds = new Set(out.groups.map(g => g.id).filter(id => id !== LIBRARY_GROUP_ID && id !== ONLINE_GROUP_ID && id !== ONLINE_FAVORITES_GROUP_ID));
+    const validGroupIds = new Set(out.groups.map(g => g.id).filter(id => id !== LIBRARY_GROUP_ID && id !== ONLINE_GROUP_ID && id !== ONLINE_FAVORITES_GROUP_ID && id !== ONLINE_FOLLOWING_GROUP_ID));
 
     const allowedStatus = new Set(['online', 'offline', 'private', 'loading', 'error', 'unknown']);
     const rawRooms = Array.isArray(src.rooms) ? src.rooms.slice(0, 1200) : [];
@@ -1567,6 +1611,10 @@
     if (groupId === LIBRARY_GROUP_ID) return true;
     if (groupId === ONLINE_GROUP_ID) return room?.lastStatus === 'online';
     if (groupId === ONLINE_FAVORITES_GROUP_ID) return room?.lastStatus === 'online' && getRoomGroups(room).includes(FAVORITE_GROUP_ID);
+    // Chaturbate's Online Rooms following page also contains broadcasters who
+    // are presently private/hidden. They remain in this live virtual group but
+    // are rendered with their protected status and no preview stream.
+    if (groupId === ONLINE_FOLLOWING_GROUP_ID) return room?.onlineFollowing === true && room?.lastStatus !== 'offline';
     return getRoomGroups(room).includes(groupId || DEFAULT_GROUP_ID);
   }
   function roomOrderInGroup(room, groupId) {
@@ -1580,7 +1628,7 @@
   }
   function ensureRoomInGroup(room, groupId, order) {
     normalizeRoom(room);
-    if (!groupId || groupId === LIBRARY_GROUP_ID || groupId === ONLINE_GROUP_ID || groupId === ONLINE_FAVORITES_GROUP_ID) return false;
+    if (!groupId || groupId === LIBRARY_GROUP_ID || groupId === ONLINE_GROUP_ID || groupId === ONLINE_FAVORITES_GROUP_ID || groupId === ONLINE_FOLLOWING_GROUP_ID) return false;
     const groups = getRoomGroups(room);
     const existed = groups.includes(groupId);
     if (!existed) groups.push(groupId);
@@ -1591,7 +1639,7 @@
     return !existed;
   }
   function removeRoomFromGroup(room, groupId) {
-    if (!room || !groupId || groupId === LIBRARY_GROUP_ID || groupId === ONLINE_GROUP_ID || groupId === ONLINE_FAVORITES_GROUP_ID) return false;
+    if (!room || !groupId || groupId === LIBRARY_GROUP_ID || groupId === ONLINE_GROUP_ID || groupId === ONLINE_FAVORITES_GROUP_ID || groupId === ONLINE_FOLLOWING_GROUP_ID) return false;
     const before = getRoomGroups(room);
     const after = before.filter(g => g !== groupId);
     if (after.length === before.length) return false;
@@ -2307,7 +2355,7 @@
         update(s => {
           normalizeStateMemberships(s);
           const ag = s.settings.activeGroup || DEFAULT_GROUP_ID;
-          const targetGroup = (ag === LIBRARY_GROUP_ID || ag === ONLINE_GROUP_ID || ag === ONLINE_FAVORITES_GROUP_ID) ? DEFAULT_GROUP_ID : ag;
+          const targetGroup = (ag === LIBRARY_GROUP_ID || ag === ONLINE_GROUP_ID || ag === ONLINE_FAVORITES_GROUP_ID || ag === ONLINE_FOLLOWING_GROUP_ID) ? DEFAULT_GROUP_ID : ag;
           const existing = s.rooms.find(r => r.id === id);
           if (existing) {
             changed = ensureRoomInGroup(existing, targetGroup, nextOrderForGroup(s, targetGroup)) || changed;
@@ -2376,7 +2424,7 @@
       reorderRooms(orderedIds, targetGroup) {
         update(s => {
           normalizeStateMemberships(s);
-          const actualGroup = targetGroup === ONLINE_FAVORITES_GROUP_ID ? FAVORITE_GROUP_ID : targetGroup;
+          const actualGroup = targetGroup === ONLINE_FAVORITES_GROUP_ID ? FAVORITE_GROUP_ID : (targetGroup === ONLINE_FOLLOWING_GROUP_ID ? DEFAULT_GROUP_ID : targetGroup);
           orderedIds.forEach((id, idx) => {
             const r = s.rooms.find(r => r.id === id);
             if (!r) return;
@@ -2394,7 +2442,7 @@
         update(s => {
           normalizeStateMemberships(s);
           const r = s.rooms.find(r => r.id === id);
-          if (!r || !groupId || groupId === LIBRARY_GROUP_ID || groupId === ONLINE_GROUP_ID || groupId === ONLINE_FAVORITES_GROUP_ID) return;
+          if (!r || !groupId || groupId === LIBRARY_GROUP_ID || groupId === ONLINE_GROUP_ID || groupId === ONLINE_FAVORITES_GROUP_ID || groupId === ONLINE_FOLLOWING_GROUP_ID) return;
           ensureRoomInGroup(r, groupId, nextOrderForGroup(s, groupId));
         }, 'rooms');
       },
@@ -2404,7 +2452,7 @@
         update(s => {
           normalizeStateMemberships(s);
           const r = s.rooms.find(r => r.id === id);
-          if (!r || !groupId || groupId === LIBRARY_GROUP_ID || groupId === ONLINE_GROUP_ID || groupId === ONLINE_FAVORITES_GROUP_ID) return;
+          if (!r || !groupId || groupId === LIBRARY_GROUP_ID || groupId === ONLINE_GROUP_ID || groupId === ONLINE_FAVORITES_GROUP_ID || groupId === ONLINE_FOLLOWING_GROUP_ID) return;
           if (roomInGroup(r, groupId)) {
             removeRoomFromGroup(r, groupId);
             nowInGroup = false;
@@ -2420,7 +2468,7 @@
         update(s => {
           normalizeStateMemberships(s);
           const r = s.rooms.find(r => r.id === id);
-          if (!r || !groupId || groupId === LIBRARY_GROUP_ID || groupId === ONLINE_GROUP_ID || groupId === ONLINE_FAVORITES_GROUP_ID) return;
+          if (!r || !groupId || groupId === LIBRARY_GROUP_ID || groupId === ONLINE_GROUP_ID || groupId === ONLINE_FAVORITES_GROUP_ID || groupId === ONLINE_FOLLOWING_GROUP_ID) return;
           r.groups = [groupId];
           r.group = groupId;
           r.groupOrder = r.groupOrder && typeof r.groupOrder === 'object' && !Array.isArray(r.groupOrder) ? r.groupOrder : {};
@@ -2443,7 +2491,7 @@
         update(s => {
           normalizeStateMemberships(s);
           ensureSystemGroups(s);
-          const validGroupIds = new Set((s.groups || []).map(g => g.id).filter(id => id !== LIBRARY_GROUP_ID && id !== ONLINE_GROUP_ID && id !== ONLINE_FAVORITES_GROUP_ID));
+          const validGroupIds = new Set((s.groups || []).map(g => g.id).filter(id => id !== LIBRARY_GROUP_ID && id !== ONLINE_GROUP_ID && id !== ONLINE_FAVORITES_GROUP_ID && id !== ONLINE_FOLLOWING_GROUP_ID));
           s.rooms.forEach((r, idx) => {
             r.groups = getRoomGroups(r).filter(g => validGroupIds.has(g));
             r.group = r.groups[0] || null;
@@ -2585,6 +2633,7 @@
    * ============================================================= */
   function createRoomService(store) {
     const sessions = new Map();   // id -> { hls, video, status, retryCount, pollTimer, userPaused }
+    const qualityCaps = new Map(); // id -> maximum stream height for a specific virtual view/consumer
     const domain = safeChaturbateHost(window.location.hostname) ? window.location.hostname : 'chaturbate.com';
 
     function clearPoll(s) {
@@ -2592,7 +2641,7 @@
     }
 
     function onlinePollMs() {
-      return Math.max(45000, Number(store.state.settings.pollMs?.online) || 120000);
+      return Math.max(10000, Number(store.state.settings.pollMs?.online) || 120000);
     }
 
     async function fetchContext(id, signal) {
@@ -2646,6 +2695,7 @@
         if (prev !== 'online' || !lastSeen || Date.now() - lastSeen > 60000) patch.lastSeenOnline = Date.now();
       }
       store.patchRoom(id, patch);
+      EventBus.emit('room:status', { id, status, previous: prev, extra: safeExtra });
       if (prev !== status && isStableRoomStatus(status)) addRoomStatusHistory(id, status, safeExtra);
       // 上线提醒
       const notificationEligible = !store.state.settings.notifyFavoritesOnly || roomInGroup(room, FAVORITE_GROUP_ID);
@@ -2787,16 +2837,32 @@
       return best >= 0 ? best : smallest;
     }
 
-    function applyHlsQuality(hls) {
+    function applyHlsQuality(hls, id = '') {
       if (!hls) return;
-      const level = hlsLevelForMaxHeight(hls);
+      id = normalizeUsername(id);
+      const cap = qualityCaps.get(id);
+      const level = hlsLevelForMaxHeight(hls, Number(cap) > 0 ? Number(cap) : streamMaxHeight());
       try { hls.autoLevelCapping = level; } catch (_) {}
       try { hls.loadLevel = level; } catch (_) {}
       try { hls.currentLevel = level; } catch (_) {}
     }
 
     function refreshQuality() {
-      sessions.forEach(s => { if (s?.hls) applyHlsQuality(s.hls); });
+      sessions.forEach((s, id) => { if (s?.hls) applyHlsQuality(s.hls, id); });
+    }
+
+    function setQualityCap(id, maxHeight = 0) {
+      id = normalizeUsername(id);
+      const value = Math.max(0, Number(maxHeight) || 0);
+      if (value) qualityCaps.set(id, value);
+      else qualityCaps.delete(id);
+      const s = sessions.get(id);
+      if (s?.hls) applyHlsQuality(s.hls, id);
+    }
+
+    function clearQualityCaps() {
+      qualityCaps.clear();
+      refreshQuality();
     }
 
     async function connect(id) {
@@ -2818,6 +2884,7 @@
       } catch (e) {
         if (ac.signal.aborted || !sessions.has(id) || sessions.get(id) !== s) return;
         setStatus(id, 'error', { errorMsg: 'request failed', transient: true });
+        EventBus.emit('room:transient-error', { id, error: 'request failed' });
         s.retryCount = (s.retryCount || 0) + 1;
         const wait = Math.min(60000, store.state.settings.pollMs.error * Math.pow(1.6, s.retryCount));
         schedulePoll(id, wait);
@@ -2839,7 +2906,7 @@
         schedulePoll(id, cfg.offline);
         return;
       }
-      if (data.room_status === 'private' || data.room_status === 'hidden' || data.room_status === 'away') {
+      if (['private', 'hidden', 'away', 'secret', 'group', 'password'].includes(String(data.room_status || '').toLowerCase())) {
         setStatus(id, 'private', { privateLabel: data.room_status });
         destroyPlayer(id);
         sessions.set(id, sessions.get(id) || s);
@@ -2887,14 +2954,14 @@
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           if (sessions.get(id)?.hls === hls) {
-            applyHlsQuality(hls);
+            applyHlsQuality(hls, id);
             if (sessions.get(id)?.userPaused) video.pause();
             else video.play().catch(() => {});
           }
         });
         if (Hls.Events.LEVELS_UPDATED) {
           hls.on(Hls.Events.LEVELS_UPDATED, () => {
-            if (sessions.get(id)?.hls === hls) applyHlsQuality(hls);
+            if (sessions.get(id)?.hls === hls) applyHlsQuality(hls, id);
           });
         }
         hls.on(Hls.Events.ERROR, (_, data) => {
@@ -2950,7 +3017,7 @@
     function stopAll() { for (const id of [...sessions.keys()]) stop(id); stopAllPageMedia(); }
     function has(id) { id = normalizeUsername(id); return sessions.has(id); }
 
-    return { start, stop, stopAll, refresh, refreshAll, attachVideo, detachVideo, startHls, has, pause, resume, togglePause, isPaused, pauseAll, resumeAll, refreshQuality };
+    return { start, stop, stopAll, refresh, refreshAll, attachVideo, detachVideo, startHls, has, pause, resume, togglePause, isPaused, pauseAll, resumeAll, refreshQuality, setQualityCap, clearQualityCaps };
   }
 
   /* =============================================================
@@ -2989,6 +3056,545 @@
   })();
 
   /* =============================================================
+   * 5.5. Unified Recorder Hub
+   * One background Chaturbate tab owns every recording. Other Suite surfaces
+   * only enqueue commands and render the Hub's lightweight state snapshot.
+   * ============================================================= */
+  const RECORDER_COMMAND_KEY = 'ziggy_recorder_commands_v1';
+  const RECORDER_STATE_KEY = 'ziggy_recorder_state_v1';
+  const RECORDER_HEARTBEAT_KEY = 'ziggy_recorder_heartbeat_v1';
+  const RECORDER_CHANNEL_NAME = 'ziggy_recorder_hub_v1';
+
+  const UnifiedRecorder = (() => {
+    const recordings = new Map();
+    const listeners = new Set();
+    let channel = null;
+    try { channel = new BroadcastChannel(RECORDER_CHANNEL_NAME); } catch (_) {}
+
+    function notify() {
+      try { document.dispatchEvent(new CustomEvent('ziggy-recorder:state')); } catch (_) {}
+      listeners.forEach(fn => { try { fn(recordings); } catch (_) {} });
+    }
+
+    function applySnapshot(snapshot) {
+      const rows = Array.isArray(snapshot?.recordings) ? snapshot.recordings : [];
+      recordings.clear();
+      rows.forEach(row => {
+        const id = normalizeUsername(row?.id);
+        if (isLikelyUsername(id)) recordings.set(id, { ...row, id });
+      });
+      notify();
+    }
+
+    function loadSnapshot() {
+      try { applySnapshot(JSON.parse(localStorage.getItem(RECORDER_STATE_KEY) || '{}')); } catch (_) {}
+    }
+
+    function enqueue(action, id = '') {
+      id = normalizeUsername(id);
+      const command = { commandId: `${Date.now()}_${Math.random().toString(36).slice(2)}`, action, id, ts: Date.now() };
+      let queue = [];
+      try { queue = JSON.parse(localStorage.getItem(RECORDER_COMMAND_KEY) || '[]'); } catch (_) {}
+      if (!Array.isArray(queue)) queue = [];
+      queue.push(command);
+      localStorage.setItem(RECORDER_COMMAND_KEY, JSON.stringify(queue.slice(-100)));
+      try { channel?.postMessage({ type: 'command', command }); } catch (_) {}
+      return command;
+    }
+
+    function heartbeatFresh() {
+      return Date.now() - Number(localStorage.getItem(RECORDER_HEARTBEAT_KEY) || 0) < 6500;
+    }
+
+    function openHub(active = false) {
+      const url = canonicalRecorderHubUrl();
+      try {
+        if (typeof GM_openInTab === 'function') return GM_openInTab(url, { active: !!active, insert: true, setParent: true });
+      } catch (_) {}
+      return active ? openNoopener(url) : openBackgroundTab(url);
+    }
+
+    function ensureHub() {
+      if (!heartbeatFresh()) {
+        // Reserve the Hub briefly while its background tab is starting so a
+        // rapid series of Record clicks cannot create duplicate Hub tabs.
+        localStorage.setItem(RECORDER_HEARTBEAT_KEY, String(Date.now()));
+        openHub(false);
+      }
+    }
+
+    function start(id) {
+      id = normalizeUsername(id);
+      if (!isLikelyUsername(id)) return false;
+      recordings.set(id, { id, status: 'connecting', startedAt: Date.now(), recordedMs: 0, waitingMs: 0, bytes: 0 });
+      notify();
+      enqueue('start', id);
+      ensureHub();
+      return true;
+    }
+
+    function stop(id) {
+      id = normalizeUsername(id);
+      if (!id) return false;
+      const row = recordings.get(id);
+      if (row) recordings.set(id, { ...row, status: 'finalizing', finalizingProgress: 1 });
+      notify();
+      enqueue('stop', id);
+      ensureHub();
+      return true;
+    }
+
+    function toggle(id) {
+      id = normalizeUsername(id);
+      if (recordings.has(id) && heartbeatFresh()) return stop(id);
+      if (recordings.has(id)) { recordings.delete(id); notify(); }
+      return start(id);
+    }
+    function stopAll() { enqueue('stop-all'); ensureHub(); }
+    function retry(id) { enqueue('retry', id); ensureHub(); }
+    function has(id) { return heartbeatFresh() && recordings.has(normalizeUsername(id)); }
+    function get(id) { return recordings.get(normalizeUsername(id)) || null; }
+    function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }
+
+    channel && (channel.onmessage = event => {
+      if (event.data?.type === 'state') applySnapshot(event.data.snapshot || {});
+    });
+    window.addEventListener('storage', event => { if (event.key === RECORDER_STATE_KEY) loadSnapshot(); });
+    loadSnapshot();
+    if (!heartbeatFresh() && recordings.size) { recordings.clear(); notify(); }
+    return { recordings, start, stop, stopAll, retry, toggle, has, get, openHub, subscribe, loadSnapshot };
+  })();
+  window.__ziggyUnifiedRecorder = UnifiedRecorder;
+
+  function initRecorderHub() {
+    stopAllPageMedia();
+    document.title = RECORDER_TAB_TITLE;
+    document.documentElement.classList.add('ziggy-recorder-hub');
+    document.body.replaceChildren();
+
+    const jobs = new Map();
+    const processedCommands = new Set();
+    const channel = (() => { try { return new BroadcastChannel(RECORDER_CHANNEL_NAME); } catch (_) { return null; } })();
+    const hubStore = {
+      state: {
+        rooms: [],
+        settings: {
+          maxStreamHeight: 1080,
+          notifyFavoritesOnly: false,
+          notifyOnline: false,
+          pollMs: { online: 12000, offline: 15000, private: 15000, error: 5000 },
+        },
+      },
+      patchRoom(id, patch) {
+        id = normalizeUsername(id);
+        let room = this.state.rooms.find(item => item.id === id);
+        if (!room) { room = { id, lastStatus: 'unknown', groups: [DEFAULT_GROUP_ID] }; this.state.rooms.push(room); }
+        Object.assign(room, patch || {});
+      },
+    };
+    const service = createRoomService(hubStore);
+
+    document.head.appendChild($('style', { html: trustedHtml(`
+      html.ziggy-recorder-hub,html.ziggy-recorder-hub body{margin:0;min-height:100%;background:#17202a;color:#f1f1f1;font-family:UbuntuRegular,Arial,sans-serif}
+      .rec-hub{max-width:980px;margin:0 auto;padding:24px}.rec-head{display:flex;gap:14px;align-items:center;justify-content:space-between;border-bottom:1px solid #2d3e50;padding-bottom:18px}
+      .rec-title{font:700 24px/1.2 UbuntuMedium,UbuntuRegular,Arial,sans-serif}.rec-sub{color:#b3b3b3;font-size:13px;margin-top:5px}.rec-actions{display:flex;gap:8px;flex-wrap:wrap}
+      .rec-btn{min-height:38px;border:1px solid #2d3e50;border-radius:4px;background:#202c39;color:#f1f1f1;padding:0 14px;cursor:pointer}.rec-btn:hover{background:#253648}.rec-btn.danger{background:#8b1d1d;border-color:#a52a2a}.rec-btn.primary{background:#0c6a93;border-color:#0c6a93}
+      .rec-list{display:grid;gap:12px;margin-top:18px}.rec-empty{padding:36px 16px;border:1px dashed #2d3e50;color:#b3b3b3;text-align:center}.rec-row{border:1px solid #2d3e50;border-radius:4px;background:#202c39;padding:14px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center}
+      .rec-row.is-recording{border-left:4px solid #ef4444}.rec-row.is-waiting{border-left:4px solid #d97706}.rec-row.is-finalizing{border-left:4px solid #68b5f0}.rec-name{font:700 16px/1.2 UbuntuMedium,UbuntuRegular,Arial,sans-serif;color:#68b5f0}.rec-meta{margin-top:7px;color:#b3b3b3;font-size:12px;line-height:1.55}.rec-progress{height:8px;background:#17202a;border-radius:999px;margin-top:10px;overflow:hidden}.rec-progress>i{display:block;height:100%;background:#68b5f0;transition:width .2s}.rec-hidden-media{position:fixed;left:-10000px;top:-10000px;width:2px;height:2px;overflow:hidden}
+      @media(max-width:640px){.rec-hub{padding:16px}.rec-head,.rec-row{grid-template-columns:1fr;display:grid}.rec-actions{margin-top:10px}.rec-row>.rec-actions{justify-content:stretch}.rec-row>.rec-actions .rec-btn{flex:1}}
+    `) }));
+
+    const list = $('div', { class: 'rec-list' });
+    const shell = $('main', { class: 'rec-hub' }, [
+      $('header', { class: 'rec-head' }, [
+        $('div', {}, [
+          $('div', { class: 'rec-title' }, t('recorderHubTitle')),
+          $('div', { class: 'rec-sub' }, t('recorderHubSubtitle')),
+        ]),
+        $('div', { class: 'rec-actions' }, [
+          $('button', { class: 'rec-btn', onclick: () => openNoopener(canonicalWorkshopUrl()) }, t('dockOpen')),
+          $('button', { class: 'rec-btn danger', onclick: () => [...jobs.keys()].forEach(stopJob) }, t('stopAllRecordings')),
+        ]),
+      ]),
+      list,
+      $('div', { class: 'rec-hidden-media', id: 'rec-hidden-media' }),
+    ]);
+    document.body.appendChild(shell);
+
+    function formatDuration(ms) {
+      const seconds = Math.max(0, Math.floor(Number(ms || 0) / 1000));
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = seconds % 60;
+      return h ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
+    }
+
+    function formatBytes(bytes) {
+      const n = Math.max(0, Number(bytes) || 0);
+      if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+      if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+      return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
+    }
+
+    function recorderMimeType() {
+      if (typeof MediaRecorder === 'undefined') return '';
+      return ['video/mp4;codecs=h264,aac', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+        .find(type => { try { return MediaRecorder.isTypeSupported(type); } catch (_) { return false; } }) || '';
+    }
+
+    function fileStamp(ts) {
+      const d = new Date(ts || Date.now());
+      const two = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}_${two(d.getHours())}-${two(d.getMinutes())}-${two(d.getSeconds())}`;
+    }
+
+    function currentRecordedMs(job) {
+      return Number(job.recordedMs || 0) + (job.recordingSince ? Date.now() - job.recordingSince : 0);
+    }
+
+    function pauseClock(job) {
+      if (job.recordingSince) job.recordedMs = currentRecordedMs(job);
+      job.recordingSince = 0;
+      if (!job.waitingSince) job.waitingSince = Date.now();
+    }
+
+    function resumeClock(job) {
+      if (!job.recordingSince) job.recordingSince = Date.now();
+      if (job.waitingSince) job.waitingMs = Number(job.waitingMs || 0) + Date.now() - job.waitingSince;
+      job.waitingSince = 0;
+    }
+
+    function summary(job) {
+      const waitingMs = Number(job.waitingMs || 0) + (job.waitingSince ? Date.now() - job.waitingSince : 0);
+      return {
+        id: job.id,
+        status: job.status,
+        startedAt: job.startedAt,
+        recordedMs: currentRecordedMs(job),
+        waitingMs,
+        bytes: Number(job.bytes || 0),
+        resolution: job.width && job.height ? `${job.width}×${job.height}` : '',
+        audio: !!job.audioEnabled,
+        mimeType: job.mimeType || '',
+        filename: job.filename || '',
+        error: job.error || '',
+        finalizingProgress: Number(job.finalizingProgress || 0),
+        offlineDeadline: Number(job.offlineDeadline || 0),
+      };
+    }
+
+    function publishState() {
+      const snapshot = { updatedAt: Date.now(), recordings: [...jobs.values()].map(summary) };
+      try { localStorage.setItem(RECORDER_STATE_KEY, JSON.stringify(snapshot)); } catch (_) {}
+      try { channel?.postMessage({ type: 'state', snapshot }); } catch (_) {}
+      render();
+    }
+
+    function statusLabel(job) {
+      if (job.status === 'recording') return t('recorderRecording');
+      if (job.status === 'private') return t('recorderPausedPrivate');
+      if (job.status === 'offline') {
+        const left = Math.max(0, Number(job.offlineDeadline || 0) - Date.now());
+        return t('recorderPausedOffline', formatDuration(left));
+      }
+      if (job.status === 'finalizing') return `${t('recorderFinalizing')} ${Math.round(job.finalizingProgress || 0)}%`;
+      if (job.status === 'saved') return t('recorderSaved');
+      if (job.status === 'error') return job.error || t('recorderRetrying');
+      return t('recorderConnecting');
+    }
+
+    function render() {
+      list.replaceChildren();
+      if (!jobs.size) { list.appendChild($('div', { class: 'rec-empty' }, t('recordingCenterEmpty'))); return; }
+      jobs.forEach(job => {
+        const row = $('section', { class: `rec-row is-${job.status === 'recording' ? 'recording' : (job.status === 'finalizing' ? 'finalizing' : 'waiting')}` }, [
+          $('div', {}, [
+            $('div', { class: 'rec-name' }, job.id),
+            $('div', { class: 'rec-meta' }, [
+              document.createTextNode(`${statusLabel(job)} · ${t('recordingDuration')}: ${formatDuration(currentRecordedMs(job))} · ${t('recorderWaitingTime')}: ${formatDuration(Number(job.waitingMs || 0) + (job.waitingSince ? Date.now() - job.waitingSince : 0))}`),
+              $('br'),
+              document.createTextNode(`${job.width ? `${job.width}×${job.height}` : '—'} · ${job.audioEnabled ? t('recorderAudioOn') : t('recorderAudioOff')} · ${formatBytes(job.bytes)}`),
+            ]),
+            job.status === 'finalizing' ? $('div', { class: 'rec-progress' }, [$('i', { style: { width: `${Math.max(1, job.finalizingProgress || 0)}%` } })]) : null,
+          ]),
+          $('div', { class: 'rec-actions' }, [
+            $('button', { class: 'rec-btn', onclick: () => openNoopener(`${location.origin}/${encodeURIComponent(job.id)}/`) }, t('recorderOpenRoom')),
+            job.status === 'error' ? $('button', { class: 'rec-btn primary', onclick: () => retryJob(job.id) }, t('recorderRetry')) : null,
+            !['finalizing', 'saved'].includes(job.status) ? $('button', { class: 'rec-btn danger', onclick: () => stopJob(job.id) }, t('opRecordStop')) : null,
+          ]),
+        ]);
+        list.appendChild(row);
+      });
+    }
+
+    async function prepareSink(job) {
+      job.chunks = [];
+      job.writeQueue = Promise.resolve();
+      if (!navigator.storage?.getDirectory) return;
+      try {
+        const root = await navigator.storage.getDirectory();
+        const dir = await root.getDirectoryHandle('ziggy-recorder', { create: true });
+        job.opfsDir = dir;
+        job.opfsName = `${safeFilePart(job.id)}-${job.startedAt}.part`;
+        job.fileHandle = await dir.getFileHandle(job.opfsName, { create: true });
+        job.writer = await job.fileHandle.createWritable();
+      } catch (_) {
+        job.writer = null;
+        job.fileHandle = null;
+      }
+    }
+
+    function queueChunk(job, chunk) {
+      if (!chunk?.size) return;
+      job.bytes += chunk.size;
+      if (job.writer) job.writeQueue = job.writeQueue.then(() => job.writer.write(chunk));
+      else job.chunks.push(chunk);
+    }
+
+    function drawFrame(job) {
+      if (!job.canvas || !job.ctx || !job.video) return;
+      if (job.video.readyState >= 2 && job.status === 'recording') {
+        try { job.ctx.drawImage(job.video, 0, 0, job.width, job.height); } catch (_) {}
+      }
+    }
+
+    async function beginRecorder(job) {
+      if (job.recorder || job.finalizing || !job.video.videoWidth || !job.video.videoHeight) return;
+      const sourceW = job.video.videoWidth;
+      const sourceH = job.video.videoHeight;
+      const scale = Math.min(1, 1920 / sourceW, 1080 / sourceH);
+      job.width = Math.max(2, Math.round(sourceW * scale / 2) * 2);
+      job.height = Math.max(2, Math.round(sourceH * scale / 2) * 2);
+      job.canvas = document.createElement('canvas');
+      job.canvas.width = job.width;
+      job.canvas.height = job.height;
+      job.ctx = job.canvas.getContext('2d', { alpha: false });
+      const canvasStream = job.canvas.captureStream(30);
+      const tracks = [...canvasStream.getVideoTracks()];
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) {
+          job.audioContext = new AudioCtx();
+          job.audioDestination = job.audioContext.createMediaStreamDestination();
+          job.audioSource = job.audioContext.createMediaElementSource(job.video);
+          job.audioSource.connect(job.audioDestination);
+          await job.audioContext.resume().catch(() => {});
+          const audioTrack = job.audioDestination.stream.getAudioTracks()[0];
+          if (audioTrack) { tracks.push(audioTrack); job.audioEnabled = true; }
+        }
+      } catch (_) { job.audioEnabled = false; }
+      job.captureStream = new MediaStream(tracks);
+      job.mimeType = recorderMimeType();
+      if (!job.mimeType) throw new Error('MediaRecorder format unavailable');
+      const videoBitsPerSecond = job.height >= 1080 ? 10000000 : (job.height >= 720 ? 6000000 : Math.max(2500000, Math.round(job.width * job.height * 8)));
+      job.recorder = new MediaRecorder(job.captureStream, { mimeType: job.mimeType, videoBitsPerSecond: Math.min(12000000, videoBitsPerSecond), audioBitsPerSecond: 192000 });
+      job.recorder.ondataavailable = event => queueChunk(job, event.data);
+      job.recorder.onerror = event => { job.error = event.error?.message || 'Recorder error'; job.status = 'error'; pauseClock(job); publishState(); };
+      job.recorder.start(2000);
+      job.drawTimer = setInterval(() => drawFrame(job), 1000 / 30);
+    }
+
+    function clearStableTimer(job) { if (job.stableTimer) clearTimeout(job.stableTimer); job.stableTimer = 0; }
+
+    function waitForStablePublic(job) {
+      clearStableTimer(job);
+      job.status = 'connecting';
+      pauseClock(job);
+      job.stableTimer = setTimeout(async () => {
+        if (!jobs.has(job.id) || job.finalizing || job.video.readyState < 2) return;
+        try {
+          if (!job.recorder) await beginRecorder(job);
+          else if (job.recorder.state === 'paused') job.recorder.resume();
+          job.status = 'recording';
+          job.offlineDeadline = 0;
+          resumeClock(job);
+        } catch (error) {
+          job.status = 'error';
+          job.error = String(error?.message || error);
+        }
+        publishState();
+      }, 1500);
+      publishState();
+    }
+
+    function pauseForStatus(job, status) {
+      clearStableTimer(job);
+      pauseClock(job);
+      try { if (job.recorder?.state === 'recording') job.recorder.pause(); } catch (_) {}
+      job.status = status;
+      if (status === 'offline') {
+        if (!job.offlineDeadline) job.offlineDeadline = Date.now() + 10 * 60 * 1000;
+        clearTimeout(job.offlineTimer);
+        job.offlineTimer = setTimeout(() => {
+          if (jobs.get(job.id)?.status === 'offline') stopJob(job.id, 'offline-timeout');
+        }, Math.max(0, job.offlineDeadline - Date.now()));
+      } else {
+        job.offlineDeadline = 0;
+        clearTimeout(job.offlineTimer);
+      }
+      publishState();
+    }
+
+    async function startJob(id) {
+      id = normalizeUsername(id);
+      if (!isLikelyUsername(id) || jobs.has(id)) return;
+      const job = {
+        id, startedAt: Date.now(), status: 'connecting', recordedMs: 0, waitingMs: 0,
+        waitingSince: Date.now(), bytes: 0, finalizingProgress: 0, audioEnabled: false,
+      };
+      jobs.set(id, job);
+      hubStore.state.rooms.push({ id, groups: [DEFAULT_GROUP_ID], lastStatus: 'unknown', muted: true });
+      const video = $('video', { muted: false, autoplay: true, playsInline: true, crossOrigin: 'anonymous', dataset: { multicamRoomId: id } });
+      job.video = video;
+      document.getElementById('rec-hidden-media').appendChild(video);
+      video.addEventListener('playing', () => { if (hubStore.state.rooms.find(room => room.id === id)?.lastStatus === 'online') waitForStablePublic(job); });
+      await prepareSink(job);
+      service.setQualityCap(id, 1080);
+      service.start(id);
+      publishState();
+    }
+
+    async function finalizeJob(job) {
+      if (!job || job.finalizing) return;
+      job.finalizing = true;
+      job.status = 'finalizing';
+      pauseClock(job);
+      clearStableTimer(job);
+      clearTimeout(job.offlineTimer);
+      job.finalizingProgress = 5;
+      publishState();
+      try {
+        if (job.recorder && job.recorder.state !== 'inactive') {
+          await new Promise(resolve => {
+            const done = () => resolve();
+            job.recorder.addEventListener('stop', done, { once: true });
+            try { job.recorder.requestData?.(); } catch (_) {}
+            try { job.recorder.stop(); } catch (_) { resolve(); }
+          });
+        }
+        job.finalizingProgress = 35; publishState();
+        await job.writeQueue;
+        job.finalizingProgress = 60; publishState();
+        let blob;
+        if (job.writer && job.fileHandle) {
+          await job.writer.close();
+          blob = await job.fileHandle.getFile();
+        } else {
+          blob = new Blob(job.chunks || [], { type: job.mimeType || 'video/webm' });
+        }
+        job.finalizingProgress = 82; publishState();
+        if (!blob?.size) throw new Error(t('recordingNoData'));
+        const ext = String(job.mimeType || '').includes('mp4') ? 'mp4' : 'webm';
+        job.filename = `${safeFilePart(job.id)}_${fileStamp(job.startedAt)}.${ext}`;
+        downloadBlob(blob, job.filename);
+        job.finalizingProgress = 100;
+        job.status = 'saved';
+        publishState();
+        setTimeout(() => removeJob(job.id), 8000);
+      } catch (error) {
+        job.status = 'error';
+        job.error = String(error?.message || error);
+        job.finalizing = false;
+        publishState();
+      }
+    }
+
+    function cleanupJob(job) {
+      clearStableTimer(job);
+      clearTimeout(job.offlineTimer);
+      clearInterval(job.drawTimer);
+      service.stop(job.id);
+      service.setQualityCap(job.id, 0);
+      try { job.captureStream?.getTracks().forEach(track => track.stop()); } catch (_) {}
+      try { job.audioSource?.disconnect(); } catch (_) {}
+      try { job.audioContext?.close(); } catch (_) {}
+      try { stopMediaElement(job.video, true); } catch (_) {}
+    }
+
+    function removeJob(id) {
+      const job = jobs.get(normalizeUsername(id));
+      if (!job) return;
+      cleanupJob(job);
+      if (job.opfsDir && job.opfsName) job.opfsDir.removeEntry(job.opfsName).catch(() => {});
+      jobs.delete(job.id);
+      hubStore.state.rooms = hubStore.state.rooms.filter(room => room.id !== job.id);
+      publishState();
+    }
+
+    function stopJob(id) {
+      const job = jobs.get(normalizeUsername(id));
+      if (job) finalizeJob(job);
+    }
+
+    function retryJob(id) {
+      const job = jobs.get(normalizeUsername(id));
+      if (!job || job.finalizing) return;
+      job.error = '';
+      job.status = 'connecting';
+      service.refresh(job.id);
+      publishState();
+    }
+
+    function processCommand(command) {
+      if (!command?.commandId || processedCommands.has(command.commandId)) return;
+      processedCommands.add(command.commandId);
+      if (command.action === 'start') startJob(command.id);
+      else if (command.action === 'stop') stopJob(command.id);
+      else if (command.action === 'stop-all') [...jobs.keys()].forEach(stopJob);
+      else if (command.action === 'retry') retryJob(command.id);
+    }
+
+    function drainCommands() {
+      let queue = [];
+      try { queue = JSON.parse(localStorage.getItem(RECORDER_COMMAND_KEY) || '[]'); } catch (_) {}
+      if (Array.isArray(queue)) queue.forEach(processCommand);
+      // Commands are a delivery queue, not durable history. Clearing handled
+      // entries prevents an old Start command from being replayed after a
+      // long-running Hub prunes its in-memory de-duplication set.
+      if (Array.isArray(queue) && queue.length) {
+        const handled = new Set(queue.map(item => item?.commandId).filter(Boolean));
+        let latest = [];
+        try { latest = JSON.parse(localStorage.getItem(RECORDER_COMMAND_KEY) || '[]'); } catch (_) {}
+        if (!Array.isArray(latest)) latest = [];
+        localStorage.setItem(RECORDER_COMMAND_KEY, JSON.stringify(latest.filter(item => !handled.has(item?.commandId)).slice(-100)));
+      }
+    }
+
+    channel && (channel.onmessage = event => { if (event.data?.type === 'command') processCommand(event.data.command); });
+    window.addEventListener('storage', event => { if (event.key === RECORDER_COMMAND_KEY) drainCommands(); });
+    EventBus.on('room:online', ({ id, hlsSource }) => {
+      const job = jobs.get(id);
+      if (!job) return;
+      if (!job.video.isConnected) document.getElementById('rec-hidden-media')?.appendChild(job.video);
+      service.attachVideo(id, job.video);
+      service.startHls(id, hlsSource);
+      if (job.video.readyState >= 2) waitForStablePublic(job);
+    });
+    EventBus.on('room:status', ({ id, status }) => {
+      const job = jobs.get(id);
+      if (!job || job.finalizing) return;
+      if (status === 'private') pauseForStatus(job, 'private');
+      else if (status === 'offline') pauseForStatus(job, 'offline');
+      else if (status === 'error') pauseForStatus(job, 'reconnecting');
+      else if (status === 'online' && job.video.readyState >= 2) waitForStablePublic(job);
+    });
+    EventBus.on('room:transient-error', ({ id }) => {
+      const job = jobs.get(id);
+      if (job && !job.finalizing) pauseForStatus(job, 'reconnecting');
+    });
+    setInterval(() => { localStorage.setItem(RECORDER_HEARTBEAT_KEY, String(Date.now())); drainCommands(); publishState(); }, 1000);
+    localStorage.setItem(RECORDER_HEARTBEAT_KEY, String(Date.now()));
+    drainCommands();
+    render();
+    window.addEventListener('beforeunload', event => {
+      if (![...jobs.values()].some(job => !['saved', 'error'].includes(job.status))) return;
+      event.preventDefault();
+      event.returnValue = t('recorderHubCloseWarning');
+    });
+    window.addEventListener('pagehide', () => localStorage.setItem(RECORDER_HEARTBEAT_KEY, '0'));
+  }
+
+  /* =============================================================
    * 6. 模式分发
    * ============================================================= */
   function isPhoneLikeDevice() {
@@ -3015,8 +3621,10 @@
     return Math.min(Number(window.innerWidth) || 9999, Number(window.screen?.width) || 9999) <= 1100;
   }
 
+  const isRecorderHub = isRecorderHubRoute();
   const isWorkstation = new URLSearchParams(location.search).get('multicam_mode') === '1';
-  if (isWorkstation) initWorkstation();
+  if (isRecorderHub) initRecorderHub();
+  else if (isWorkstation) initWorkstation();
   else initInjector();
 
   /* =============================================================
@@ -3275,9 +3883,9 @@
     function queueCurrentRoomRecording() {
       if (!currentRoom) { toast(t('dockNoRoom')); return; }
       if (!Storage.has(currentRoom)) Storage.add(currentRoom);
-      setRecordingIntent(currentRoom, true);
-      toast(t('dockRecordQueued'));
-      openWorkstationNew();
+      UnifiedRecorder.toggle(currentRoom);
+      toast(UnifiedRecorder.has(currentRoom) ? t('dockRecordQueued') : t('recorderFinalizing'));
+      updateDockRoom();
     }
 
     function openCurrentRoomRecu() {
@@ -3310,6 +3918,7 @@
       .roomgrid-dock-pane[hidden] { display:none !important; }
       .roomgrid-dock-room { font-size:12px; color:#cbd5e1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       .roomgrid-dock-actions { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+      .roomgrid-dock-save-row { display:grid; grid-template-columns:1fr 1fr; gap:7px; grid-column:1/-1; }
       .roomgrid-dock-action { min-height:36px; border:1px solid #2d3e50; border-radius:4px; background:#17202a; color:#d7d7d7; cursor:pointer; font-size:12px; font-weight:500; text-align:left; padding:7px 9px; }
       .roomgrid-dock-action:hover { background:#253648; border-color:#3b5066; color:#fff; }
       .roomgrid-dock-action.primary { background:#0c6a93; border-color:#0c6a93; color:#fff; }
@@ -3483,6 +4092,7 @@
       .roomgrid-mobile-panel .roomgrid-dock-pane { gap:0; }
       .roomgrid-mobile-panel .roomgrid-dock-room { padding:12px 16px; border-bottom:1px solid #2d3e50; color:#b3b3b3; font-size:14px; }
       .roomgrid-mobile-panel .roomgrid-dock-actions { display:block; }
+      .roomgrid-mobile-panel .roomgrid-dock-save-row { display:grid; grid-template-columns:1fr 1fr; }
       .roomgrid-mobile-panel .roomgrid-dock-action {
         display:flex; width:100%; min-height:52px; align-items:center; padding:12px 16px;
         border:0; border-bottom:1px solid #2d3e50; border-radius:0; background:#202c39;
@@ -3547,6 +4157,7 @@
 
     const roomLine = $('div', { class: 'roomgrid-dock-room' }, t('dockNoRoom'));
     const addBtn = $('button', { class: 'roomgrid-dock-action success', onclick: () => toggleCurrentRoomSaved() }, t('dockAdd'));
+    const favoriteBtn = $('button', { class: 'roomgrid-dock-action', onclick: () => toggleCurrentRoomFavorite() }, t('dockFavoriteAdd'));
     const recuBtn = $('button', { class: 'roomgrid-dock-action roomgrid-recu-action', onclick: openCurrentRoomRecu }, t('dockRecu'));
     const sendTipMenuBtn = $('button', { class: 'roomgrid-dock-action roomgrid-send-tip-action', type: 'button', onclick: openNativeSendTip }, 'Send Tip');
     const privateMenuBtn = $('button', { class: 'roomgrid-dock-action roomgrid-private-action', type: 'button', onclick: openNativePrivateTab }, 'Private show options');
@@ -3576,7 +4187,7 @@
       $('div', { class: 'roomgrid-dock-actions' }, [
         $('button', { class: 'roomgrid-dock-action primary', onclick: openWorkstationNew }, t('dockOpen')),
         recuBtn,
-        addBtn,
+        $('div', { class: 'roomgrid-dock-save-row' }, [addBtn, favoriteBtn]),
         $('button', { class: 'roomgrid-dock-action warn', onclick: queueCurrentRoomRecording }, t('dockRecord')),
         $('button', { class: 'roomgrid-dock-action', onclick: captureCurrentPageVideo }, t('dockScreenshot')),
         $('button', { class: 'roomgrid-dock-action', onclick: toggleCurrentPagePiP }, t('dockPip')),
@@ -3632,6 +4243,33 @@
       updateDockRoom();
     }
 
+    function currentRoomIsFavorite() {
+      if (!currentRoom) return false;
+      const room = Storage.load().rooms.find(item => item.id === currentRoom);
+      return !!room && roomInGroup(room, FAVORITE_GROUP_ID);
+    }
+
+    function toggleCurrentRoomFavorite() {
+      if (!currentRoom) return;
+      if (!Storage.has(currentRoom)) Storage.add(currentRoom);
+      const state = Storage.load();
+      const room = state.rooms.find(item => item.id === currentRoom);
+      if (!room) return;
+      const groups = new Set(getRoomGroups(room));
+      const removing = groups.has(FAVORITE_GROUP_ID);
+      if (removing) groups.delete(FAVORITE_GROUP_ID);
+      else groups.add(FAVORITE_GROUP_ID);
+      room.groups = [...groups];
+      room.groupOrder = room.groupOrder && typeof room.groupOrder === 'object' ? room.groupOrder : {};
+      if (!removing && !Number.isFinite(Number(room.groupOrder[FAVORITE_GROUP_ID]))) {
+        room.groupOrder[FAVORITE_GROUP_ID] = nextOrderForGroup(state, FAVORITE_GROUP_ID);
+      }
+      Storage.save(state);
+      toast(removing ? t('dockFavoriteRemove') : t('dockFavoriteAdd'));
+      refreshInjectorState();
+      updateDockRoom();
+    }
+
     function updateDockRoom() {
       roomLine.textContent = currentRoom ? t('dockCurrentRoom', currentRoom) : t('dockNoRoom');
       addBtn.textContent = currentRoom && Storage.has(currentRoom) ? t('dockRemove') : t('dockAdd');
@@ -3639,6 +4277,11 @@
       addBtn.classList.toggle('warn', !!(currentRoom && Storage.has(currentRoom)));
       addBtn.disabled = !currentRoom;
       addBtn.style.opacity = currentRoom ? '1' : '.55';
+      const favorite = currentRoomIsFavorite();
+      favoriteBtn.textContent = favorite ? t('dockFavoriteRemove') : t('dockFavoriteAdd');
+      favoriteBtn.classList.toggle('warn', favorite);
+      favoriteBtn.disabled = !currentRoom;
+      favoriteBtn.style.opacity = currentRoom ? '1' : '.55';
       recuBtn.disabled = !currentRoom;
       recuBtn.style.opacity = currentRoom ? '1' : '.55';
       publishSuiteState();
@@ -4729,7 +5372,6 @@
         { label: 'Big thumbnails', key: 'bigthumb', inverted: false },
         { label: 'Hide male/trans', key: 'hidemt', inverted: false },
         { label: '480px snapshots', key: 'smallsnap', inverted: false },
-        { label: 'Auto-save recordings every 20 min', key: 'recautosave', inverted: true },
       ];
 
       function settingEnabled(definition) {
@@ -4782,6 +5424,7 @@
             $('div', { class: 'ziggy-mobile-reloaded-section-title' }, 'Suite'),
             $('div', { class: 'ziggy-mobile-reloaded-actions' }, [
               toolButton('Open Workshop', 'ziggy-suite:open-workshop', null, 'primary'),
+              $('button', { class: 'ziggy-mobile-reloaded-action', type: 'button', onclick: () => { close(); UnifiedRecorder.openHub(true); } }, 'Recorder Hub'),
               toolButton(room ? (saved ? `Remove ${room}` : `Add ${room}`) : 'Add current model', 'ziggy-suite:toggle-current-room'),
               toolButton('RoomGrid', 'ziggy-suite:toggle-roomgrid', { tab: 'multicam' }),
               toolButton('Cam ARNA', 'ziggy-suite:toggle-roomgrid', { tab: 'arna' }),
@@ -5550,15 +6193,9 @@
     // 离开工作台页时，统一停流，避免浏览器残留音轨。
 
     window.addEventListener('pagehide', () => {
-      try { stopAllRecordings({ final: true, silent: true }); } catch (_) {}
+      // The dedicated Recorder Hub owns active recordings; closing Workshop must
+      // never stop or finalize them.
       try { service.stopAll(); } catch (_) { stopAllPageMedia(); }
-    });
-    window.addEventListener('beforeunload', (e) => {
-      if (!store.state.settings.recordingExitWarn || !recordings.size) return;
-      const msg = t('recordingExitWarnMessage');
-      e.preventDefault();
-      e.returnValue = msg;
-      return msg;
     });
 
     // 全局样式
@@ -6547,7 +7184,7 @@
     }
     installWheelInputGuard();
 
-    const recordings = new Map();
+    const recordings = UnifiedRecorder.recordings;
     const recordingLog = [];
     const pureExitChip = $('button', {
       class: 'pure-exit-chip',
@@ -6751,7 +7388,7 @@
       class: 'ctrl-btn primary',
       title: t('refreshAll') + ' · R',
       style: { cursor: 'pointer' },
-      onclick: () => service.refreshAll(),
+      onclick: refreshAllSources,
       html: trustedHtml(iconLabel('refresh', t('refreshAll'))),
     });
 
@@ -7268,6 +7905,7 @@
         if (g.name === '__library__') return t('groupLibrary');
         if (g.name === '__all__') return t('groupAll');
         if (g.name === '__online_favorites__') return t('groupOnlineFav');
+        if (g.name === '__online_following__') return t('groupOnlineFollowing');
         if (g.name === '__online__') return t('groupOnline');
         if (g.name === '__fav__') return t('groupFav');
         return g.name;
@@ -7281,17 +7919,17 @@
           dataset: { groupId: g.id },
           title: g.id === LIBRARY_GROUP_ID
             ? t('hintLibraryTab')
-            : (g.id === ONLINE_FAVORITES_GROUP_ID ? t('hintOnlineFavoritesTab') : t('hintGroupTab', groupDisplayName(g))),
+            : (g.id === ONLINE_FAVORITES_GROUP_ID ? t('hintOnlineFavoritesTab') : (g.id === ONLINE_FOLLOWING_GROUP_ID ? t('hintOnlineFollowingTab') : t('hintGroupTab', groupDisplayName(g)))),
           onclick: () => {
             grid.scrollTop = 0;
             store.setActiveGroup(g.id);
             if (phoneEnvironment || store.state.settings.viewMode === 'phone') store.patchSettings({ sidebarCollapsed: true });
           },
           oncontextmenu: (e) => { if (!g.system) { e.preventDefault(); openGroupMenu(e, g); } },
-          ondragover: (e) => { if (g.id === LIBRARY_GROUP_ID || g.id === ONLINE_GROUP_ID || g.id === ONLINE_FAVORITES_GROUP_ID) return; e.preventDefault(); tab.classList.add('drop-target'); },
+          ondragover: (e) => { if (g.id === LIBRARY_GROUP_ID || g.id === ONLINE_GROUP_ID || g.id === ONLINE_FAVORITES_GROUP_ID || g.id === ONLINE_FOLLOWING_GROUP_ID) return; e.preventDefault(); tab.classList.add('drop-target'); },
           ondragleave: () => tab.classList.remove('drop-target'),
           ondrop: (e) => {
-            if (g.id === LIBRARY_GROUP_ID || g.id === ONLINE_GROUP_ID || g.id === ONLINE_FAVORITES_GROUP_ID) return;
+            if (g.id === LIBRARY_GROUP_ID || g.id === ONLINE_GROUP_ID || g.id === ONLINE_FAVORITES_GROUP_ID || g.id === ONLINE_FOLLOWING_GROUP_ID) return;
             e.preventDefault(); tab.classList.remove('drop-target');
             const id = e.dataTransfer.getData('text/room-id');
             if (id) store.moveToGroup(id, g.id);
@@ -7314,7 +7952,7 @@
 
       const byId = new Map(store.state.groups.map(g => [g.id, g]));
       sidebar.append($('div', { class: 'sidebar-section-title' }, t('quickViewsHeading')));
-      [ONLINE_FAVORITES_GROUP_ID, ONLINE_GROUP_ID, LIBRARY_GROUP_ID].forEach(id => renderGroup(byId.get(id)));
+      [ONLINE_FOLLOWING_GROUP_ID, ONLINE_FAVORITES_GROUP_ID, ONLINE_GROUP_ID, LIBRARY_GROUP_ID].forEach(id => renderGroup(byId.get(id)));
 
       sidebar.append($('div', { class: 'sidebar-section-title sidebar-section-spaced' }, t('myGroupsHeading')));
       [DEFAULT_GROUP_ID, FAVORITE_GROUP_ID].forEach(id => renderGroup(byId.get(id)));
@@ -7348,6 +7986,7 @@
         [LIBRARY_GROUP_ID]: rooms.length,
         [ONLINE_GROUP_ID]: rooms.filter(r => r.lastStatus === 'online').length,
         [ONLINE_FAVORITES_GROUP_ID]: rooms.filter(r => roomInGroup(r, ONLINE_FAVORITES_GROUP_ID)).length,
+        [ONLINE_FOLLOWING_GROUP_ID]: rooms.filter(r => roomInGroup(r, ONLINE_FOLLOWING_GROUP_ID)).length,
       };
       for (const r of rooms) for (const g of getRoomGroups(r)) c[g] = (c[g] || 0) + 1;
       return c;
@@ -7374,8 +8013,7 @@
 
     function isRoomMediaProtected(roomId) {
       const room = findRoomAny(roomId);
-      return recordings.has(roomId)
-        || store.state.settings.focusedRoomId === roomId && store.state.settings.viewMode === 'focus'
+      return store.state.settings.focusedRoomId === roomId && store.state.settings.viewMode === 'focus'
         || store.state.settings.splitRoomIds.includes(roomId)
         || !!room && room.muted === false;
     }
@@ -7462,6 +8100,69 @@
       id = String(id || '');
       return store.state.rooms.find(r => r.id === id) || tempRooms.find(r => r.id === id) || null;
     }
+    let onlineFollowingSyncBusy = false;
+    let onlineFollowingLastSync = 0;
+
+    function parseOnlineFollowingDocument(html) {
+      const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+      const found = new Map();
+      doc.querySelectorAll('a[href]').forEach(anchor => {
+        let url;
+        try { url = new URL(anchor.getAttribute('href'), location.origin); } catch (_) { return; }
+        if (!safeChaturbateHost(url.hostname)) return;
+        const match = url.pathname.match(/^\/([A-Za-z0-9_-]+)\/?$/);
+        const id = normalizeUsername(match?.[1] || '');
+        if (!isLikelyUsername(id)) return;
+        const card = anchor.closest('li,article,[class*="room"],[class*="Room"],[class*="card"],[class*="Card"]');
+        if (!anchor.querySelector('img,video') && !card?.querySelector('img,video')) return;
+        const statusText = `${anchor.textContent || ''} ${card?.textContent || ''}`.toLowerCase();
+        const protectedRoom = /\b(?:in private|private|hidden|secret|group|password)\b/.test(statusText);
+        const previous = found.get(id);
+        found.set(id, { id, lastStatus: protectedRoom || previous?.lastStatus === 'private' ? 'private' : 'online' });
+      });
+      return [...found.values()].sort((a, b) => a.id.localeCompare(b.id));
+    }
+
+    function syncOnlineFollowingQualityCaps() {
+      const active = store.state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID;
+      tempRooms.filter(room => room.onlineFollowing).forEach(room => service.setQualityCap(room.id, active ? 480 : 0));
+    }
+
+    async function syncOnlineFollowing(force = false) {
+      if (onlineFollowingSyncBusy) return;
+      if (!force && Date.now() - onlineFollowingLastSync < 45000) return;
+      onlineFollowingSyncBusy = true;
+      try {
+        const response = await fetch(`${location.origin}/followed-cams/`, { credentials: 'include', cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const followed = parseOnlineFollowingDocument(await response.text());
+        const ids = followed.map(item => item.id);
+        const oldIds = new Set(tempRooms.filter(room => room.onlineFollowing).map(room => room.id));
+        for (let index = tempRooms.length - 1; index >= 0; index--) {
+          if (tempRooms[index]?.onlineFollowing) tempRooms.splice(index, 1);
+        }
+        followed.forEach((item, order) => tempRooms.push({
+          id: item.id, displayName: item.id, temporary: true, onlineFollowing: true,
+          lastStatus: item.lastStatus, privateLabel: item.lastStatus === 'private' ? 'Private' : '', addedAt: Date.now(), lastSeenOnline: Date.now(), order,
+          groups: [], groupOrder: {}, muted: true,
+        }));
+        const nextIds = new Set(ids);
+        oldIds.forEach(id => { if (!nextIds.has(id)) { service.setQualityCap(id, 0); service.stop(id); } });
+        onlineFollowingLastSync = Date.now();
+        syncOnlineFollowingQualityCaps();
+        scheduleSidebarRender();
+        if (store.state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID) scheduleGridRender();
+      } catch (error) {
+        console.warn('[RoomGrid] Online Following sync failed', error);
+      } finally {
+        onlineFollowingSyncBusy = false;
+      }
+    }
+
+    function refreshAllSources() {
+      service.refreshAll();
+      syncOnlineFollowing(true);
+    }
     function isDirectMediaUrl(url) { return /\.(m3u8|mp4|webm|mov|m4v)(?:[?#].*)?$/i.test(String(url || '')); }
     function isHlsUrl(url) { return /\.m3u8(?:[?#].*)?$/i.test(String(url || '')) || /m3u8/i.test(String(url || '')); }
     function tempIdFromUrl(url) {
@@ -7501,7 +8202,7 @@
             const username = normalizeUsername(part);
             if (username && isLikelyUsername(username)) {
               const activeGroup = store.state.settings.activeGroup;
-              const groupId = (!activeGroup || activeGroup === LIBRARY_GROUP_ID || activeGroup === ONLINE_GROUP_ID || activeGroup === ONLINE_FAVORITES_GROUP_ID) ? DEFAULT_GROUP_ID : activeGroup;
+              const groupId = (!activeGroup || activeGroup === LIBRARY_GROUP_ID || activeGroup === ONLINE_GROUP_ID || activeGroup === ONLINE_FAVORITES_GROUP_ID || activeGroup === ONLINE_FOLLOWING_GROUP_ID) ? DEFAULT_GROUP_ID : activeGroup;
               if (!findRoomAny(username)) tempRooms.push({ id: username, group: groupId, groups: [groupId], addedAt: Date.now(), order: 100000 + tempRooms.length, lastStatus: 'unknown', lastSeenOnline: 0, muted: false, temporary: true });
               service.start(username);
               added++;
@@ -7515,7 +8216,7 @@
           if (!mediaUrl) { failed++; continue; }
           const id = tempIdFromUrl(mediaUrl);
           const activeGroup = store.state.settings.activeGroup;
-          const groupId = (!activeGroup || activeGroup === LIBRARY_GROUP_ID || activeGroup === ONLINE_GROUP_ID || activeGroup === ONLINE_FAVORITES_GROUP_ID) ? DEFAULT_GROUP_ID : activeGroup;
+          const groupId = (!activeGroup || activeGroup === LIBRARY_GROUP_ID || activeGroup === ONLINE_GROUP_ID || activeGroup === ONLINE_FAVORITES_GROUP_ID || activeGroup === ONLINE_FOLLOWING_GROUP_ID) ? DEFAULT_GROUP_ID : activeGroup;
           tempRooms.push({ id, displayName: new URL(mediaUrl).hostname, sourceUrl: mediaUrl, group: groupId, groups: [groupId], addedAt: Date.now(), order: 100000 + tempRooms.length, lastStatus: 'online', lastSeenOnline: Date.now(), muted: false, temporary: true });
           added++;
         } catch (_) { failed++; }
@@ -7639,7 +8340,11 @@
           target: '_blank',
           rel: 'noopener noreferrer',
           title: t('opOpenRoom'),
-          onclick: (event) => event.stopPropagation(),
+          onclick: (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            openBackgroundTab(event.currentTarget.href);
+          },
         } : {}),
       }, room.displayName || room.id);
       const infoMeta = $('div', { class: 'cam-info-meta' }, statusMeta(room.lastStatus).label);
@@ -7785,14 +8490,15 @@
         setElementHint(c.removeBtn, (store.state.settings.activeGroup === LIBRARY_GROUP_ID || store.state.settings.activeGroup === ONLINE_GROUP_ID) ? t('opDeleteRoom') : (store.state.settings.activeGroup === ONLINE_FAVORITES_GROUP_ID ? t('opFavoriteRemove') : t('opRemove')));
       }
       const rec = recordings.get(id);
+      const recWaiting = !!rec && !['recording', 'finalizing', 'complete', 'saved'].includes(rec.status);
       if (c.recordBtn) {
         setTrustedHtml(c.recordBtn, trustedHtml(iconSvg(rec ? 'stop' : 'record', 15)));
-        setElementHint(c.recordBtn, rec?.waitingForSource ? t('recordingWaiting') : (rec ? t('opRecordStop') : t('opRecordStart')));
+        setElementHint(c.recordBtn, recWaiting ? t('recordingWaiting') : (rec ? t('opRecordStop') : t('opRecordStart')));
         c.recordBtn.classList.toggle('recording', !!rec);
-        c.recordBtn.classList.toggle('waiting', !!rec?.waitingForSource);
+        c.recordBtn.classList.toggle('waiting', recWaiting);
       }
       c.root.classList.toggle('recording', !!rec);
-      c.root.classList.toggle('recording-waiting', !!rec?.waitingForSource);
+      c.root.classList.toggle('recording-waiting', recWaiting);
     }
 
     function captureCardScreenshot(roomId) {
@@ -7816,259 +8522,39 @@
       }
     }
 
-    function getVideoCaptureStream(video) {
-      if (!video) return null;
-      if (typeof video.captureStream === 'function') return video.captureStream();
-      if (typeof video.mozCaptureStream === 'function') return video.mozCaptureStream();
-      return null;
-    }
-
-    function recordingSegmentMs() {
-      return clampInt(store.state.settings.recordingSegmentMinutes, 1, 180, 10) * 60 * 1000;
-    }
-
-    function recordingVideoBitrate() {
-      return clampInt(store.state.settings.recordingVideoBitrate, 500000, 20000000, 6000000);
-    }
-
-    function recordingMimeType() {
-      if (typeof MediaRecorder === 'undefined') return '';
-      const mimes = ['video/mp4;codecs=h264,aac', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
-      return mimes.find(m => { try { return MediaRecorder.isTypeSupported(m); } catch (_) { return false; } }) || '';
-    }
-
-    function recordingFileExt(mimeType) {
-      return String(mimeType || '').includes('mp4') ? 'mp4' : 'webm';
-    }
-
-    function recordingReasonSuffix(reason) {
-      if (reason === 'source-loss') return '-source-paused';
-      if (reason === 'manual' || reason === 'final') return '-final';
-      return '';
-    }
-
-    function getRecordingVideo(roomId) {
-      const c = cardMap.get(roomId);
-      if (c?.video) return c.video;
-      try {
-        return document.querySelector(`video[data-multicam-room-id="${String(roomId).replace(/"/g, '')}"]`);
-      } catch (_) {
-        return null;
-      }
-    }
-
-    function createRecordingStream(video) {
-      const source = getVideoCaptureStream(video);
-      if (!source) return null;
-      const videoTracks = source.getVideoTracks().filter(track => track.readyState === 'live');
-      const audioTracks = source.getAudioTracks().filter(track => track.readyState === 'live');
-      if (!videoTracks.length || typeof MediaRecorder === 'undefined') {
-        try { source.getTracks().forEach(track => track.stop()); } catch (_) {}
-        return null;
-      }
-      return new MediaStream([...videoTracks, ...audioTracks]);
-    }
-
-    function cleanupRecordingStream(rec) {
-      try { rec.stream?.getTracks?.().forEach(track => track.stop()); } catch (_) {}
-      rec.stream = null;
-    }
-
-    function saveRecordingSegment(roomId, rec, reason = 'segment') {
-      const chunks = Array.isArray(rec?.chunks) ? rec.chunks.filter(chunk => chunk && chunk.size) : [];
-      if (!chunks.length) return false;
-      const mimeType = rec.mimeType || 'video/webm';
-      const blob = new Blob(chunks, { type: mimeType });
-      const part = String(rec.segmentIndex || 1).padStart(3, '0');
-      const ext = recordingFileExt(mimeType);
-      downloadBlob(blob, `roomgrid-${safeFilePart(roomId)}-${stampForFile()}-part${part}${recordingReasonSuffix(reason)}.${ext}`);
-      rec.savedSegments = (Number(rec.savedSegments) || 0) + 1;
-      rec.savedBytes = (Number(rec.savedBytes) || 0) + blob.size;
-      rec.lastSavedAt = Date.now();
-      recordingLog.unshift({ roomId, reason, ts: Date.now(), size: blob.size, part, ext });
-      recordingLog.splice(80);
-      return true;
-    }
-
-    function finishCurrentRecordingSegment(roomId, rec, reason) {
-      if (!rec || rec.stopping) return;
-      try { clearTimeout(rec.timer); } catch (_) {}
-      rec.timer = null;
-      rec.stopReason = reason;
-      const recorder = rec.recorder;
-      if (recorder && recorder.state !== 'inactive') {
-        rec.stopping = true;
-        try { recorder.requestData?.(); } catch (_) {}
-        try { recorder.stop(); } catch (_) { handleRecorderStop(roomId, rec); }
-      } else {
-        handleRecorderStop(roomId, rec);
-      }
-    }
-
-    function handleRecorderStop(roomId, rec) {
-      if (!rec) return;
-      const reason = rec.stopReason || (rec.manualStop ? 'manual' : 'segment');
-      try { clearTimeout(rec.timer); } catch (_) {}
-      rec.timer = null;
-      rec.stopping = false;
-      const hadData = saveRecordingSegment(roomId, rec, reason);
-      cleanupRecordingStream(rec);
-      rec.recorder = null;
-      rec.chunks = [];
-
-      if (recordings.get(roomId) !== rec) return;
-
-      if (rec.manualStop || reason === 'final' || reason === 'manual') {
-        recordings.delete(roomId);
-        setRecordingIntent(roomId, false);
-        updateCardButtons(roomId);
-        if (!rec.silentStop) toast(hadData ? t('recordingFinalSaved') : t('recordingNoData'));
-        return;
-      }
-
-      if (reason === 'source-loss') {
-        rec.waitingForSource = true;
-        updateCardButtons(roomId);
-        if (!rec.sourceLossToastShown && !rec.silentStop) {
-          rec.sourceLossToastShown = true;
-          toast(t('recordingPausedSource'));
-        }
-        return;
-      }
-
-      if (reason === 'segment') {
-        if (hadData && !rec.silentStop) toast(t('recordingSegmentSaved'));
-        if (!startRecordingSegment(roomId, rec)) {
-          rec.waitingForSource = true;
-          updateCardButtons(roomId);
-          if (!rec.sourceLossToastShown && !rec.silentStop) {
-            rec.sourceLossToastShown = true;
-            toast(t('recordingPausedSource'));
-          }
-        }
-      }
-    }
-
-    function startRecordingSegment(roomId, rec) {
-      const video = getRecordingVideo(roomId);
-      const stream = createRecordingStream(video);
-      if (!stream) return false;
-
-      const mimeType = recordingMimeType();
-      const options = { videoBitsPerSecond: recordingVideoBitrate() };
-      if (mimeType) options.mimeType = mimeType;
-
-      let recorder;
-      try {
-        recorder = new MediaRecorder(stream, options);
-      } catch (_) {
-        try { stream.getTracks().forEach(track => track.stop()); } catch (e) {}
-        return false;
-      }
-
-      rec.roomId = roomId;
-      rec.stream = stream;
-      rec.recorder = recorder;
-      rec.mimeType = mimeType || 'video/webm';
-      rec.chunks = [];
-      rec.startedAt = Date.now();
-      rec.segmentIndex = (Number(rec.segmentIndex) || 0) + 1;
-      rec.waitingForSource = false;
-      rec.sourceLossToastShown = false;
-      rec.manualStop = false;
-      rec.silentStop = false;
-      rec.stopReason = '';
-
-      recorder.ondataavailable = ev => { if (ev.data && ev.data.size) rec.chunks.push(ev.data); };
-      recorder.onstop = () => handleRecorderStop(roomId, rec);
-
-      try {
-        recorder.start(1000);
-      } catch (_) {
-        cleanupRecordingStream(rec);
-        rec.recorder = null;
-        rec.chunks = [];
-        return false;
-      }
-
-      rec.timer = setTimeout(() => {
-        const current = recordings.get(roomId);
-        if (current === rec && !rec.manualStop && !rec.waitingForSource) {
-          finishCurrentRecordingSegment(roomId, rec, 'segment');
-        }
-      }, recordingSegmentMs());
-      updateCardButtons(roomId);
-      return true;
-    }
-
     function startCardRecording(roomId, options = {}) {
-      if (recordings.has(roomId)) return;
+      roomId = normalizeUsername(roomId);
+      if (UnifiedRecorder.has(roomId)) return;
       const opts = options && typeof options === 'object' ? options : {};
       if (!opts.skipConfirm && !confirm(t('recordingConsent'))) return;
-      const rec = { roomId, segmentIndex: 0, chunks: [] };
-      recordings.set(roomId, rec);
-      if (!startRecordingSegment(roomId, rec)) {
-        if (opts.waitForSource) {
-          rec.waitingForSource = true;
-          rec.sourceLossToastShown = true;
-          rec.startedAt = Date.now();
-          setRecordingIntent(roomId, true);
-          updateCardButtons(roomId);
-          return;
-        }
-        recordings.delete(roomId);
-        updateCardButtons(roomId);
-        toast(t('recordingUnsupported'));
-        return;
-      }
-      setRecordingIntent(roomId, true);
-      toast(t('recordingStarted'));
+      if (!UnifiedRecorder.start(roomId)) { toast(t('recordingUnsupported')); return; }
+      updateCardButtons(roomId);
+      toast(t('dockRecordQueued'));
     }
 
     function pauseRecordingForSourceLoss(roomId, opts = {}) {
-      const rec = recordings.get(roomId);
-      if (!rec || rec.manualStop) return false;
-      if (rec.waitingForSource && !rec.recorder) return false;
-      rec.waitingForSource = true;
-      rec.silentStop = !!opts.silent;
-      finishCurrentRecordingSegment(roomId, rec, 'source-loss');
-      updateCardButtons(roomId);
-      return true;
+      // Status handling belongs to the Recorder Hub so all launch surfaces obey
+      // the same private/offline/reconnect policy.
+      return UnifiedRecorder.has(roomId);
     }
 
     function resumeWaitingRecording(roomId) {
-      const rec = recordings.get(roomId);
-      if (!rec || !rec.waitingForSource || rec.manualStop || rec.recorder) return false;
-      if (!startRecordingSegment(roomId, rec)) return false;
-      toast(t('recordingResumed'));
-      return true;
+      return UnifiedRecorder.has(roomId);
     }
 
     function stopCardRecording(roomId, options = false) {
-      const rec = recordings.get(roomId);
-      if (!rec) return;
-      const opts = typeof options === 'boolean' ? { silent: options, final: true } : (options || {});
-      rec.manualStop = true;
-      rec.waitingForSource = false;
-      rec.silentStop = !!opts.silent;
-      if (rec.recorder) {
-        finishCurrentRecordingSegment(roomId, rec, opts.final === false ? 'manual' : 'final');
-      } else {
-        cleanupRecordingStream(rec);
-        recordings.delete(roomId);
-        setRecordingIntent(roomId, false);
-        updateCardButtons(roomId);
-        if (!rec.silentStop) toast(t('recordingNoData'));
-      }
+      if (!UnifiedRecorder.has(roomId)) return;
+      UnifiedRecorder.stop(roomId);
+      updateCardButtons(roomId);
     }
 
     function toggleCardRecording(roomId) {
-      if (recordings.has(roomId)) stopCardRecording(roomId);
+      if (UnifiedRecorder.has(roomId)) stopCardRecording(roomId);
       else startCardRecording(roomId);
     }
 
     function stopAllRecordings(options = {}) {
-      [...recordings.keys()].forEach(id => stopCardRecording(id, options));
+      UnifiedRecorder.stopAll();
     }
 
     function openRecordingSettings() {
@@ -8459,36 +8945,20 @@
 
     function queueRecordingIntent(roomId) {
       roomId = normalizeUsername(roomId);
-      if (!roomId || recordings.has(roomId)) return;
-      recordings.set(roomId, {
-        roomId,
-        segmentIndex: 0,
-        chunks: [],
-        waitingForSource: true,
-        sourceLossToastShown: true,
-        startedAt: Date.now(),
-      });
-      setRecordingIntent(roomId, true);
+      if (!roomId || UnifiedRecorder.has(roomId)) return;
+      UnifiedRecorder.start(roomId);
       updateCardButtons(roomId);
-      if (findRoomAny(roomId)?.lastStatus === 'online') resumeWaitingRecording(roomId);
-      else if (service.has(roomId)) service.refresh(roomId);
-      else service.start(roomId);
     }
 
     function checkRecordingIntentRecovery() {
-      const ids = loadRecordingIntents().filter(id => findRoomAny(id));
-      if (!ids.length) return;
-      if (!confirm(t('recordingRecoverPrompt', ids.length))) {
-        saveRecordingIntents([]);
-        return;
-      }
-      ids.forEach(queueRecordingIntent);
+      UnifiedRecorder.loadSnapshot();
       renderGrid();
     }
 
     function renderRecordingCenterBody(body) {
       body.replaceChildren();
       const actions = $('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' } }, [
+        $('button', { class: 'ctrl-btn primary', onclick: () => UnifiedRecorder.openHub(true) }, t('recorderOpenHub')),
         $('button', { class: 'ctrl-btn primary', onclick: recordCurrentPage }, t('recordCurrentPage')),
         $('button', { class: 'ctrl-btn', onclick: recordCurrentGroup }, t('recordCurrentGroup')),
         $('button', { class: 'ctrl-btn', onclick: recordOnlineRooms }, t('recordOnlineRooms')),
@@ -8503,13 +8973,13 @@
       } else {
         const table = $('div', { style: { display: 'grid', gap: '8px' } });
         rows.forEach(([id, rec]) => {
-          const status = rec.waitingForSource ? t('recordingWaitingShort') : t('recordingActive');
-          const duration = rec.startedAt ? fmtDuration(Date.now() - rec.startedAt) : '0:00';
+          const status = rec.status === 'recording' ? t('recordingActive') : (rec.status === 'finalizing' ? `${t('recorderFinalizing')} ${Math.round(rec.finalizingProgress || 0)}%` : (rec.status || t('recordingWaitingShort')));
+          const duration = fmtDuration(rec.recordedMs || 0);
           table.appendChild($('div', { style: { border: '1px solid var(--border)', borderRadius: '8px', padding: '10px', display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px', alignItems: 'center' } }, [
             $('div', {}, [
               $('div', { style: { fontWeight: '750' } }, id),
               $('div', { style: { fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' } },
-                `${status} · ${t('recordingDuration')}: ${duration} · ${t('recordingSavedSegments')}: ${Number(rec.savedSegments) || 0} · ${t('recordingBitrate')}: ${(recordingVideoBitrate() / 1000000).toFixed(1)} Mbps`),
+                `${status} · ${t('recordingDuration')}: ${duration} · ${rec.resolution || '—'} · ${rec.audio ? t('recorderAudioOn') : t('recorderAudioOff')} · ${fmtBytes(rec.bytes)}`),
             ]),
             $('button', { class: 'ctrl-btn danger', onclick: () => stopCardRecording(id) }, t('opRecordStop')),
           ]));
@@ -8533,28 +9003,13 @@
     }
 
     function openRecordingSettingsPanel() {
-      const curMinutes = clampInt(store.state.settings.recordingSegmentMinutes, 1, 180, 10);
-      const curMbps = Math.round(recordingVideoBitrate() / 100000) / 10;
       openToolPanel(t('recordingSettingsTitle'), (body, close) => {
-        const minutesInput = $('input', { class: 'ctrl-input', type: 'number', min: '1', max: '180', value: String(curMinutes), style: { width: '100%' } });
-        const bitrateInput = $('input', { class: 'ctrl-input', type: 'number', min: '0.5', max: '20', step: '0.5', value: String(curMbps), style: { width: '100%' } });
-        const exitWarn = $('input', { type: 'checkbox', checked: store.state.settings.recordingExitWarn !== false });
         body.append(
-          $('div', { class: 'roomgrid-modal-hint' }, t('recordingFormatHint')),
-          $('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' } }, [
-            $('label', { style: { display: 'grid', gap: '5px', fontSize: '12px', color: 'var(--text-muted)' } }, [t('recordingSegmentPrompt'), minutesInput]),
-            $('label', { style: { display: 'grid', gap: '5px', fontSize: '12px', color: 'var(--text-muted)' } }, [t('recordingBitratePrompt'), bitrateInput]),
-          ]),
-          $('label', { class: 'toggle', style: { marginTop: '10px' } }, [exitWarn, t('recordingExitWarnToggle')]),
+          $('div', { class: 'roomgrid-modal-hint' }, t('recorderQualityPolicy')),
+          $('div', { class: 'roomgrid-modal-hint', style: { marginTop: '10px' } }, t('recorderHubSubtitle')),
           $('div', { class: 'roomgrid-modal-actions' }, [
-            $('button', { class: 'ctrl-btn', onclick: close }, t('importReviewCancel')),
-            $('button', { class: 'ctrl-btn primary', onclick: () => {
-              const minutes = clampInt(minutesInput.value, 1, 180, curMinutes);
-              const bitrate = clampInt(Number(bitrateInput.value) * 1000000, 500000, 20000000, recordingVideoBitrate());
-              store.patchSettings({ recordingSegmentMinutes: minutes, recordingVideoBitrate: bitrate, recordingExitWarn: !!exitWarn.checked });
-              toast(t('recordingSettingsSaved'));
-              close();
-            } }, t('saveSettings')),
+            $('button', { class: 'ctrl-btn primary', onclick: () => UnifiedRecorder.openHub(true) }, t('recorderOpenHub')),
+            $('button', { class: 'ctrl-btn', onclick: close }, t('aboutClose')),
           ]),
         );
       });
@@ -8619,6 +9074,7 @@
           if (group.name === '__library__') return t('groupLibrary');
           if (group.name === '__all__') return t('groupAll');
           if (group.name === '__online_favorites__') return t('groupOnlineFav');
+          if (group.name === '__online_following__') return t('groupOnlineFollowing');
           if (group.name === '__online__') return t('groupOnline');
           if (group.name === '__fav__') return t('groupFav');
           return group.name;
@@ -8852,7 +9308,7 @@
         const id = tempIdFromUrl(item.url);
         if (findRoomAny(id)) return;
         const activeGroup = store.state.settings.activeGroup;
-        const groupId = (!activeGroup || activeGroup === LIBRARY_GROUP_ID || activeGroup === ONLINE_GROUP_ID || activeGroup === ONLINE_FAVORITES_GROUP_ID) ? DEFAULT_GROUP_ID : activeGroup;
+        const groupId = (!activeGroup || activeGroup === LIBRARY_GROUP_ID || activeGroup === ONLINE_GROUP_ID || activeGroup === ONLINE_FAVORITES_GROUP_ID || activeGroup === ONLINE_FOLLOWING_GROUP_ID) ? DEFAULT_GROUP_ID : activeGroup;
         tempRooms.push({ id, displayName: item.name || new URL(item.url).hostname, sourceUrl: item.url, group: groupId, groups: [groupId], addedAt: Date.now(), order: 100000 + tempRooms.length, lastStatus: 'online', lastSeenOnline: Date.now(), muted: false, temporary: true });
       });
     }
@@ -8985,7 +9441,7 @@
       const ag = store.state.settings.activeGroup || DEFAULT_GROUP_ID;
       const targetGroup = ag === ONLINE_FAVORITES_GROUP_ID
         ? FAVORITE_GROUP_ID
-        : ((ag === LIBRARY_GROUP_ID || ag === ONLINE_GROUP_ID) ? undefined : ag);
+        : ((ag === LIBRARY_GROUP_ID || ag === ONLINE_GROUP_ID || ag === ONLINE_FOLLOWING_GROUP_ID) ? undefined : ag);
       const manualRooms = (ag === LIBRARY_GROUP_ID ? [...store.state.rooms] : store.state.rooms.filter(r => roomInGroup(r, ag)))
         .sort((a, b) => roomOrderInGroup(a, ag) - roomOrderInGroup(b, ag) || a.id.localeCompare(b.id));
       const manualIds = manualRooms.map(r => r.id);
@@ -9026,13 +9482,14 @@
         if (g.name === '__library__') return t('groupLibrary');
         if (g.name === '__all__') return t('groupAll');
         if (g.name === '__online_favorites__') return t('groupOnlineFav');
+        if (g.name === '__online_following__') return t('groupOnlineFollowing');
         if (g.name === '__online__') return t('groupOnline');
         if (g.name === '__fav__') return t('groupFav');
         return g.name;
       };
       const menu = $('div', { class: 'menu-pop',
         style: { left: e.clientX + 'px', top: e.clientY + 'px' } });
-      groups.filter(g => g.id !== LIBRARY_GROUP_ID && g.id !== ONLINE_GROUP_ID && g.id !== ONLINE_FAVORITES_GROUP_ID).forEach(g => {
+      groups.filter(g => g.id !== LIBRARY_GROUP_ID && g.id !== ONLINE_GROUP_ID && g.id !== ONLINE_FAVORITES_GROUP_ID && g.id !== ONLINE_FOLLOWING_GROUP_ID).forEach(g => {
         const inGroup = roomInGroup(r, g.id);
         const label = (inGroup ? ' ' : ' ') + groupDisplayName(g);
         menu.appendChild($('button', {
@@ -9367,6 +9824,10 @@
       if (f.hidePrivate) list = list.filter(r => r.lastStatus !== 'private');
       if (f.onlyOnline) list = list.filter(r => r.lastStatus === 'online');
       if (s.settings.showRecordingOnly) list = list.filter(r => recordings.has(r.id));
+      if (ag === ONLINE_FOLLOWING_GROUP_ID) {
+        list.sort((a, b) => a.id.localeCompare(b.id));
+        return list;
+      }
       const sb = s.settings.sortBy;
       if (sb === 'manual') list.sort((a, b) => roomOrderInGroup(a, ag) - roomOrderInGroup(b, ag));
       else if (sb === 'name') list.sort((a, b) => a.id.localeCompare(b.id));
@@ -10186,6 +10647,10 @@
         syncShellControls();
         applyPureModeState();
         if (hasSetting('maxStreamHeight')) service.refreshQuality();
+        if (hasSetting('activeGroup')) {
+          syncOnlineFollowingQualityCaps();
+          if (state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID) syncOnlineFollowing();
+        }
         if (hasSetting('videoTransforms')) applyAllVideoTransforms();
         if (needsGrid || hasSetting('toolbarCollapsed', 'sidebarCollapsed', 'pureMode')) scheduleFocusSizing();
       }
@@ -10195,7 +10660,7 @@
         if (r) renderCardState(r);
         scheduleSidebarRender();
         // 状态排序时，单卡状态变化也要重排
-        if (state.settings.splitViewActive || state.settings.activeGroup === ONLINE_GROUP_ID || state.settings.activeGroup === ONLINE_FAVORITES_GROUP_ID || state.settings.sortBy === 'status' || state.settings.filter?.hideOffline || state.settings.filter?.hidePrivate || state.settings.filter?.onlyOnline) scheduleGridRender();
+        if (state.settings.splitViewActive || state.settings.activeGroup === ONLINE_GROUP_ID || state.settings.activeGroup === ONLINE_FAVORITES_GROUP_ID || state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID || state.settings.sortBy === 'status' || state.settings.filter?.hideOffline || state.settings.filter?.hidePrivate || state.settings.filter?.onlyOnline) scheduleGridRender();
       }
     });
 
@@ -10215,6 +10680,16 @@
       const r = findRoomAny(id);
       if (r) renderCardState(r);
       requestAnimationFrame(applyFocusMainSizing);
+    });
+    EventBus.on('room:status', ({ id, status, extra }) => {
+      const room = tempRooms.find(item => item.id === id && item.onlineFollowing);
+      if (!room) return;
+      room.lastStatus = status || room.lastStatus;
+      if (status === 'online') room.lastSeenOnline = Date.now();
+      if (status === 'private') room.privateLabel = String(extra?.label || room.privateLabel || 'Private');
+      renderCardState(room);
+      scheduleSidebarRender();
+      if (store.state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID) scheduleGridRender();
     });
     EventBus.on('room:flash', (id) => {
       const c = cardMap.get(id);
@@ -10300,7 +10775,7 @@
       if (shortcutMatches(e, 'focusThumbs')) { e.preventDefault(); toggleFocusThumbs(); return; }
       if (e.key === 'Escape' && store.state.settings.pureMode) { e.preventDefault(); setPureMode(false); return; }
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-      if (shortcutMatches(e, 'refreshAll')) { e.preventDefault(); service.refreshAll(); return; }
+      if (shortcutMatches(e, 'refreshAll')) { e.preventDefault(); refreshAllSources(); return; }
       if (shortcutMatches(e, 'focusAdd')) { e.preventDefault(); tbInput.focus(); return; }
       if (shortcutMatches(e, 'recordingCenter')) { e.preventDefault(); openRecordingCenter(); return; }
       if (shortcutMatches(e, 'recordPage')) { e.preventDefault(); recordCurrentPage(); return; }
@@ -10333,6 +10808,11 @@
     renderGrid();
     applyPureModeState();
     for (const r of store.state.rooms) service.start(r.id);
+    syncOnlineFollowing(true);
+    UnifiedRecorder.subscribe(() => {
+      cardMap.forEach((_, id) => updateCardButtons(id));
+      if (store.state.settings.showRecordingOnly) scheduleGridRender();
+    });
     setTimeout(checkRecordingIntentRecovery, 1200);
 
     // 兜底：定期检查 sessions 与 rooms 是否一致（防止某些边缘 case 数据漂移）
@@ -10340,6 +10820,7 @@
       for (const r of store.state.rooms) {
         if (!service.has(r.id)) service.start(r.id);
       }
+      syncOnlineFollowing();
     }, 60000);
 
     // 调试入口默认不暴露到页面；需要时先在控制台设置 localStorage.ryujo_multicam_debug = '1' 后刷新。
@@ -10361,7 +10842,7 @@
     'use strict';
 
     // Integrated Reloaded 1.8.0: keep it off the standalone MultiCam workstation and prevent duplicate startup.
-    if (new URLSearchParams(location.search).get('multicam_mode') === '1') { return; }
+    if (new URLSearchParams(location.search).get('multicam_mode') === '1' || new URLSearchParams(location.search).get('multicam_recorder') === '1') { return; }
     var reloadedPath = String(location.pathname || '');
     if (location.hostname === 'secure.chaturbate.com' || /^\/(?:security|auth|apps|api|b|fullvideo)(?:\/|$)/.test(reloadedPath) || /^\/accounts\/followers(?:\/|$)/.test(reloadedPath)) { return; }
     if (window.__chaturbateReloadedIntegratedRunning) { return; }
@@ -10483,38 +10964,6 @@
     var restarts=0;
     var pimg = new Image();
     var recording=false;
-    var recpause=false;
-    var mediaRecorder;
-    var recordedBlobs=[];
-    var blob = new Blob([]);
-    var url = URL.createObjectURL(blob);
-    var recname="";
-    var stoppressed=false;
-    var timerrecstop=false;
-    var savetime=20;
-    var rectime=0;
-    var recparts=1;
-    var recTimeoutID=0;
-    var zeroData=0;
-    var recwait=false;
-    var prectime=0;
-    var bitrate=2500000;
-    var mimeTypes=['video/mp4; codecs="avc3.64001F, mp4a.40.2"',
-                   'video/mp4; codecs="vp9, opus"',
-                   'video/webm',
-                   'video/webm'];
-    var extentions=['.mp4',
-                    '.mp4',
-                    '.webm',
-                    '.webm'];
-    var vidcontainers=['video/mp4',
-                       'video/mp4',
-                       'video/webm',
-                       'video/webm'];
-    var mimeType=0;
-    for(mimeType=0;mimeType < mimeTypes.length-1;mimeType++) {
-        if (MediaRecorder.isTypeSupported(mimeTypes[mimeType])){break;}
-    }
     var c1=0;
     var c2=0;
     var c3=0;
@@ -10974,6 +11423,14 @@
         makeRow(workspace,'suiteopenworkshop','Open Workshop',function(){dispatchSuite('ziggy-suite:open-workshop');},{icon:'▦',primary:true});
         makeRow(workspace,'suiteroomgrid','RoomGrid',function(){dispatchSuite('ziggy-suite:toggle-roomgrid',{tab:'multicam'});},{icon:'⊞'});
         makeRow(workspace,'suitecamarna','Cam ARNA',function(){dispatchSuite('ziggy-suite:toggle-roomgrid',{tab:'arna'});},{icon:'⌕'});
+        var recorderRow=makeRow(workspace,'suiterecorderhub','Recorder Hub',function(){window.__ziggyUnifiedRecorder?.openHub?.(true);},{icon:'●'});
+        function syncRecorderRow(){
+            var count=window.__ziggyUnifiedRecorder?.recordings?.size||0;
+            var label=recorderRow.querySelector('.suite-menu-row-label');
+            if(label) label.textContent='Recorder Hub'+(count?' · '+count+' active':'');
+        }
+        window.__ziggyUnifiedRecorder?.subscribe?.(syncRecorderRow);
+        syncRecorderRow();
 
         var tools=makeSection('Tools');
         var reloaded=makeRow(tools,'reloadedtoolsbutton','Reloaded Tools',toggleReloadedToolsFromMenu,{icon:'⚙'});
@@ -11002,8 +11459,6 @@
         makeSwitch(preferences,'h6','a6','Big thumbnails',0,bigthumb,false);
         makeSwitch(preferences,'h5','a5','Hide male/trans',0,hidemt,false);
         makeSwitch(preferences,'h9','a9','480px snapshots',0,smallsnap,false);
-        makeSwitch(preferences,'h7','a7','Auto-save recordings every 20 min',1,recautosave,false);
-        makeSwitch(preferences,'h8','a8','Use VP9 recording codec',0,recvp9,mimeType!==0);
 
         var data=makeSection('Data');
         makeRow(data,'suiteexport','Export all to GitHub',function(){window.__chaturbateSuiteSettings?.exportSettings?.();},{icon:'↑'});
@@ -11131,19 +11586,6 @@
         newelem.innerHTML="480px snapshots : <input type='range' id='a9' min=0 max=1 value=0 style='width: 40px;height:11px;cursor: pointer;float: right;accent-color: #f47321;'>";
         document.getElementById("scriptcontrols").appendChild(newelem);
 
-        newelem=document.createElement('span');
-        newelem.id="h7";
-        newelem.innerHTML="Auto save recordings every 20 mins: <input type='range' id='a7' min=0 max=1 value=1 style='width: 40px;height:11px;cursor: pointer;float: right;accent-color: #f47321;'>";
-        document.getElementById("scriptcontrols").appendChild(newelem);
-
-        newelem=document.createElement('span');
-        newelem.id="h8";
-        newelem.style.display="none";
-        if (mimeType==0){
-            newelem.style.display="block";
-        }
-        newelem.innerHTML="Use vp9 video codec for recording: <input type='range' id='a8' min=0 max=1 value=0 style='width: 40px;height:11px;cursor: pointer;float: right;accent-color: #f47321;'>";
-        document.getElementById("scriptcontrols").appendChild(newelem);
         if(login){
         newelem=document.createElement('span');
         newelem.id="saved";
@@ -11181,8 +11623,6 @@
         document.getElementById("a4").addEventListener("change",refreshoff);
         document.getElementById("a5").addEventListener("change",hidemt);
         document.getElementById("a6").addEventListener("change",bigthumb);
-        document.getElementById("a7").addEventListener("change",recautosave);
-        document.getElementById("a8").addEventListener("change",recvp9);
         document.getElementById("a9").addEventListener("change",smallsnap);
         setsw();
     }
@@ -11192,16 +11632,6 @@
             document.getElementById("a9").value=1;
         }else{
             document.getElementById("a9").value=0;
-        }
-        if (localStorage.getItem("recvp9")){
-            document.getElementById("a8").value=1;
-        }else{
-            document.getElementById("a8").value=0;
-        }
-        if (localStorage.getItem("recautosave")){
-            document.getElementById("a7").value=0;
-        }else{
-            document.getElementById("a7").value=1;
         }
         if (localStorage.getItem("bigthumb")){
             document.getElementById("a6").value=1;
@@ -11266,25 +11696,6 @@
             localStorage.removeItem("smallsnap");
         }
     }
-    function recvp9(){
-        if (document.getElementById("a8").value==1){
-            localStorage.setItem("recvp9","foo");
-            mimeType=1;
-        }else{
-            localStorage.removeItem("recvp9");
-            mimeType=1;
-        }
-    }
-    function recautosave(){
-        if (document.getElementById("a7").value==0){
-            localStorage.setItem("recautosave","foo");
-            savetime=200000;
-        }else{
-            localStorage.removeItem("recautosave");
-            savetime=20;
-        }
-    }
-
     function bigthumb(){
         if (document.getElementById("a6").value==1){
              localStorage.setItem("bigthumb","foo");
@@ -12542,13 +12953,6 @@
 
         newelem=document.createElement('span');
         newelem.setAttribute("style", cbutstyle);
-        newelem.innerHTML="STOP RECORDING";
-        newelem.id="stopbut";
-        newelem.addEventListener("click",recstop);
-        document.getElementById("controls").appendChild(newelem);
-
-        newelem=document.createElement('span');
-        newelem.setAttribute("style", cbutstyle);
         newelem.innerHTML="RECORD";
         newelem.id="recbut";
         newelem.addEventListener("click",recstart);
@@ -12573,6 +12977,11 @@
         newelem.style.cursor="default";
         newelem.innerHTML="REC(1): 00:00:00";
         document.getElementById("controls").appendChild(newelem);
+        if(!window.__ziggyReloadedRecorderSubscribed){
+            window.__ziggyReloadedRecorderSubscribed=true;
+            window.__ziggyUnifiedRecorder?.subscribe?.(syncUnifiedRecordingUi);
+        }
+        syncUnifiedRecordingUi();
         activateReloadedToolsTab("info");
         if ((pageType=="noaccess")||(pageType=="ppage")){return;}
 
@@ -13867,177 +14276,36 @@
     }
 
     function recstop(){
-        if (!recording){return;}
-        stoppressed=true;
-        mediaRecorder.stop();
+        // Legacy room-player source changes must not stop the Recorder Hub.
+        return;
+    }
+    function syncUnifiedRecordingUi(){
+        var controller=window.__ziggyUnifiedRecorder;
+        var rec=controller?.get?.(roomname);
+        var button=document.getElementById('recbut');
+        var timer=document.getElementById('rectime');
+        if(button){
+            button.textContent=rec?'STOP RECORDING':'RECORD';
+            button.style.color=rec?.status==='recording'?'#ff6b6b':'white';
+            button.title=rec?('Recorder Hub: '+String(rec.status||'active')):'Start recording in Recorder Hub';
+        }
+        if(timer){
+            timer.style.display=rec?'block':'none';
+            if(rec){
+                var total=Math.max(0,Number(rec.recordedMs)||0);
+                var h=String(Math.floor(total/3600000)).padStart(2,'0');
+                var m=String(Math.floor(total%3600000/60000)).padStart(2,'0');
+                var s=String(Math.floor(total%60000/1000)).padStart(2,'0');
+                timer.textContent=String(rec.status||'active').toUpperCase()+' '+h+':'+m+':'+s;
+            }
+        }
     }
     function recstart(){
-        stoppressed=false;
-        if (recording){
-            if (recwait){return;}
-            if (!recpause){
-                clearTimeout(recTimeoutID);
-                mediaRecorder.pause();
-                recpause=true;
-                return;
-            }
-            mediaRecorder.resume();
-            document.getElementById("recbut").style.color="white";
-            recpause=false;
-            return;
-        }
-        recording=true;
-        setReloadedToolsMenuState(null,"not-allowed");
-        document.getElementById("vcontr2").style.cursor="not-allowed";
-        document.getElementById("recbut").innerHTML="&nbsp&nbspPAUSE&nbsp&nbsp";
-        document.getElementById("rectime").style.display="block";
-        if (!document.getElementById('profjpgimg')){
-            var video=document.querySelector('video');
-            video.addEventListener("pause", function(){video.play();});
-            stream = video.captureStream ? video.captureStream() : video.mozCaptureStream();
-            if (!video.captureStream) {
-                var ctx = new AudioContext();
-                var dest = ctx.createMediaStreamSource(stream);
-                dest.connect(ctx.destination);
-            }
-        }
-        mediaRecorder = new MediaRecorder(stream,{
-            mimeType:mimeTypes[mimeType],
-            videoBitsPerSecond: bitrate
-         });
-        mediaRecorder.onstop = autosave;
-        mediaRecorder.ondataavailable = handleDataAvailable;
-        timedisplay();
-        recstart2();
+        var controller=window.__ziggyUnifiedRecorder;
+        if(!controller||!roomname){return;}
+        controller.toggle(roomname);
+        setTimeout(syncUnifiedRecordingUi,100);
     }
-    function recstart2(){
-        prectime=0;
-        recwait=false;
-        recpause=false;
-        clearTimeout(recTimeoutID);
-        var starttime=new Date().toISOString().split(".")[0]+"GMT";
-        starttime=starttime.replaceAll(":","-");
-        recname=roomname+"("+recparts+")-"+starttime;
-        try {
-            mediaRecorder.start(1000);
-        } catch (e) {
-            endrecord();
-            return;
-        }
-        recTimeoutID=setTimeout(recstop,10000);
-    }
-    function handleDataAvailable(event) {
-        clearTimeout(recTimeoutID);
-        if (event.data){
-            if (event.data.size){
-                if (event.data.size>0){
-                    recordedBlobs.push(event.data);
-                    zeroData=0;
-                }else{
-                    zeroData++;
-                }
-            }else{
-                zeroData++;
-            }
-        }
-        if (zeroData>10){
-            recstop();
-            return;
-        }
-        if (!recpause){
-            if(!recwait){
-                recTimeoutID=setTimeout(recstop,10000);
-            }
-        }
-    }
-    function timedisplay(){
-        if (recording){
-            setTimeout(timedisplay,1000);
-            if(!recpause){
-                if(!recwait){
-                    var h = Math.floor(rectime / 3600);
-                    var H=("0"+h).substr(-2);
-                    var m = Math.floor(rectime % 3600 / 60);
-                    var M=("0"+m).substr(-2);
-                    var s = Math.floor(rectime % 3600 % 60);
-                    var S=("0"+s).substr(-2);
-                    document.getElementById("rectime").innerHTML="REC("+recparts+"): "+H+" : "+M+" : "+S;
-                    rectime++;
-                    prectime++;
-                }
-            }
-            if (recpause){
-                if (document.getElementById("recbut").style.color=="red"){
-                    document.getElementById("recbut").style.color="white";
-                }else{
-                    document.getElementById("recbut").style.color="red";
-                }
-            }
-            if (prectime==savetime*60){
-                timerrecstop=true;
-                mediaRecorder.stop();
-            }
-        }
-    }
-
-    function autosave(){
-        recwait=true;
-        document.getElementById("recbut").style.color="white";
-        clearTimeout(recTimeoutID);
-        if (prectime<10){
-            recparts--;
-            dlready();
-            return;
-        }
-        if (recordedBlobs.length <3){
-            stoppressed=true;
-            dlready();
-            return;
-        }
-        document.getElementById("rectime").innerHTML="SAVING";
-        blob = new Blob(recordedBlobs, {type: vidcontainers[mimeType]});
-        URL.revokeObjectURL(url);
-        url = URL.createObjectURL(blob);
-        GM_download({
-            url: blob,
-            name: recname+extentions[mimeType],
-            onload: dlready,
-        });
-    }
-
-    function dlready(){
-        recordedBlobs=[];
-        blob = new Blob([]);
-        if(stoppressed==false){
-            recparts++;
-            if (timerrecstop==false){
-                    document.getElementById("rectime").innerHTML="WAITING";
-                    setTimeout(recstart2,10000);
-                    return;
-            }
-            timerrecstop=false;
-            recstart2();
-            return;
-        }else{
-            endrecord();
-        }
-    }
-
-    function endrecord(){
-        setReloadedToolsMenuState(null,"pointer");
-        document.getElementById("vcontr2").style.cursor="pointer";
-        document.getElementById("recbut").innerHTML="RECORD";
-        document.getElementById("recbut").style.color="white";
-        document.getElementById("rectime").style.display="none";
-        document.getElementById("rectime").innerHTML="";
-        recparts=1;
-        rectime=0;
-        recording=false;
-        recpause=false;
-        recwait=false;
-        stoppressed=false;
-    }
-
     function buildprofnote(){
         var subbutraw="<span id='profsubmit' style='color: rgb(255, 255, 255); background: rgb(244, 115, 33); font-family: UbuntuMedium, Helvetica, Arial, sans-serif; font-size: 12px; padding: 4px 10px 5px; position: relative; left: 120px; float: left; border-radius: 4px; cursor: pointer;'>Save</span>";
         wprof("",'<div width="200px" id="profnote" style="display:none"><a href=# id="profcancel">Cancel</a>'+subbutraw+'</div>');
@@ -15701,7 +15969,7 @@
   function isBlockedPage() {
     if (location.hostname === 'secure.chaturbate.com') return true;
     if (BLOCKED_PATH.test(location.pathname || '')) return true;
-    if (new URLSearchParams(location.search).get('multicam_mode') === '1') return true;
+    if (new URLSearchParams(location.search).get('multicam_mode') === '1' || new URLSearchParams(location.search).get('multicam_recorder') === '1') return true;
     return !!document.body?.classList.contains('age-gate--shown');
   }
 

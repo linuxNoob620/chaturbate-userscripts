@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.7
+// @version           16.5.8
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.7');
+  instanceMarker.setAttribute('data-suite-version', '16.5.8');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1269,7 +1269,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.7',
+    version: '16.5.8',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -8817,9 +8817,10 @@
           } catch (_) {}
         };
         frame.addEventListener('load', inspect);
-        const renderedUrl = new URL(pageUrl, location.origin);
-        renderedUrl.searchParams.set('ziggy_following_sync', '1');
-        frame.src = renderedUrl.href;
+        // Keep the followed-cams URL native. Chaturbate forwards unknown page
+        // query parameters to its room-list API, and Cloudflare may reject the
+        // resulting request. Only the site's own `page` parameter belongs here.
+        frame.src = new URL(pageUrl, location.origin).href;
         (document.body || document.documentElement).appendChild(frame);
         pollTimer = setInterval(inspect, 350);
         timeoutTimer = setTimeout(() => latestRooms.length ? finish(latestRooms) : fail(), 15000);

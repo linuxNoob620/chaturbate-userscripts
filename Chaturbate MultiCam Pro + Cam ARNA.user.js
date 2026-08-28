@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.8
+// @version           16.5.9
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.8');
+  instanceMarker.setAttribute('data-suite-version', '16.5.9');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -662,6 +662,11 @@
       opResetView: 'Reset view',
       opOpenRoom: 'Open room',
       opCopyUsername: 'Copy username',
+      opUnfollowAccount: 'Unfollow on Chaturbate',
+      unfollowAccountConfirm: (n) => `Unfollow ${n} on Chaturbate? This changes your actual Chaturbate account.`,
+      unfollowAccountDone: (n) => `${n} unfollowed on Chaturbate`,
+      unfollowAccountFailed: (n) => `Could not unfollow ${n}`,
+      unfollowSignInRequired: 'Sign in to Chaturbate before unfollowing rooms',
       opFavoriteAdd: 'Add favorite',
       opFavoriteRemove: 'Remove favorite',
       opMoveToFavorites: 'Move to favorites only',
@@ -1016,6 +1021,11 @@
       opResetView: '重置画面',
       opOpenRoom: '打开房间',
       opCopyUsername: '复制用户名',
+      opUnfollowAccount: '在 Chaturbate 取消关注',
+      unfollowAccountConfirm: (n) => `确定要在 Chaturbate 取消关注 ${n} 吗？这会修改你的 Chaturbate 账号。`,
+      unfollowAccountDone: (n) => `已在 Chaturbate 取消关注 ${n}`,
+      unfollowAccountFailed: (n) => `无法取消关注 ${n}`,
+      unfollowSignInRequired: '请先登录 Chaturbate 再取消关注房间',
       opFavoriteAdd: '加入收藏',
       opFavoriteRemove: '取消收藏',
       opMoveToFavorites: '仅移到收藏',
@@ -1269,7 +1279,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.8',
+    version: '16.5.9',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -8695,6 +8705,14 @@
     let onlineFollowingLastSync = 0;
     let onlineFollowingInitialOrderReady = false;
     let onlineFollowingNextOrder = 0;
+    const onlineFollowingSuppressedUntil = new Map();
+
+    function onlineFollowingIsSuppressed(roomId) {
+      const until = Number(onlineFollowingSuppressedUntil.get(roomId) || 0);
+      if (until > Date.now()) return true;
+      onlineFollowingSuppressedUntil.delete(roomId);
+      return false;
+    }
 
     function parseOnlineFollowingDocument(source) {
       const doc = source?.querySelectorAll
@@ -8874,7 +8892,7 @@
       if (!force && Date.now() - onlineFollowingLastSync < 45000) return;
       onlineFollowingSyncBusy = true;
       try {
-        const followed = await loadAllOnlineFollowing();
+        const followed = (await loadAllOnlineFollowing()).filter(item => !onlineFollowingIsSuppressed(item.id));
         const ids = followed.map(item => item.id);
         const currentFollowing = tempRooms.filter(room => room.onlineFollowing);
         const currentById = new Map(currentFollowing.map(room => [room.id, room]));
@@ -9033,6 +9051,42 @@
       scheduleGridRender();
       toast(added ? `${roomId} added to Workshop` : `${roomId} is already saved`);
       return true;
+    }
+
+    async function unfollowOnlineFollowingRoom(rawUsername) {
+      const target = normalizeUsername(rawUsername);
+      if (!target || !isLikelyUsername(target)) return false;
+      if (!confirm(t('unfollowAccountConfirm', target))) return false;
+
+      try {
+        const csrf = readSuiteCookie('csrftoken');
+        if (!csrf) throw new Error(t('unfollowSignInRequired'));
+        const response = await postSuiteForm(`/follow/unfollow/${encodeURIComponent(target)}/`, {
+          location: 'FollowButton',
+          csrfmiddlewaretoken: csrf,
+        }, { referrer: `${location.origin}/${target}/` });
+        if (response.redirected && /(?:login|auth)/i.test(response.url || '')) {
+          throw new Error(t('unfollowSignInRequired'));
+        }
+
+        // The native followed-room list can briefly remain stale after the
+        // account request succeeds. Ignore that stale result while it catches up.
+        onlineFollowingSuppressedUntil.set(target, Date.now() + 120000);
+        for (let index = tempRooms.length - 1; index >= 0; index--) {
+          if (tempRooms[index]?.onlineFollowing && tempRooms[index].id === target) tempRooms.splice(index, 1);
+        }
+        service.setQualityCap(target, 0);
+        if (!store.state.rooms.some(room => room.id === target)) service.stop(target);
+        onlineFollowingLastSync = Date.now();
+        scheduleSidebarRender();
+        if (store.state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID) scheduleGridRender();
+        toast(t('unfollowAccountDone', target));
+        return true;
+      } catch (error) {
+        console.warn('[RoomGrid] Chaturbate unfollow failed', error);
+        toast(`${t('unfollowAccountFailed', target)}: ${error?.message || error}`, 4000);
+        return false;
+      }
     }
 
     function buildCard(room) {
@@ -10173,6 +10227,11 @@
       const followingRoom = tempRooms.find(x => x.id === roomId && x.onlineFollowing);
       if (!currentRoom && followingRoom) {
         menu.appendChild(item('', LANG === 'zh' ? '添加房间' : 'Add room', () => saveOnlineFollowingRoom(roomId)));
+      }
+      if (followingRoom) {
+        const unfollowItem = item('', t('opUnfollowAccount'), () => { void unfollowOnlineFollowingRoom(roomId); });
+        unfollowItem.style.color = '#f87171';
+        menu.appendChild(unfollowItem);
       }
       if (currentRoom) {
         menu.appendChild(item('', currentRoom.muted ? (LANG === 'zh' ? '取消静音' : 'Unmute') : (LANG === 'zh' ? '静音' : 'Mute'), () => {

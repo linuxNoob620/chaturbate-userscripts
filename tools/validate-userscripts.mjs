@@ -99,6 +99,9 @@ for (const item of scripts) {
     if (source.includes("searchParams.set('ziggy_following_sync'")) failures.push(`${item.file}: Online Following synchronizer must use Chaturbate's native URL without custom query parameters`);
     if (!source.includes("'aria-label': t('startupViewLabel')") || !source.includes("'aria-label': t('startupGroupLabel')")) failures.push(`${item.file}: startup settings controls are missing distinct accessible labels`);
     if (source.includes('(await loadAllOnlineFollowing()).filter(item => !savedIds.has(item.id))')) failures.push(`${item.file}: saved followed rooms are incorrectly omitted from Online Following`);
+    if (!source.includes('async function unfollowOnlineFollowingRoom')) failures.push(`${item.file}: Online Following account unfollow action is missing`);
+    if (!source.includes("t('opUnfollowAccount')")) failures.push(`${item.file}: Online Following card menu does not expose account unfollow`);
+    if (!source.includes('onlineFollowingSuppressedUntil')) failures.push(`${item.file}: Online Following unfollow stale-sync suppression is missing`);
     if (!source.includes("findDesktopNavigationSlot('private')")) failures.push(`${item.file}: desktop Workshop navigation does not replace Private Shows`);
     if (!source.includes("const WORKSHOP_TAB_TITLE = 'Ziggy Room Suite'")) failures.push(`${item.file}: unique Workshop tab title is missing`);
     if (!source.includes("function canonicalWorkshopUrl()")) failures.push(`${item.file}: canonical Workshop URL helper is missing`);

@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.3
+// @version           16.5.4
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
 // @downloadURL       https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.user.js
-// @description       Native desktop and mobile Room Tools suite with MultiCam, Cam ARNA, Reloaded tools, mobile Clean View, recording, split view, and encrypted settings sync.
+// @description       Native desktop and mobile Rooms suite with MultiCam, Cam ARNA, Reloaded tools, mobile Clean View, recording, split view, and encrypted settings sync.
 // @author            Ziggy
 // @license           MIT
 // @match             https://chaturbate.com/*
@@ -94,7 +94,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.3');
+  instanceMarker.setAttribute('data-suite-version', '16.5.4');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -158,6 +158,33 @@
   }
   setInterval(enforceSuiteTabTitle, 750);
   enforceSuiteTabTitle();
+
+  // Desktop room pages default to Chaturbate's own theater layout. This only
+  // attempts the transition once per page load, so leaving theater manually is
+  // respected until the next navigation or refresh.
+  function enterDefaultDesktopTheaterOnce() {
+    if (!roomNameForTabTitle() || isWorkshopRoute() || isRecorderHubRoute()) return;
+    let attempts = 0;
+    const tryEnter = () => {
+      attempts += 1;
+      const button = document.getElementById('theater-mode-icon')
+        || document.querySelector('[aria-label="Theater Mode"]');
+      const resizeHandle = [...document.querySelectorAll('.resizeHandle')]
+        .find(node => node.getClientRects().length && getComputedStyle(node).display !== 'none');
+      if (button?.getClientRects().length && resizeHandle) {
+        try { button.click(); } catch (_) {}
+        return;
+      }
+      // A mounted theater button without the normal-mode resize handle means
+      // the room is already in theater mode.
+      if (button && !resizeHandle && attempts >= 10) return;
+      if (attempts < 50) setTimeout(tryEnter, 160);
+    };
+    setTimeout(tryEnter, 180);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', enterDefaultDesktopTheaterOnce, { once: true });
+  else enterDefaultDesktopTheaterOnce();
 
   /* Core utilities */
   const $ = (tag, props = {}, children = []) => {
@@ -235,6 +262,7 @@
     split: '<rect x="3" y="5" width="8" height="14" rx="2"/><rect x="13" y="5" width="8" height="14" rx="2"/>',
     swap: '<path d="M7 7h11l-3-3M17 17H6l3 3"/>',
     move: '<path d="M12 2v20M2 12h20M12 2l-3 3M12 2l3 3M12 22l-3-3M12 22l3-3M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
     chevronLeft: '<path d="m15 18-6-6 6-6"/>',
     chevronRight: '<path d="m9 18 6-6-6-6"/>',
     trash: '<path d="M5 7h14M10 11v6M14 11v6M8 7l1-3h6l1 3M7 7l1 14h8l1-14"/>',
@@ -808,7 +836,7 @@
       recorderResume: 'Resume',
       recorderPausedManual: 'Paused manually',
       recorderHubTitle: 'Recorder Hub',
-      recorderHubSubtitle: 'One persistent recording service for Room Tools and Workshop.',
+      recorderHubSubtitle: 'One persistent recording service for Rooms and Workshop.',
       recorderRecording: 'Recording',
       recorderPausedPrivate: 'Paused for private/secret/group/password show',
       recorderPausedOffline: (time) => `Offline · stopping in ${time}`,
@@ -1241,7 +1269,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.3',
+    version: '16.5.4',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -1262,6 +1290,8 @@
   const MOBILE_CLEAN_VIEW_VERSION = '2.1.0';
   const MOBILE_CLEAN_VIEW_SETTINGS_KEY = 'cb_desktop_mobile_comfort_v1';
   const GITHUB_SYNC_CONFIG_KEY = 'chaturbate_suite_github_sync_v1';
+  const GITHUB_SYNC_STATE_KEY = 'chaturbate_suite_github_sync_state_v1';
+  const GITHUB_AUTO_IMPORT_LEASE_KEY = 'chaturbate_suite_github_auto_import_lease_v1';
   const GITHUB_SYNC_FORMAT = 'chaturbate-suite-settings-encrypted-v1';
   const GITHUB_SYNC_TARGET = Object.freeze({
     owner: 'linuxNoob620',
@@ -1271,6 +1301,7 @@
   });
   const GITHUB_API_VERSION = '2022-11-28';
   const GITHUB_PBKDF2_ITERATIONS = 250000;
+  const GITHUB_AUTO_IMPORT_CHECK_MS = 5 * 60 * 1000;
   const RELOADED_SETTING_KEYS = Object.freeze([
     'animationoff', 'bigthumb', 'defaultVideoWidth', 'hidemt', 'hpfltopen',
     'ignoredusers', 'isTheaterMode', 'newtabon', 'pclean', 'recautosave',
@@ -1880,6 +1911,75 @@
   }
 
   let githubSessionPassphrase = '';
+  const githubAutoImportOwner = `tab-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  function loadGithubSyncState() {
+    const parsed = readJsonStorage(GITHUB_SYNC_STATE_KEY, {});
+    return {
+      lastAppliedRemoteAt: Math.max(0, numeric(parsed?.lastAppliedRemoteAt, 0)),
+      lastAppliedSha: typeof parsed?.lastAppliedSha === 'string' ? parsed.lastAppliedSha : '',
+      localChangedAt: Math.max(0, numeric(parsed?.localChangedAt, 0)),
+      lastSnapshotFingerprint: typeof parsed?.lastSnapshotFingerprint === 'string' ? parsed.lastSnapshotFingerprint : '',
+      lastCheckedAt: Math.max(0, numeric(parsed?.lastCheckedAt, 0)),
+    };
+  }
+
+  function saveGithubSyncState(next) {
+    writeJsonStorage(GITHUB_SYNC_STATE_KEY, {
+      ...loadGithubSyncState(),
+      ...(next && typeof next === 'object' ? next : {}),
+    });
+  }
+
+  function githubPayloadFingerprintSource(payload) {
+    const multicam = payload?.components?.multicamPro || {};
+    return {
+      multicamPro: {
+        settings: multicam.settings || {},
+        rooms: (Array.isArray(multicam.rooms) ? multicam.rooms : []).map(room => ({
+          id: room.id,
+          addedAt: room.addedAt,
+          group: room.group,
+          groups: room.groups,
+          groupOrder: room.groupOrder,
+          order: room.order,
+          muted: room.muted,
+          notes: room.notes || '',
+        })),
+        groups: Array.isArray(multicam.groups) ? multicam.groups : [],
+      },
+      reloaded: payload?.components?.reloaded || {},
+      mobileCleanView: payload?.components?.mobileCleanView || {},
+    };
+  }
+
+  async function githubPayloadFingerprint(payload) {
+    const bytes = new TextEncoder().encode(JSON.stringify(githubPayloadFingerprintSource(payload)));
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+    return [...digest].map(value => value.toString(16).padStart(2, '0')).join('');
+  }
+
+  function githubSettingsFingerprint(multicamState = Storage.load()) {
+    return githubPayloadFingerprint(buildSuiteSettingsPayload(multicamState));
+  }
+
+  function githubRemoteTimestamp(downloaded) {
+    const value = downloaded?.payload?.exportedAt || downloaded?.envelope?.encryptedAt || '';
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  async function recordGithubSyncBaseline(downloaded, multicamState = Storage.load()) {
+    const fingerprint = await githubSettingsFingerprint(multicamState);
+    const remoteAt = githubRemoteTimestamp(downloaded);
+    saveGithubSyncState({
+      lastAppliedRemoteAt: remoteAt,
+      lastAppliedSha: downloaded?.sha || '',
+      localChangedAt: 0,
+      lastSnapshotFingerprint: fingerprint,
+      lastCheckedAt: Date.now(),
+    });
+  }
 
   function defaultGithubDeviceName() {
     const mobile = navigator.userAgentData?.mobile === true || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || '');
@@ -1920,6 +2020,7 @@
   function clearGithubSyncConfig() {
     githubSessionPassphrase = '';
     if (typeof GM_setValue === 'function') GM_setValue(GITHUB_SYNC_CONFIG_KEY, '');
+    try { localStorage.removeItem(GITHUB_SYNC_STATE_KEY); } catch (_) {}
   }
 
   function bytesToBase64(bytes) {
@@ -2069,7 +2170,12 @@
     if (existing.status === 200 && existing.data?.sha) requestBody.sha = existing.data.sha;
     const uploaded = await githubApiRequest(config, 'PUT', url, requestBody);
     if (![200, 201].includes(uploaded.status)) throw githubResponseError(uploaded, 'Unable to upload settings');
-    return { envelope, commit: uploaded.data?.commit?.sha || '' };
+    return {
+      payload,
+      envelope,
+      sha: uploaded.data?.content?.sha || '',
+      commit: uploaded.data?.commit?.sha || '',
+    };
   }
 
   async function downloadSuiteSettingsFromGithub(config, passphrase) {
@@ -2091,6 +2197,97 @@
       return null;
     }
     return { config, passphrase };
+  }
+
+  function claimGithubAutoImportLease() {
+    const now = Date.now();
+    const existing = readJsonStorage(GITHUB_AUTO_IMPORT_LEASE_KEY, {});
+    if (existing?.owner && existing.owner !== githubAutoImportOwner && numeric(existing.expiresAt, 0) > now) return false;
+    writeJsonStorage(GITHUB_AUTO_IMPORT_LEASE_KEY, { owner: githubAutoImportOwner, expiresAt: now + 45000 });
+    const claimed = readJsonStorage(GITHUB_AUTO_IMPORT_LEASE_KEY, {});
+    return claimed?.owner === githubAutoImportOwner;
+  }
+
+  function releaseGithubAutoImportLease() {
+    const current = readJsonStorage(GITHUB_AUTO_IMPORT_LEASE_KEY, {});
+    if (current?.owner === githubAutoImportOwner) localStorage.removeItem(GITHUB_AUTO_IMPORT_LEASE_KEY);
+  }
+
+  let githubFingerprintMonitorBusy = false;
+  async function monitorGithubLocalSettings() {
+    if (githubFingerprintMonitorBusy) return;
+    githubFingerprintMonitorBusy = true;
+    try {
+      const fingerprint = await githubSettingsFingerprint(Storage.load());
+      const syncState = loadGithubSyncState();
+      if (!syncState.lastSnapshotFingerprint) {
+        saveGithubSyncState({ lastSnapshotFingerprint: fingerprint });
+      } else if (syncState.lastSnapshotFingerprint !== fingerprint) {
+        saveGithubSyncState({
+          localChangedAt: Date.now(),
+          lastSnapshotFingerprint: fingerprint,
+        });
+      }
+    } catch (_) {
+      // A failed local comparison must never interfere with the site.
+    } finally {
+      githubFingerprintMonitorBusy = false;
+    }
+  }
+
+  async function maybeAutoImportGithubSettings(force = false) {
+    const config = loadGithubSyncConfig();
+    const passphrase = config.passphrase || githubSessionPassphrase;
+    if (!config.token || String(passphrase).length < 8) return false;
+    if (isRecorderHubRoute() || loadRecordingIntents().length) return false;
+    const syncState = loadGithubSyncState();
+    if (!force && Date.now() - syncState.lastCheckedAt < GITHUB_AUTO_IMPORT_CHECK_MS) return false;
+    if (!claimGithubAutoImportLease()) return false;
+    try {
+      const downloaded = await downloadSuiteSettingsFromGithub(config, passphrase);
+      const currentFingerprint = await githubSettingsFingerprint(Storage.load());
+      const remoteFingerprint = await githubPayloadFingerprint(downloaded.payload);
+      const latestState = loadGithubSyncState();
+      let localChangedAt = latestState.localChangedAt;
+      if (latestState.lastSnapshotFingerprint && latestState.lastSnapshotFingerprint !== currentFingerprint) {
+        localChangedAt = Date.now();
+      }
+      const remoteAt = githubRemoteTimestamp(downloaded);
+      const firstCloudComparison = !latestState.lastSnapshotFingerprint && !latestState.lastAppliedRemoteAt;
+      const remoteChanged = !latestState.lastAppliedSha || downloaded.sha !== latestState.lastAppliedSha;
+      const settingsDiffer = remoteFingerprint !== currentFingerprint;
+      const shouldImport = settingsDiffer && remoteChanged
+        && (firstCloudComparison || remoteAt > Math.max(latestState.lastAppliedRemoteAt, localChangedAt));
+      if (!shouldImport) {
+        if (!settingsDiffer && remoteChanged) {
+          await recordGithubSyncBaseline(downloaded, Storage.load());
+          return false;
+        }
+        saveGithubSyncState({
+          localChangedAt,
+          lastSnapshotFingerprint: currentFingerprint,
+          lastCheckedAt: Date.now(),
+        });
+        return false;
+      }
+      applySuiteSettingsPayload(downloaded.payload);
+      await recordGithubSyncBaseline(downloaded, Storage.load());
+      setTimeout(() => location.reload(), 450);
+      return true;
+    } catch (error) {
+      saveGithubSyncState({ lastCheckedAt: Date.now() });
+      console.warn('[Rooms] automatic GitHub import skipped', error);
+      return false;
+    } finally {
+      releaseGithubAutoImportLease();
+    }
+  }
+
+  function scheduleGithubAutoImport() {
+    setTimeout(() => maybeAutoImportGithubSettings(), 2200);
+    setTimeout(() => monitorGithubLocalSettings(), 5000);
+    setInterval(() => monitorGithubLocalSettings(), 10000);
+    setInterval(() => maybeAutoImportGithubSettings(), GITHUB_AUTO_IMPORT_CHECK_MS);
   }
 
   function ensureGithubSyncStyle() {
@@ -2159,6 +2356,7 @@
       const saved = readAndSave();
       if (!saved.token || String(saved.passphrase || '').length < 8) throw new Error('Save a token and passphrase first.');
       const result = await uploadSuiteSettingsToGithub(saved, saved.passphrase, Storage.load());
+      await recordGithubSyncBaseline(result, Storage.load());
       setStatus(`Cloud backup uploaded ${result.commit ? `(${result.commit.slice(0, 7)})` : ''}.`, 'success');
     }));
     const importButton = $('button', { class: 'warn', type: 'button' }, 'Import from GitHub');
@@ -2170,6 +2368,7 @@
       const detail = `Backup: ${downloaded.envelope.encryptedAt || 'unknown date'} from ${downloaded.envelope.deviceName || 'unknown device'}${Number.isInteger(roomCount) ? `, ${roomCount} models` : ''}.`;
       if (!confirm(`${detail}\n\nImporting replaces the current model library. Continue?`)) { setStatus('Import cancelled.'); return; }
       const result = applySuiteSettingsPayload(downloaded.payload);
+      await recordGithubSyncBaseline(downloaded, Storage.load());
       setStatus(`Imported cloud backup${Number.isInteger(result.roomCount) ? ` with ${result.roomCount} models` : ''}. Reloading…`, 'success');
       setTimeout(() => location.reload(), 650);
     }));
@@ -2212,6 +2411,7 @@
     if (!credentials) return null;
     try {
       const result = await uploadSuiteSettingsToGithub(credentials.config, credentials.passphrase, multicamState);
+      await recordGithubSyncBaseline(result, Storage.load());
       alert(`Settings uploaded securely to GitHub${result.commit ? ` (${result.commit.slice(0, 7)})` : ''}.`);
       return result;
     } catch (error) {
@@ -2229,6 +2429,7 @@
       const detail = `Backup: ${downloaded.envelope.encryptedAt || 'unknown date'} from ${downloaded.envelope.deviceName || 'unknown device'}${Number.isInteger(roomCount) ? `, ${roomCount} models` : ''}.`;
       if (!confirm(`${detail}\n\nImporting replaces the current model library. Continue?`)) return null;
       const result = applySuiteSettingsPayload(downloaded.payload);
+      await recordGithubSyncBaseline(downloaded, Storage.load());
       options.onImported?.(result);
       setTimeout(() => location.reload(), 650);
       return result;
@@ -3775,6 +3976,7 @@
 
   const isRecorderHub = isRecorderHubRoute();
   const isWorkstation = new URLSearchParams(location.search).get('multicam_mode') === '1';
+  scheduleGithubAutoImport();
   if (isRecorderHub) initRecorderHub();
   else if (isWorkstation) initWorkstation();
   else initInjector();
@@ -4231,7 +4433,7 @@
       .roomgrid-native-desktop .roomgrid-private-action { display:none; }
       .roomgrid-native-trigger {
         overflow:hidden; box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center;
-        position:relative; top:-4px; float:right; width:84px; min-width:84px; max-width:84px; height:22px;
+        position:relative; top:-4px; float:right; width:auto; min-width:0; max-width:none; height:22px;
         margin:0; padding:3px 8px 2px;
         border:1px solid #0c6a93; border-radius:3px; background:#0c6a93; color:#fff;
         cursor:pointer; white-space:nowrap; text-overflow:ellipsis;
@@ -4338,7 +4540,7 @@
     const head = $('button', { class: 'roomgrid-dock-head', title: 'Alt+M / Alt+A / Shift+A', onclick: () => { if (!dragged) toggleDock(); } }, [
       $('span', { class: 'roomgrid-dock-mark' }, '▦'),
       $('span', {}, [
-        $('div', { class: 'roomgrid-dock-title' }, 'Room Tools'),
+        $('div', { class: 'roomgrid-dock-title' }, 'Rooms'),
         $('div', { class: 'roomgrid-dock-sub' }, t('dockSubtitle')),
       ]),
       $('span', { class: 'roomgrid-dock-chevron' }, '▾'),
@@ -4620,9 +4822,9 @@
       if (rect.width < 20 || rect.height < 12) return;
       Object.assign(nativeRoomGridTrigger.style, {
         boxSizing: 'border-box',
-        width: `${rect.width}px`,
-        minWidth: `${rect.width}px`,
-        maxWidth: `${rect.width}px`,
+        width: 'auto',
+        minWidth: '0',
+        maxWidth: 'none',
         height: `${rect.height}px`,
         margin: style.margin,
         padding: style.padding,
@@ -4688,11 +4890,11 @@
           id: 'roomgrid-native-trigger',
           class: 'roomgrid-native-trigger',
           type: 'button',
-          title: 'Open Room Tools',
-          'aria-label': 'Open Room Tools',
+          title: 'Open Rooms',
+          'aria-label': 'Open Rooms',
           'aria-haspopup': 'menu',
           'aria-expanded': collapsed ? 'false' : 'true',
-        }, 'ROOM TOOLS');
+        }, 'ROOMS');
         const activate = event => {
           event.preventDefault();
           event.stopPropagation();
@@ -4710,7 +4912,7 @@
       nativeSendTipSource = findNativeSendTipSource();
       root.classList.add('roomgrid-native-desktop');
       root.setAttribute('role', 'menu');
-      root.setAttribute('aria-label', 'Room Tools');
+      root.setAttribute('aria-label', 'Rooms');
       if (!root.isConnected) document.body.appendChild(root);
       if (!collapsed) requestAnimationFrame(positionDesktopRoomGridMenu);
       return true;
@@ -4956,7 +5158,7 @@
       const candidates = [...document.querySelectorAll(selectors)].filter(node => {
         if (!visibleNode(node) || node.closest('#scriptcontrols,#zmc-root,.roomgrid-mobile-panel')) return false;
         const text = mobileTabText(node);
-        return text === 'Private' || (node.classList.contains('roomgrid-mobile-tab') && /^(?:RoomGrid|Room Tools)$/i.test(text));
+        return text === 'Private' || (node.classList.contains('roomgrid-mobile-tab') && /^(?:RoomGrid|Room Tools|Rooms)$/i.test(text));
       });
       return candidates.sort((a, b) => {
         const ar = a.getBoundingClientRect();
@@ -5008,7 +5210,7 @@
         const text = mobileTabText(node);
         const rect = node.getBoundingClientRect();
         return visibleNode(node) && rect.width > 0 && rect.width <= 100
-          && !/^(?:Chat|Private|RoomGrid|Room Tools|Tokens|Bio|More Rooms)$/i.test(text);
+          && !/^(?:Chat|Private|RoomGrid|Room Tools|Rooms|Tokens|Bio|More Rooms)$/i.test(text);
       }).sort((a, b) => b.getBoundingClientRect().right - a.getBoundingClientRect().right);
       if (!candidates.length) return fallback[0] || null;
       return candidates.sort((a, b) => {
@@ -5187,7 +5389,7 @@
       id: 'roomgrid-mobile-panel',
       class: 'roomgrid-mobile-panel',
       role: 'tabpanel',
-      'aria-label': 'Room Tools',
+      'aria-label': 'Rooms',
       hidden: true,
     });
 
@@ -5324,10 +5526,10 @@
         tab.addEventListener('click', handleMobileRoomGridClick, true);
         tab.addEventListener('keydown', handleMobileRoomGridKeydown, true);
       }
-      tab.textContent = 'Room Tools';
+      tab.textContent = 'Rooms';
       tab.classList.add('roomgrid-mobile-tab');
       tab.setAttribute('role', 'tab');
-      tab.setAttribute('aria-label', 'Room Tools');
+      tab.setAttribute('aria-label', 'Rooms');
       tab.setAttribute('aria-controls', mobilePanel.id);
       tab.setAttribute('tabindex', '0');
       const tabStrip = findMobileTabStrip(tab);
@@ -5613,7 +5815,7 @@
               toolButton('Open Workshop', 'ziggy-suite:open-workshop', null, 'primary'),
               $('button', { class: 'ziggy-mobile-reloaded-action', type: 'button', onclick: () => { close(); UnifiedRecorder.openHub(true); } }, 'Recorder Hub'),
               toolButton(room ? (saved ? `Remove ${room}` : `Add ${room}`) : 'Add current model', 'ziggy-suite:toggle-current-room'),
-              toolButton('Room Tools', 'ziggy-suite:toggle-roomgrid', { tab: 'multicam' }),
+              toolButton('Rooms', 'ziggy-suite:toggle-roomgrid', { tab: 'multicam' }),
               toolButton('Cam ARNA', 'ziggy-suite:toggle-roomgrid', { tab: 'arna' }),
               toolButton('Video fullscreen', 'ziggy-mobile-clean-view:fullscreen'),
               toolButton('Picture-in-Picture', 'ziggy-mobile-clean-view:pip'),
@@ -8084,7 +8286,7 @@
       sidebar.style.setProperty('border-width', '1px', 'important');
 
       const counts = countByGroup();
-      const sidebarRooms = allRoomsForView();
+      const sidebarRooms = regularRoomsForView();
       const total = sidebarRooms.length;
       const online = sidebarRooms.filter(r => r.lastStatus === 'online').length;
 
@@ -8190,12 +8392,12 @@
     }
 
     function countByGroup() {
-      const rooms = allRoomsForView();
+      const rooms = regularRoomsForView();
       const c = {
         [LIBRARY_GROUP_ID]: rooms.length,
         [ONLINE_GROUP_ID]: rooms.filter(r => r.lastStatus === 'online').length,
         [ONLINE_FAVORITES_GROUP_ID]: rooms.filter(r => roomInGroup(r, ONLINE_FAVORITES_GROUP_ID)).length,
-        [ONLINE_FOLLOWING_GROUP_ID]: rooms.filter(r => roomInGroup(r, ONLINE_FOLLOWING_GROUP_ID)).length,
+        [ONLINE_FOLLOWING_GROUP_ID]: onlineFollowingRooms().length,
       };
       for (const r of rooms) for (const g of getRoomGroups(r)) c[g] = (c[g] || 0) + 1;
       return c;
@@ -8304,6 +8506,12 @@
 
     // v15.6-minimal: 临时 URL 窗口。只存在于当前页面内存，刷新后消失；不写入 localStorage。
     const tempRooms = [];
+    function regularTemporaryRooms() { return tempRooms.filter(room => !room.onlineFollowing); }
+    function onlineFollowingRooms() {
+      const savedIds = new Set(store.state.rooms.map(room => room.id));
+      return tempRooms.filter(room => room.onlineFollowing && !savedIds.has(room.id));
+    }
+    function regularRoomsForView() { return [...store.state.rooms, ...regularTemporaryRooms()]; }
     function allRoomsForView() { return [...store.state.rooms, ...tempRooms]; }
     function findRoomAny(id) {
       id = String(id || '');
@@ -8366,6 +8574,19 @@
         } catch (_) {}
       });
       return [...pages.entries()].sort((a, b) => a[0] - b[0]).map(([, url]) => url);
+    }
+
+    function expectedOnlineFollowingCount(source) {
+      const doc = source?.querySelectorAll
+        ? source
+        : new DOMParser().parseFromString(String(source || ''), 'text/html');
+      for (const anchor of doc.querySelectorAll('a[href*="followed-cams"]')) {
+        const match = String(anchor.textContent || '').match(/\(\s*([\d,.\s]+)\s*\//);
+        if (!match) continue;
+        const count = Number(match[1].replace(/[^\d]/g, ''));
+        if (Number.isFinite(count) && count >= 0) return count;
+      }
+      return 0;
     }
 
     function loadRenderedOnlineFollowing(pageUrl = `${location.origin}/followed-cams/`) {
@@ -8438,28 +8659,39 @@
       const firstDocument = new DOMParser().parseFromString(await firstResponse.text(), 'text/html');
       let firstRooms = parseOnlineFollowingDocument(firstDocument);
       if (!firstRooms.length) firstRooms = await loadRenderedOnlineFollowing(firstUrl);
-      const pageUrls = onlineFollowingPageUrls(firstDocument);
-      const extraPages = await Promise.all(pageUrls.map(async pageUrl => {
-        const response = await fetch(pageUrl, { credentials: 'include', cache: 'no-store' });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
-        const rooms = parseOnlineFollowingDocument(doc);
-        return rooms.length ? rooms : loadRenderedOnlineFollowing(pageUrl);
-      }));
       const merged = new Map();
-      [firstRooms, ...extraPages].forEach(rooms => rooms.forEach(item => {
+      const mergeRooms = rooms => rooms.forEach(item => {
         const previous = merged.get(item.id);
         merged.set(item.id, {
           id: item.id,
           lastStatus: item.lastStatus === 'private' || previous?.lastStatus === 'private' ? 'private' : 'online',
         });
-      }));
+      });
+      mergeRooms(firstRooms);
+      const expectedCount = expectedOnlineFollowingCount(firstDocument);
+      const firstPageSize = Math.max(1, firstRooms.length);
+      for (let page = 2; page <= 50 && (!expectedCount || merged.size < expectedCount); page += 1) {
+        const pageUrl = new URL(firstUrl);
+        pageUrl.searchParams.set('page', String(page));
+        const response = await fetch(pageUrl.href, { credentials: 'include', cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
+        let rooms = parseOnlineFollowingDocument(doc);
+        if (!rooms.length && page === 2) {
+          try { rooms = await loadRenderedOnlineFollowing(pageUrl.href); } catch (_) {}
+        }
+        if (!rooms.length) break;
+        const before = merged.size;
+        mergeRooms(rooms);
+        if (merged.size === before) break;
+        if (rooms.length < firstPageSize && (!expectedCount || merged.size >= expectedCount)) break;
+      }
       return [...merged.values()];
     }
 
     function syncOnlineFollowingQualityCaps() {
       const active = store.state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID;
-      tempRooms.filter(room => room.onlineFollowing).forEach(room => service.setQualityCap(room.id, active ? 480 : 0));
+      onlineFollowingRooms().forEach(room => service.setQualityCap(room.id, active ? 480 : 0));
     }
 
     async function syncOnlineFollowing(force = false) {
@@ -8467,7 +8699,8 @@
       if (!force && Date.now() - onlineFollowingLastSync < 45000) return;
       onlineFollowingSyncBusy = true;
       try {
-        const followed = await loadAllOnlineFollowing();
+        const savedIds = new Set(store.state.rooms.map(room => room.id));
+        const followed = (await loadAllOnlineFollowing()).filter(item => !savedIds.has(item.id));
         const ids = followed.map(item => item.id);
         const currentFollowing = tempRooms.filter(room => room.onlineFollowing);
         const currentById = new Map(currentFollowing.map(room => [room.id, room]));
@@ -8514,7 +8747,11 @@
         }
         tempRooms.push(...nextFollowing);
         const nextIds = new Set(ids);
-        oldIds.forEach(id => { if (!nextIds.has(id)) { service.setQualityCap(id, 0); service.stop(id); } });
+        oldIds.forEach(id => {
+          if (nextIds.has(id)) return;
+          service.setQualityCap(id, 0);
+          if (!store.state.rooms.some(room => room.id === id)) service.stop(id);
+        });
         onlineFollowingLastSync = Date.now();
         syncOnlineFollowingQualityCaps();
         scheduleSidebarRender();
@@ -8603,6 +8840,27 @@
         case 'error': return { color: '#dc2626', label: LANG === 'zh' ? '流不可用' : 'Stream unavailable' };
         default: return { color: '#64748b', label: t('stUnknown') };
       }
+    }
+
+    function saveOnlineFollowingRoom(roomId) {
+      const room = tempRooms.find(item => item.id === roomId && item.onlineFollowing);
+      if (!room) return false;
+      const added = store.addRoom(roomId);
+      const saved = store.state.rooms.find(item => item.id === roomId);
+      if (!saved) return false;
+      store.patchRoom(roomId, {
+        lastStatus: room.lastStatus,
+        lastSeenOnline: room.lastSeenOnline,
+        privateLabel: room.privateLabel || '',
+        muted: true,
+      });
+      const index = tempRooms.indexOf(room);
+      if (index >= 0) tempRooms.splice(index, 1);
+      service.setQualityCap(roomId, 0);
+      scheduleSidebarRender();
+      scheduleGridRender();
+      toast(added ? `${roomId} added to Workshop` : `${roomId} is already saved`);
+      return true;
     }
 
     function buildCard(room) {
@@ -8716,6 +8974,11 @@
       }, room.displayName || room.id);
       const infoMeta = $('div', { class: 'cam-info-meta' }, statusMeta(room.lastStatus).label);
       const infoActions = $('div', { class: 'cam-info-actions' });
+      if (room.onlineFollowing) {
+        const addRoomBtn = mkOp('plus', LANG === 'zh' ? '添加房间' : 'Add room', () => saveOnlineFollowingRoom(room.id));
+        addRoomBtn.classList.add('quick-op', 'quick-add-room');
+        infoActions.appendChild(addRoomBtn);
+      }
       if (favoriteBtn) infoActions.appendChild(favoriteBtn);
       infoActions.appendChild(moreOpsBtn);
       const info = $('div', { class: 'cam-info' }, [
@@ -9735,6 +9998,10 @@
       menu.appendChild(item('', service.isPaused(roomId) ? t('opResume') : t('opPause'), () => service.togglePause(roomId)));
       menu.appendChild(item('', t('opRefresh'), () => service.refresh(roomId)));
       const currentRoom = store.state.rooms.find(x => x.id === roomId);
+      const followingRoom = tempRooms.find(x => x.id === roomId && x.onlineFollowing);
+      if (!currentRoom && followingRoom) {
+        menu.appendChild(item('', LANG === 'zh' ? '添加房间' : 'Add room', () => saveOnlineFollowingRoom(roomId)));
+      }
       if (currentRoom) {
         menu.appendChild(item('', currentRoom.muted ? (LANG === 'zh' ? '取消静音' : 'Unmute') : (LANG === 'zh' ? '静音' : 'Mute'), () => {
           store.patchRoom(roomId, { muted: !currentRoom.muted });
@@ -9742,9 +10009,11 @@
         }));
       }
       const inFav = currentRoom ? roomInGroup(currentRoom, FAVORITE_GROUP_ID) : false;
-      menu.appendChild(item(inFav ? '' : '', inFav ? t('opFavoriteRemove') : t('opFavoriteAdd'), () => store.toggleRoomInGroup(roomId, FAVORITE_GROUP_ID)));
-      if (!inFav) menu.appendChild(item('', t('opMoveToFavorites'), () => store.moveOnlyToGroup(roomId, FAVORITE_GROUP_ID)));
-      if (currentRoom) menu.appendChild(item('', t('opAddSplit'), () => handleAddRoomToSplit(roomId)));
+      if (currentRoom) {
+        menu.appendChild(item(inFav ? '' : '', inFav ? t('opFavoriteRemove') : t('opFavoriteAdd'), () => store.toggleRoomInGroup(roomId, FAVORITE_GROUP_ID)));
+        if (!inFav) menu.appendChild(item('', t('opMoveToFavorites'), () => store.moveOnlyToGroup(roomId, FAVORITE_GROUP_ID)));
+        menu.appendChild(item('', t('opAddSplit'), () => handleAddRoomToSplit(roomId)));
+      }
       menu.appendChild(item('', t('opScreenshot'), () => captureCardScreenshot(roomId)));
       menu.appendChild(item('', recordings.has(roomId) ? t('opRecordStop') : t('opRecordStart'), () => toggleCardRecording(roomId)));
       menu.appendChild(item('', t('opMirror'), () => {
@@ -9775,8 +10044,10 @@
       menu.appendChild(item('', t('opFullscreen'), () => {
         document.fullscreenElement ? document.exitFullscreen() : card.requestFullscreen().catch(() => {});
       }));
-      menu.appendChild(item('', t('opMoveGroup'), () => openMoveMenu(e, roomId)));
-      menu.appendChild(item('', t('opDeleteRoom'), () => { stopCardRecording(roomId, true); service.stop(roomId); store.removeRoom(roomId); }));
+      if (currentRoom) {
+        menu.appendChild(item('', t('opMoveGroup'), () => openMoveMenu(e, roomId)));
+        menu.appendChild(item('', t('opDeleteRoom'), () => { stopCardRecording(roomId, true); service.stop(roomId); store.removeRoom(roomId); }));
+      }
 
       if (phoneEnvironment || store.state.settings.viewMode === 'phone') {
         const backdrop = $('div', { class: 'card-ops-menu-backdrop', role: 'presentation' });
@@ -10217,7 +10488,10 @@
     function visibleRooms() {
       const s = store.state;
       const ag = s.settings.activeGroup || DEFAULT_GROUP_ID;
-      let list = ag === LIBRARY_GROUP_ID ? [...allRoomsForView()] : allRoomsForView().filter(r => roomInGroup(r, ag));
+      const sourceRooms = ag === ONLINE_FOLLOWING_GROUP_ID ? onlineFollowingRooms() : regularRoomsForView();
+      let list = (ag === LIBRARY_GROUP_ID || ag === ONLINE_FOLLOWING_GROUP_ID)
+        ? [...sourceRooms]
+        : sourceRooms.filter(r => roomInGroup(r, ag));
       const q = normalizeUsername(s.settings.searchQuery || '');
       if (q) list = list.filter(r => normalizeUsername(r.id).includes(q));
       const f = s.settings.filter;
@@ -11826,7 +12100,7 @@
 
         var workspace=makeSection('Workspace');
         makeRow(workspace,'suiteopenworkshop','Open Workshop',function(){dispatchSuite('ziggy-suite:open-workshop');},{icon:'▦',primary:true});
-        makeRow(workspace,'suiteroomgrid','Room Tools',function(){dispatchSuite('ziggy-suite:toggle-roomgrid',{tab:'multicam'});},{icon:'⊞'});
+        makeRow(workspace,'suiteroomgrid','Rooms',function(){dispatchSuite('ziggy-suite:toggle-roomgrid',{tab:'multicam'});},{icon:'⊞'});
         makeRow(workspace,'suitecamarna','Cam ARNA',function(){dispatchSuite('ziggy-suite:toggle-roomgrid',{tab:'arna'});},{icon:'⌕'});
         var recorderRow=makeRow(workspace,'suiterecorderhub','Recorder Hub',function(){window.__ziggyUnifiedRecorder?.openHub?.(true);},{icon:'●'});
         function syncRecorderRow(){
@@ -16949,7 +17223,7 @@
     pipButton.classList.add('zmc-pip-action');
     const workshopButton = makeAction('▦', 'Workshop', 'Open the MultiCam workstation', '', () => requestSuiteAction(SUITE_EVENTS.workshop));
     workshopButton.classList.add('zmc-workshop-action');
-    const roomGridButton = makeAction('⊞', 'Room Tools', 'Open rooms and Cam ARNA', '', () => requestSuiteAction(SUITE_EVENTS.roomGrid));
+    const roomGridButton = makeAction('⊞', 'Rooms', 'Open rooms and Cam ARNA', '', () => requestSuiteAction(SUITE_EVENTS.roomGrid));
     roomGridButton.classList.add('zmc-roomgrid-action');
     const addButton = makeAction('★', 'Add model', 'Save this room to Workshop', 'success', () => requestSuiteAction(SUITE_EVENTS.toggleRoom));
     addButton.classList.add('zmc-add-action');
@@ -17881,8 +18155,8 @@
     }
     const status = root.querySelector('.zmc-status');
     if (status) status.textContent = suiteAvailable
-      ? 'Chat is hidden. Workshop and Room Tools are connected.'
-      : 'Chat is hidden. Install Ziggy Chaturbate Suite to enable Workshop and Room Tools.';
+      ? 'Chat is hidden. Workshop and Rooms are connected.'
+      : 'Chat is hidden. Install Ziggy Chaturbate Suite to enable Workshop and Rooms.';
   }
 
   function markVideoTarget(target) {

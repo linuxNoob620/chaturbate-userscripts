@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.3
+// @version           16.5.4
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
 // @downloadURL       https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.user.js
-// @description       Native desktop and mobile Room Tools suite with MultiCam, Cam ARNA, Reloaded tools, mobile Clean View, recording, split view, and encrypted settings sync.
+// @description       Native desktop and mobile Rooms suite with MultiCam, Cam ARNA, Reloaded tools, mobile Clean View, recording, split view, and encrypted settings sync.
 // @author            Ziggy
 // @license           MIT
 // @match             https://chaturbate.com/*

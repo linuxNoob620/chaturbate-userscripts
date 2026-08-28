@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.2
+// @version           16.5.3
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.2');
+  instanceMarker.setAttribute('data-suite-version', '16.5.3');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1241,7 +1241,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.2',
+    version: '16.5.3',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -8311,6 +8311,8 @@
     }
     let onlineFollowingSyncBusy = false;
     let onlineFollowingLastSync = 0;
+    let onlineFollowingInitialOrderReady = false;
+    let onlineFollowingNextOrder = 0;
 
     function parseOnlineFollowingDocument(source) {
       const doc = source?.querySelectorAll
@@ -8318,14 +8320,19 @@
         : new DOMParser().parseFromString(String(source || ''), 'text/html');
       const found = new Map();
       const candidates = new Set();
-      doc.querySelectorAll('[data-testid="room-card"]').forEach(card => {
-        const anchor = card.querySelector('a[data-testid="room-card-username"][href],a[href]');
+      // The native Following page contains a separate "Recommended For You"
+      // strip using the same RoomCard markup. Only read the direct Online Rooms
+      // grid inside the paginated followed-room list.
+      const onlineGrids = [...doc.querySelectorAll('.HomepagePaginatedRoomlist > .RoomCardGrid:not(.RoomCardGrid--oneRow)')];
+      const scopes = onlineGrids.length ? onlineGrids : [doc];
+      scopes.forEach(scope => scope.querySelectorAll('[data-testid="room-card"]').forEach(card => {
+        const anchor = card.querySelector('a[data-testid="room-card-username"][href],a.RoomCardThumbnail[href],a[href]');
         if (anchor) candidates.add(anchor);
-      });
-      doc.querySelectorAll('a[data-testid="room-card-username"][href]').forEach(anchor => candidates.add(anchor));
+      }));
+      scopes.forEach(scope => scope.querySelectorAll('a[data-testid="room-card-username"][href]').forEach(anchor => candidates.add(anchor)));
       if (!candidates.size) {
-        doc.querySelectorAll('li a[href],article a[href],[class*="room"] a[href],[class*="Room"] a[href],[class*="card"] a[href],[class*="Card"] a[href]')
-          .forEach(anchor => candidates.add(anchor));
+        scopes.forEach(scope => scope.querySelectorAll('li a[href],article a[href],[class*="room"] a[href],[class*="Room"] a[href],[class*="card"] a[href],[class*="Card"] a[href]')
+          .forEach(anchor => candidates.add(anchor)));
       }
       candidates.forEach(anchor => {
         let url;
@@ -8342,10 +8349,26 @@
         const previous = found.get(id);
         found.set(id, { id, lastStatus: protectedRoom || previous?.lastStatus === 'private' ? 'private' : 'online' });
       });
-      return [...found.values()].sort((a, b) => a.id.localeCompare(b.id));
+      return [...found.values()];
     }
 
-    function loadRenderedOnlineFollowing() {
+    function onlineFollowingPageUrls(source) {
+      const doc = source?.querySelectorAll
+        ? source
+        : new DOMParser().parseFromString(String(source || ''), 'text/html');
+      const pages = new Map();
+      doc.querySelectorAll('.HomepagePaginatedRoomlist .Pagination a[href],a.Pagination__link[href]').forEach(anchor => {
+        try {
+          const url = new URL(anchor.getAttribute('href'), location.origin);
+          if (!safeChaturbateHost(url.hostname) || !/^\/followed-cams\/?$/.test(url.pathname)) return;
+          const page = Math.max(1, Math.trunc(numeric(url.searchParams.get('page'), 1)));
+          if (page > 1 && page <= 50) pages.set(page, url.href);
+        } catch (_) {}
+      });
+      return [...pages.entries()].sort((a, b) => a[0] - b[0]).map(([, url]) => url);
+    }
+
+    function loadRenderedOnlineFollowing(pageUrl = `${location.origin}/followed-cams/`) {
       return new Promise((resolve, reject) => {
         const frame = document.createElement('iframe');
         frame.name = 'ziggy-following-sync-frame';
@@ -8399,11 +8422,39 @@
           } catch (_) {}
         };
         frame.addEventListener('load', inspect);
-        frame.src = `${location.origin}/followed-cams/?ziggy_following_sync=1`;
+        const renderedUrl = new URL(pageUrl, location.origin);
+        renderedUrl.searchParams.set('ziggy_following_sync', '1');
+        frame.src = renderedUrl.href;
         (document.body || document.documentElement).appendChild(frame);
         pollTimer = setInterval(inspect, 350);
         timeoutTimer = setTimeout(() => latestRooms.length ? finish(latestRooms) : fail(), 15000);
       });
+    }
+
+    async function loadAllOnlineFollowing() {
+      const firstUrl = `${location.origin}/followed-cams/`;
+      const firstResponse = await fetch(firstUrl, { credentials: 'include', cache: 'no-store' });
+      if (!firstResponse.ok) throw new Error(`HTTP ${firstResponse.status}`);
+      const firstDocument = new DOMParser().parseFromString(await firstResponse.text(), 'text/html');
+      let firstRooms = parseOnlineFollowingDocument(firstDocument);
+      if (!firstRooms.length) firstRooms = await loadRenderedOnlineFollowing(firstUrl);
+      const pageUrls = onlineFollowingPageUrls(firstDocument);
+      const extraPages = await Promise.all(pageUrls.map(async pageUrl => {
+        const response = await fetch(pageUrl, { credentials: 'include', cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
+        const rooms = parseOnlineFollowingDocument(doc);
+        return rooms.length ? rooms : loadRenderedOnlineFollowing(pageUrl);
+      }));
+      const merged = new Map();
+      [firstRooms, ...extraPages].forEach(rooms => rooms.forEach(item => {
+        const previous = merged.get(item.id);
+        merged.set(item.id, {
+          id: item.id,
+          lastStatus: item.lastStatus === 'private' || previous?.lastStatus === 'private' ? 'private' : 'online',
+        });
+      }));
+      return [...merged.values()];
     }
 
     function syncOnlineFollowingQualityCaps() {
@@ -8416,20 +8467,52 @@
       if (!force && Date.now() - onlineFollowingLastSync < 45000) return;
       onlineFollowingSyncBusy = true;
       try {
-        const response = await fetch(`${location.origin}/followed-cams/`, { credentials: 'include', cache: 'no-store' });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        let followed = parseOnlineFollowingDocument(await response.text());
-        if (!followed.length) followed = await loadRenderedOnlineFollowing();
+        const followed = await loadAllOnlineFollowing();
         const ids = followed.map(item => item.id);
-        const oldIds = new Set(tempRooms.filter(room => room.onlineFollowing).map(room => room.id));
+        const currentFollowing = tempRooms.filter(room => room.onlineFollowing);
+        const currentById = new Map(currentFollowing.map(room => [room.id, room]));
+        const incomingById = new Map(followed.map(item => [item.id, item]));
+        const oldIds = new Set(currentById.keys());
+        const nextFollowing = [];
+        const createRoom = (item, order) => ({
+          id: item.id, displayName: item.id, temporary: true, onlineFollowing: true,
+          lastStatus: item.lastStatus, privateLabel: item.lastStatus === 'private' ? 'Private' : '', addedAt: Date.now(),
+          lastSeenOnline: item.lastStatus === 'online' ? Date.now() : 0, order,
+          groups: [], groupOrder: {}, muted: true,
+        });
+
+        if (!onlineFollowingInitialOrderReady) {
+          followed.slice().sort((a, b) => a.id.localeCompare(b.id)).forEach(item => {
+            nextFollowing.push(createRoom(item, onlineFollowingNextOrder++));
+          });
+          onlineFollowingInitialOrderReady = true;
+        } else {
+          onlineFollowingNextOrder = Math.max(
+            onlineFollowingNextOrder,
+            ...currentFollowing.map(room => numeric(room.order, -1) + 1),
+          );
+          currentFollowing
+            .slice()
+            .sort((a, b) => numeric(a.order, 0) - numeric(b.order, 0))
+            .forEach(room => {
+              const item = incomingById.get(room.id);
+              if (!item) return;
+              room.lastStatus = item.lastStatus;
+              room.privateLabel = item.lastStatus === 'private' ? 'Private' : '';
+              if (item.lastStatus === 'online') room.lastSeenOnline = Date.now();
+              nextFollowing.push(room);
+            });
+          // Existing rooms keep their positions. Broadcasters who have just
+          // appeared online are appended so periodic refreshes never reshuffle
+          // the grid the user is already watching.
+          followed.forEach(item => {
+            if (!currentById.has(item.id)) nextFollowing.push(createRoom(item, onlineFollowingNextOrder++));
+          });
+        }
         for (let index = tempRooms.length - 1; index >= 0; index--) {
           if (tempRooms[index]?.onlineFollowing) tempRooms.splice(index, 1);
         }
-        followed.forEach((item, order) => tempRooms.push({
-          id: item.id, displayName: item.id, temporary: true, onlineFollowing: true,
-          lastStatus: item.lastStatus, privateLabel: item.lastStatus === 'private' ? 'Private' : '', addedAt: Date.now(), lastSeenOnline: Date.now(), order,
-          groups: [], groupOrder: {}, muted: true,
-        }));
+        tempRooms.push(...nextFollowing);
         const nextIds = new Set(ids);
         oldIds.forEach(id => { if (!nextIds.has(id)) { service.setQualityCap(id, 0); service.stop(id); } });
         onlineFollowingLastSync = Date.now();
@@ -10143,7 +10226,7 @@
       if (f.onlyOnline) list = list.filter(r => r.lastStatus === 'online');
       if (s.settings.showRecordingOnly) list = list.filter(r => recordings.has(r.id));
       if (ag === ONLINE_FOLLOWING_GROUP_ID) {
-        list.sort((a, b) => a.id.localeCompare(b.id));
+        list.sort((a, b) => numeric(a.order, 0) - numeric(b.order, 0));
         return list;
       }
       const sb = s.settings.sortBy;
@@ -11002,8 +11085,12 @@
     EventBus.on('room:status', ({ id, status, extra }) => {
       const room = tempRooms.find(item => item.id === id && item.onlineFollowing);
       if (!room) return;
+      const previousStatus = room.lastStatus;
       room.lastStatus = status || room.lastStatus;
-      if (status === 'online') room.lastSeenOnline = Date.now();
+      if (status === 'online') {
+        room.lastSeenOnline = Date.now();
+        if (previousStatus === 'offline') room.order = onlineFollowingNextOrder++;
+      }
       if (status === 'private') room.privateLabel = String(extra?.label || room.privateLabel || 'Private');
       renderCardState(room);
       scheduleSidebarRender();

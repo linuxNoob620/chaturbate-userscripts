@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.11
+// @version           16.5.12
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -1279,7 +1279,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.11',
+    version: '16.5.12',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -9056,18 +9056,37 @@
     async function unfollowOnlineFollowingRoom(rawUsername) {
       const target = normalizeUsername(rawUsername);
       if (!target || !isLikelyUsername(target)) return false;
-      if (!confirm(t('unfollowAccountConfirm', target))) return false;
 
       try {
         const csrf = readSuiteCookie('csrftoken');
         if (!csrf) throw new Error(t('unfollowSignInRequired'));
-        const response = await postSuiteForm(`/follow/unfollow/${encodeURIComponent(target)}/`, {
-          location: 'FollowButton',
-          csrfmiddlewaretoken: csrf,
-        }, { referrer: `${location.origin}/${target}/` });
+        // Match Chaturbate's native FollowButton request. In particular, keep
+        // the CSRF value in the form body and do not add a second CSRF header.
+        const data = new FormData();
+        data.append('location', 'FollowButton');
+        data.append('csrfmiddlewaretoken', csrf);
+        const response = await fetch(`/follow/unfollow/${encodeURIComponent(target)}/`, {
+          credentials: 'same-origin',
+          method: 'POST',
+          headers: { 'x-requested-with': 'XMLHttpRequest' },
+          referrer: `${location.origin}/${target}/`,
+          body: data,
+        });
+        if (!response.ok) throw new Error(`Chaturbate returned error ${response.status}`);
         if (response.redirected && /(?:login|auth)/i.test(response.url || '')) {
           throw new Error(t('unfollowSignInRequired'));
         }
+
+        // A 200 response alone is not enough: confirm that Chaturbate's own
+        // followed-room list no longer contains the broadcaster before the UI
+        // announces success or removes its temporary card.
+        let stillFollowed = true;
+        for (let attempt = 0; attempt < 3 && stillFollowed; attempt += 1) {
+          if (attempt) await new Promise(resolve => setTimeout(resolve, 700 * attempt));
+          const followed = await loadAllOnlineFollowing();
+          stillFollowed = followed.some(item => item.id === target);
+        }
+        if (stillFollowed) throw new Error('Chaturbate still reports this room as followed');
 
         // The native followed-room list can briefly remain stale after the
         // account request succeeds. Ignore that stale result while it catches up.

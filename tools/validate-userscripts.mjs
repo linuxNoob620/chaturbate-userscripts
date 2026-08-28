@@ -102,6 +102,12 @@ for (const item of scripts) {
     if (!source.includes('async function unfollowOnlineFollowingRoom')) failures.push(`${item.file}: Online Following account unfollow action is missing`);
     if (!source.includes("t('opUnfollowAccount')")) failures.push(`${item.file}: Online Following card menu does not expose account unfollow`);
     if (!source.includes('onlineFollowingSuppressedUntil')) failures.push(`${item.file}: Online Following unfollow stale-sync suppression is missing`);
+    const cardOpsStart = source.indexOf('function openCardOpsMenu(');
+    const cardOpsEnd = source.indexOf('function openMoveMenu(', cardOpsStart);
+    const cardOpsSource = cardOpsStart >= 0 && cardOpsEnd > cardOpsStart ? source.slice(cardOpsStart, cardOpsEnd) : '';
+    for (const key of ['opMirror', 'opFlip', 'opRotateLeft', 'opRotateRight', 'opResetView', 'opOpenRoom', 'opPiP']) {
+      if (cardOpsSource.includes(`t('${key}')`)) failures.push(`${item.file}: removed Workshop card-menu action ${key} returned`);
+    }
     if (!source.includes("findDesktopNavigationSlot('private')")) failures.push(`${item.file}: desktop Workshop navigation does not replace Private Shows`);
     if (!source.includes("const WORKSHOP_TAB_TITLE = 'Ziggy Room Suite'")) failures.push(`${item.file}: unique Workshop tab title is missing`);
     if (!source.includes("function canonicalWorkshopUrl()")) failures.push(`${item.file}: canonical Workshop URL helper is missing`);

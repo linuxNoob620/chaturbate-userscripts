@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.4
+// @version           16.5.5
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -1269,7 +1269,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.4',
+    version: '16.5.5',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -2178,6 +2178,57 @@
     };
   }
 
+  let githubBanExportQueue = Promise.resolve();
+
+  function readIgnoredRoomNames() {
+    const seen = new Set();
+    return String(localStorage.getItem('ignoredusers') || '')
+      .split(',')
+      .map(normalizeUsername)
+      .filter(username => {
+        if (!username || seen.has(username)) return false;
+        seen.add(username);
+        return true;
+      });
+  }
+
+  async function commitNewIgnoredRoom(rawUsername) {
+    const username = normalizeUsername(rawUsername);
+    if (!username || !isLikelyUsername(username)) throw new Error('Invalid room name');
+    const ignored = readIgnoredRoomNames();
+    if (ignored.includes(username)) return { added: false, cloud: 'not-needed' };
+
+    ignored.push(username);
+    localStorage.setItem('ignoredusers', ignored.join(','));
+
+    const config = loadGithubSyncConfig();
+    const passphrase = config.passphrase || githubSessionPassphrase;
+    if (!config.token || String(passphrase).length < 8) {
+      return { added: true, cloud: 'not-configured' };
+    }
+
+    const upload = githubBanExportQueue
+      .catch(() => {})
+      .then(async () => {
+        const result = await uploadSuiteSettingsToGithub(config, passphrase, Storage.load());
+        await recordGithubSyncBaseline(result, Storage.load());
+        return result;
+      });
+    githubBanExportQueue = upload;
+    try {
+      const result = await upload;
+      return { added: true, cloud: 'exported', result };
+    } catch (error) {
+      console.warn(`[Rooms] ${username} was banned, but its settings backup could not be uploaded`, error);
+      return { added: true, cloud: 'failed', error };
+    }
+  }
+
+  // The integrated Reloaded component is a separate IIFE. This narrow bridge
+  // lets both its room-page ban and the Suite's room-card ban use exactly one
+  // storage update and one event-driven cloud export.
+  globalThis.__ziggySuiteCommitNewBan = commitNewIgnoredRoom;
+
   async function downloadSuiteSettingsFromGithub(config, passphrase) {
     const url = `${githubContentsApiUrl(config)}?ref=${encodeURIComponent(config.branch)}`;
     const response = await githubApiRequest(config, 'GET', url);
@@ -2236,6 +2287,7 @@
   }
 
   async function maybeAutoImportGithubSettings(force = false) {
+    if (!isWorkshopRoute()) return false;
     const config = loadGithubSyncConfig();
     const passphrase = config.passphrase || githubSessionPassphrase;
     if (!config.token || String(passphrase).length < 8) return false;
@@ -2284,6 +2336,7 @@
   }
 
   function scheduleGithubAutoImport() {
+    if (!isWorkshopRoute()) return;
     setTimeout(() => maybeAutoImportGithubSettings(), 2200);
     setTimeout(() => monitorGithubLocalSettings(), 5000);
     setInterval(() => monitorGithubLocalSettings(), 10000);
@@ -3976,7 +4029,7 @@
 
   const isRecorderHub = isRecorderHubRoute();
   const isWorkstation = new URLSearchParams(location.search).get('multicam_mode') === '1';
-  scheduleGithubAutoImport();
+  if (isWorkstation) scheduleGithubAutoImport();
   if (isRecorderHub) initRecorderHub();
   else if (isWorkstation) initWorkstation();
   else initInjector();
@@ -5888,6 +5941,61 @@
 
     initMobileReloadedMenu();
 
+    function readSuiteCookie(name) {
+      const prefix = `${name}=`;
+      const part = String(document.cookie || '').split(';').map(value => value.trim()).find(value => value.startsWith(prefix));
+      return part ? decodeURIComponent(part.slice(prefix.length)) : '';
+    }
+
+    async function postSuiteForm(url, entries, options = {}) {
+      const data = new FormData();
+      for (const [key, value] of Object.entries(entries || {})) data.append(key, value);
+      const response = await fetch(url, {
+        credentials: 'same-origin',
+        method: 'POST',
+        headers: {
+          'x-csrftoken': readSuiteCookie('csrftoken'),
+          'x-requested-with': 'XMLHttpRequest',
+        },
+        referrer: options.referrer || location.href,
+        body: data,
+      });
+      if (!response.ok && options.required !== false) throw new Error(`Chaturbate returned error ${response.status}`);
+      return response;
+    }
+
+    async function banRoomFromCard(rawUsername) {
+      const target = normalizeUsername(rawUsername);
+      if (!target || !isLikelyUsername(target)) throw new Error('Invalid room name');
+
+      const contextResponse = await fetch(`/api/chatvideocontext/${encodeURIComponent(target)}/`, {
+        credentials: 'same-origin',
+        headers: { 'x-requested-with': 'XMLHttpRequest' },
+      });
+      if (!contextResponse.ok) throw new Error('Sign in before banning a room');
+      const context = await contextResponse.json();
+      const viewer = normalizeUsername(context?.viewer_username);
+      if (!viewer || viewer === 'anonymous') throw new Error('Sign in before banning a room');
+      if (viewer === target) throw new Error('You cannot ban your own room');
+
+      const csrf = readSuiteCookie('csrftoken');
+      await Promise.allSettled([
+        postSuiteForm(`/follow/unfollow/${encodeURIComponent(target)}/`, {
+          location: 'FollowButton', csrfmiddlewaretoken: csrf,
+        }, { required: false }),
+        postSuiteForm(`/api/notes/for_user/${encodeURIComponent(target)}/`, { text: '' }, { required: false }),
+        postSuiteForm('/api/messaging/delete-conversation/', {
+          csrfmiddlewaretoken: csrf, to_username: target,
+        }, { required: false, referrer: `${location.origin}/messages/` }),
+      ]);
+
+      await postSuiteForm(`/roomban/${encodeURIComponent(target)}/${encodeURIComponent(viewer)}/`, {
+        csrfmiddlewaretoken: csrf,
+      }, { referrer: `${location.origin}/${viewer}/` });
+
+      return globalThis.__ziggySuiteCommitNewBan(target);
+    }
+
     // ===========================================================
     // QuickAdd —— 在 chaturbate 主页/分类页的房间卡片上注入「+」按钮
     // 用 MutationObserver 监听动态加载，[data-username] 是稳定锚点
@@ -5898,20 +6006,22 @@
       // 注入 QuickAdd 按钮的样式
       const style = $('style', { html: trustedHtml(`
         .multicam-native-card-actions { display:flex; align-items:center; justify-content:flex-end; gap:4px; margin-left:auto; position:relative; }
-        .multicam-quick-add,.multicam-card-overflow-toggle {
+        .multicam-quick-add,.multicam-quick-ban,.multicam-card-overflow-toggle {
           box-sizing:border-box; width:28px; height:28px; min-width:28px; padding:0; border:1px solid #2d3e50;
           border-radius:4px; background:#17202a; color:#d7d7d7; cursor:pointer; font:700 15px/1 UbuntuRegular,Arial,sans-serif;
           display:inline-flex; align-items:center; justify-content:center; box-shadow:none; touch-action:manipulation;
         }
-        .multicam-quick-add { opacity:0; transition:opacity .12s ease,background .12s ease,color .12s ease; }
-        .multicam-qa-host:hover .multicam-quick-add,.multicam-quick-add:focus-visible,.multicam-quick-add.added { opacity:1; }
+        .multicam-quick-add,.multicam-quick-ban { opacity:0; transition:opacity .12s ease,background .12s ease,color .12s ease; }
+        .multicam-qa-host:hover .multicam-quick-add,.multicam-qa-host:hover .multicam-quick-ban,.multicam-quick-add:focus-visible,.multicam-quick-ban:focus-visible,.multicam-quick-add.added { opacity:1; }
         .multicam-quick-add:hover,.multicam-quick-add:focus-visible,.multicam-card-overflow-toggle:hover { color:#fff; background:#0c6a93; border-color:#0c6a93; }
+        .multicam-quick-ban:hover,.multicam-quick-ban:focus-visible { color:#fff; background:#991b1b; border-color:#ef4444; }
+        .multicam-quick-ban:disabled { cursor:wait; opacity:.7; }
         .multicam-quick-add.added { color:#fff; background:#166534; border-color:#22c55e; }
         .multicam-quick-add.added:hover { background:#991b1b; border-color:#ef4444; }
         .multicam-mobile-card-menu { position:absolute; z-index:2147482000; right:0; bottom:34px; width:max-content; min-width:176px; padding:4px; border:1px solid #2d3e50; border-radius:4px; background:#202c39; box-shadow:0 8px 24px rgba(0,0,0,.34); }
         .multicam-mobile-card-menu button { width:100%; min-height:42px; padding:8px 10px; border:0; border-radius:3px; background:transparent; color:#f1f1f1; text-align:left; font:500 14px/1.2 UbuntuRegular,Arial,sans-serif; }
         .multicam-mobile-card-menu button:hover,.multicam-mobile-card-menu button:focus-visible { background:#253648; }
-        html.ziggy-suite-mobile .multicam-quick-add { display:none !important; }
+        html.ziggy-suite-mobile .multicam-quick-add,html.ziggy-suite-mobile .multicam-quick-ban { display:none !important; }
         html.ziggy-suite-mobile .multicam-card-overflow-toggle { display:inline-flex; }
         html:not(.ziggy-suite-mobile) .multicam-card-overflow-toggle { display:none; }
       `)});
@@ -5956,6 +6066,30 @@
           },
         }, '▦');
 
+        const banBtn = $('button', {
+          class: 'multicam-quick-ban',
+          type: 'button',
+          title: `Ban/ignore ${username}`,
+          'aria-label': `Ban/ignore ${username}`,
+          onclick: async (event) => {
+            event.preventDefault(); event.stopPropagation();
+            if (!confirm(`Do you want to ban/ignore ${username} ?\n${username} will never be able to contact you and you will never be able to visit this room again.`)) return;
+            banBtn.disabled = true;
+            banBtn.textContent = '…';
+            try {
+              const result = await banRoomFromCard(username);
+              host.remove();
+              if (result?.cloud === 'failed') toast(`${username} banned; GitHub backup failed`, 3500);
+              else if (result?.cloud === 'not-configured') toast(`${username} banned; GitHub Cloud is not configured`, 3500);
+              else toast(`${username} banned`);
+            } catch (error) {
+              banBtn.disabled = false;
+              banBtn.textContent = '⊘';
+              toast(`Ban failed: ${error?.message || error}`, 3500);
+            }
+          },
+        }, '⊘');
+
         const overflowBtn = $('button', {
           class: 'multicam-card-overflow-toggle',
           type: 'button',
@@ -5977,7 +6111,28 @@
                 menu.remove();
               },
             }, Storage.has(username) ? '✓ Remove from Workshop' : '▦ Add to Workshop');
-            menu.appendChild(action);
+            const banAction = $('button', {
+              type: 'button', role: 'menuitem',
+              onclick: async (event) => {
+                event.preventDefault(); event.stopPropagation();
+                if (!confirm(`Do you want to ban/ignore ${username} ?\n${username} will never be able to contact you and you will never be able to visit this room again.`)) return;
+                banAction.disabled = true;
+                banAction.textContent = 'Banning…';
+                try {
+                  const result = await banRoomFromCard(username);
+                  menu.remove();
+                  host.remove();
+                  if (result?.cloud === 'failed') toast(`${username} banned; GitHub backup failed`, 3500);
+                  else if (result?.cloud === 'not-configured') toast(`${username} banned; GitHub Cloud is not configured`, 3500);
+                  else toast(`${username} banned`);
+                } catch (error) {
+                  banAction.disabled = false;
+                  banAction.textContent = '⊘ Ban/ignore room';
+                  toast(`Ban failed: ${error?.message || error}`, 3500);
+                }
+              },
+            }, '⊘ Ban/ignore room');
+            menu.append(action, banAction);
             actionHost.appendChild(menu);
             const closeMenu = (event) => {
               if (!menu.contains(event.target) && event.target !== overflowBtn) {
@@ -5989,7 +6144,7 @@
           },
         }, '…');
 
-        actionHost.append(btn, overflowBtn);
+        actionHost.append(btn, banBtn, overflowBtn);
         updateBtnState(btn, username);
       }
 
@@ -16115,10 +16270,17 @@
                 return;
             }
             response.json().then(function(data){
-                banusers=localStorage.getItem("ignoredusers").split(",");
-                banusers.push(bname);
+                var finishBanNavigation=function(){setTimeout(function(){document.location.href=domain;},200);};
+                if (typeof globalThis.__ziggySuiteCommitNewBan==="function"){
+                    Promise.resolve(globalThis.__ziggySuiteCommitNewBan(bname))
+                        .catch(function(error){console.warn("[Rooms] ban backup failed",error);})
+                        .finally(finishBanNavigation);
+                    return;
+                }
+                banusers=String(localStorage.getItem("ignoredusers")||"").split(",").filter(Boolean);
+                if (banusers.indexOf(bname)===-1){banusers.push(bname);}
                 localStorage.setItem("ignoredusers",banusers.toString());
-                setTimeout(function(){document.location.href=domain;},200);
+                finishBanNavigation();
             });
         });
     }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.10
+// @version           16.5.11
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.10');
+  instanceMarker.setAttribute('data-suite-version', '16.5.11');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -332,7 +332,6 @@
       focusThumbs: 'alt+t',
       recordingCenter: 'alt+shift+c',
       recordPage: 'alt+shift+r',
-      openRoom: 'o',
     };
   }
 
@@ -662,6 +661,7 @@
       opResetView: 'Reset view',
       opOpenRoom: 'Open room',
       opCopyUsername: 'Copy username',
+      modelNameBackgroundTab: 'Open model in a background tab',
       opUnfollowAccount: 'Unfollow on Chaturbate',
       unfollowAccountConfirm: (n) => `Unfollow ${n} on Chaturbate? This changes your actual Chaturbate account.`,
       unfollowAccountDone: (n) => `${n} unfollowed on Chaturbate`,
@@ -773,7 +773,6 @@
       shortcutFocusThumbs: 'Toggle thumbnails',
       shortcutRecordingCenter: 'Recording center',
       shortcutRecordPage: 'Record visible models',
-      shortcutOpenRoom: 'Open selected room',
       settingsCenter: 'Settings',
       settingsCenterHint: 'Layout, playback, recording, shortcuts, and settings backup',
       settingsOnlyHint: 'One backup contains the MultiCam model library, groups, layout, playback, recording, filters, notifications, and shortcuts, plus Reloaded and Mobile Clean View settings. Import replaces the current MultiCam model library with the one in the backup.',
@@ -1021,6 +1020,7 @@
       opResetView: '重置画面',
       opOpenRoom: '打开房间',
       opCopyUsername: '复制用户名',
+      modelNameBackgroundTab: '在后台标签页打开主播',
       opUnfollowAccount: '在 Chaturbate 取消关注',
       unfollowAccountConfirm: (n) => `确定要在 Chaturbate 取消关注 ${n} 吗？这会修改你的 Chaturbate 账号。`,
       unfollowAccountDone: (n) => `已在 Chaturbate 取消关注 ${n}`,
@@ -1279,7 +1279,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.10',
+    version: '16.5.11',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -9150,13 +9150,6 @@
       });
       const shotBtn = mkOp('camera', t('opScreenshot'), () => captureCardScreenshot(room.id), { extra: true });
       const recordBtn = mkOp('record', t('opRecordStart'), () => toggleCardRecording(room.id), { extra: true });
-      const openBtn = mkOp('external', t('opOpenRoom') + ' · O', () => openRoomPage(room.id));
-      const pipBtn = mkOp('pip', t('opPiP'), async () => {
-        const v = cardMap.get(room.id)?.video;
-        if (!v) return;
-        try { if (document.pictureInPictureElement) await document.exitPictureInPicture(); else await v.requestPictureInPicture(); }
-        catch (_) {}
-      }, { extra: true });
       const fullBtn = mkOp('expand', t('opFullscreen'), () => {
         document.fullscreenElement ? document.exitFullscreen() : card.requestFullscreen().catch(() => {});
       }, { extra: true });
@@ -9176,9 +9169,8 @@
       muteBtn.classList.add('quick-op', 'quick-mute');
       refreshBtn.classList.add('quick-op', 'quick-refresh', 'quick-optional');
       fullBtn.classList.add('quick-op', 'quick-full', 'quick-optional');
-      openBtn.classList.add('quick-op', 'quick-open');
       moreOpsBtn.classList.add('quick-op', 'quick-more');
-      opsRow.append(muteBtn, openBtn, refreshBtn, recordBtn, fullBtn);
+      opsRow.append(muteBtn, refreshBtn, recordBtn, fullBtn);
 
       // 状态文字（中央覆盖层）
       const statusEl = $('div', { class: 'status-layer' });
@@ -9190,7 +9182,7 @@
           href: location.origin + '/' + encodeURIComponent(room.id) + '/',
           target: '_blank',
           rel: 'noopener noreferrer',
-          title: t('opOpenRoom'),
+          title: t('modelNameBackgroundTab'),
           onclick: (event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -10113,7 +10105,6 @@
           ['focusThumbs', t('shortcutFocusThumbs')],
           ['recordingCenter', t('shortcutRecordingCenter')],
           ['recordPage', t('shortcutRecordPage')],
-          ['openRoom', t('shortcutOpenRoom')],
         ];
         const current = sanitizeShortcuts(store.state.settings.shortcuts, defaultShortcuts());
         const inputs = {};
@@ -10177,22 +10168,7 @@
       });
     }
 
-    function openRoomPage(roomId) {
-      roomId = normalizeUsername(roomId);
-      if (!isLikelyUsername(roomId)) return false;
-      openNoopener(location.origin + '/' + roomId + '/');
-      return true;
-    }
-
-    function openShortcutRoom() {
-      const hovered = document.querySelector('.cam-card:hover')?.dataset?.roomId;
-      const focused = store.state.settings.focusedRoomId;
-      const first = fullVisibleRooms()[0]?.id;
-      const roomId = hovered || focused || first;
-      if (!openRoomPage(roomId)) toast(t('emptyTitle'));
-    }
-
-    /* ---- 卡片"更多"操作菜单（PiP / 全屏 / 移动到分组 / 主屏聚焦）---- */
+    /* ---- 卡片"更多"操作菜单（全屏 / 移动到分组 / 主屏聚焦）---- */
     let cardOpsMenuCleanup = null;
     function closeCardOpsMenu() {
       if (typeof cardOpsMenuCleanup === 'function') cardOpsMenuCleanup();
@@ -11665,7 +11641,6 @@
       if (shortcutMatches(e, 'focusAdd')) { e.preventDefault(); tbInput.focus(); return; }
       if (shortcutMatches(e, 'recordingCenter')) { e.preventDefault(); openRecordingCenter(); return; }
       if (shortcutMatches(e, 'recordPage')) { e.preventDefault(); recordCurrentPage(); return; }
-      if (shortcutMatches(e, 'openRoom')) { e.preventDefault(); openShortcutRoom(); return; }
       if (e.key === 'Escape' && document.fullscreenElement) document.exitFullscreen();
       if (store.state.settings.viewMode === 'focus') {
         if (e.code === 'Space') {

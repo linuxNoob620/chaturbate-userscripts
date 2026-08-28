@@ -108,6 +108,9 @@ for (const item of scripts) {
     for (const key of ['opMirror', 'opFlip', 'opRotateLeft', 'opRotateRight', 'opResetView', 'opOpenRoom', 'opPiP']) {
       if (cardOpsSource.includes(`t('${key}')`)) failures.push(`${item.file}: removed Workshop card-menu action ${key} returned`);
     }
+    if (source.includes("['openRoom', t('shortcutOpenRoom')]")) failures.push(`${item.file}: removed Workshop Open-room shortcut returned`);
+    if (source.includes("const openBtn = mkOp('external'") || source.includes("const pipBtn = mkOp('pip'")) failures.push(`${item.file}: removed Workshop card quick action returned`);
+    if (!source.includes("title: t('modelNameBackgroundTab')")) failures.push(`${item.file}: Workshop model-name background-tab hint is missing`);
     if (!source.includes("findDesktopNavigationSlot('private')")) failures.push(`${item.file}: desktop Workshop navigation does not replace Private Shows`);
     if (!source.includes("const WORKSHOP_TAB_TITLE = 'Ziggy Room Suite'")) failures.push(`${item.file}: unique Workshop tab title is missing`);
     if (!source.includes("function canonicalWorkshopUrl()")) failures.push(`${item.file}: canonical Workshop URL helper is missing`);

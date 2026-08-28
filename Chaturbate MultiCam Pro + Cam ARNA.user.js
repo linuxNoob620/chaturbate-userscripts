@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.1
+// @version           16.5.2
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.1');
+  instanceMarker.setAttribute('data-suite-version', '16.5.2');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1241,7 +1241,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.1',
+    version: '16.5.2',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3108,6 +3108,7 @@
   const UnifiedRecorder = (() => {
     const recordings = new Map();
     const listeners = new Set();
+    const stopPending = new Map();
     let channel = null;
     try { channel = new BroadcastChannel(RECORDER_CHANNEL_NAME); } catch (_) {}
 
@@ -3118,11 +3119,29 @@
 
     function applySnapshot(snapshot) {
       const rows = Array.isArray(snapshot?.recordings) ? snapshot.recordings : [];
-      recordings.clear();
+      const previous = new Map(recordings);
+      const next = new Map();
+      const now = Date.now();
       rows.forEach(row => {
         const id = normalizeUsername(row?.id);
-        if (isLikelyUsername(id)) recordings.set(id, { ...row, id });
+        if (!isLikelyUsername(id)) return;
+        const local = previous.get(id);
+        const pendingAt = Number(stopPending.get(id) || 0);
+        if (pendingAt && local?.status === 'finalizing' && !['finalizing', 'saved'].includes(row?.status)) {
+          next.set(id, local);
+          return;
+        }
+        if (['finalizing', 'saved'].includes(row?.status)) stopPending.delete(id);
+        next.set(id, { ...row, id });
       });
+      stopPending.forEach((pendingAt, id) => {
+        if (next.has(id)) return;
+        const local = previous.get(id);
+        if (local?.status === 'finalizing' && now - Number(pendingAt || 0) < 2500) next.set(id, local);
+        else stopPending.delete(id);
+      });
+      recordings.clear();
+      next.forEach((row, id) => recordings.set(id, row));
       notify();
     }
 
@@ -3180,7 +3199,12 @@
       id = normalizeUsername(id);
       if (!id) return false;
       const row = recordings.get(id);
-      if (row) recordings.set(id, { ...row, status: 'finalizing', finalizingProgress: 1 });
+      stopPending.set(id, Date.now());
+      if (row) recordings.set(id, {
+        ...row,
+        status: 'finalizing',
+        finalizingProgress: Math.max(1, Number(row.finalizingProgress || 0)),
+      });
       notify();
       enqueue('stop', id);
       ensureHub();
@@ -3317,6 +3341,18 @@
       return Number(job.recordedMs || 0) + (job.recordingSince ? Date.now() - job.recordingSince : 0);
     }
 
+    function currentWaitingMs(job) {
+      return Number(job.waitingMs || 0) + (job.waitingSince ? Date.now() - job.waitingSince : 0);
+    }
+
+    function freezeClocks(job) {
+      const now = Date.now();
+      if (job.recordingSince) job.recordedMs = Number(job.recordedMs || 0) + Math.max(0, now - job.recordingSince);
+      if (job.waitingSince) job.waitingMs = Number(job.waitingMs || 0) + Math.max(0, now - job.waitingSince);
+      job.recordingSince = 0;
+      job.waitingSince = 0;
+    }
+
     function pauseClock(job) {
       if (job.recordingSince) job.recordedMs = currentRecordedMs(job);
       job.recordingSince = 0;
@@ -3330,13 +3366,13 @@
     }
 
     function summary(job) {
-      const waitingMs = Number(job.waitingMs || 0) + (job.waitingSince ? Date.now() - job.waitingSince : 0);
+      const terminal = !!job.finalizing || ['finalizing', 'saved'].includes(job.status);
       return {
         id: job.id,
         status: job.status,
         startedAt: job.startedAt,
-        recordedMs: currentRecordedMs(job),
-        waitingMs,
+        recordedMs: terminal ? Number(job.recordedMs || 0) : currentRecordedMs(job),
+        waitingMs: terminal ? Number(job.waitingMs || 0) : currentWaitingMs(job),
         bytes: Number(job.bytes || 0),
         resolution: job.width && job.height ? `${job.width}×${job.height}` : '',
         audio: !!job.audioEnabled,
@@ -3375,11 +3411,14 @@
       list.replaceChildren();
       if (!jobs.size) { list.appendChild($('div', { class: 'rec-empty' }, t('recordingCenterEmpty'))); return; }
       jobs.forEach(job => {
+        const terminal = !!job.finalizing || ['finalizing', 'saved'].includes(job.status);
+        const recordedMs = terminal ? Number(job.recordedMs || 0) : currentRecordedMs(job);
+        const waitingMs = terminal ? Number(job.waitingMs || 0) : currentWaitingMs(job);
         const row = $('section', { class: `rec-row is-${job.status === 'recording' ? 'recording' : (job.status === 'finalizing' ? 'finalizing' : 'waiting')}` }, [
           $('div', {}, [
             $('div', { class: 'rec-name' }, job.id),
             $('div', { class: 'rec-meta' }, [
-              document.createTextNode(`${statusLabel(job)} · ${t('recordingDuration')}: ${formatDuration(currentRecordedMs(job))} · ${t('recorderWaitingTime')}: ${formatDuration(Number(job.waitingMs || 0) + (job.waitingSince ? Date.now() - job.waitingSince : 0))}`),
+              document.createTextNode(`${statusLabel(job)} · ${t('recordingDuration')}: ${formatDuration(recordedMs)} · ${t('recorderWaitingTime')}: ${formatDuration(waitingMs)}`),
               $('br'),
               document.createTextNode(`${job.width ? `${job.width}×${job.height}` : '—'} · ${job.audioEnabled ? t('recorderAudioOn') : t('recorderAudioOff')} · ${formatBytes(job.bytes)}`),
             ]),
@@ -3466,6 +3505,7 @@
     function clearStableTimer(job) { if (job.stableTimer) clearTimeout(job.stableTimer); job.stableTimer = 0; }
 
     function waitForStablePublic(job) {
+      if (!job || job.stopRequested || job.finalizing) return;
       clearStableTimer(job);
       job.sourceStatus = 'online';
       if (job.manualPaused) {
@@ -3477,7 +3517,7 @@
       job.status = 'connecting';
       pauseClock(job);
       job.stableTimer = setTimeout(async () => {
-        if (!jobs.has(job.id) || job.finalizing || job.manualPaused || job.video.readyState < 2) return;
+        if (!jobs.has(job.id) || job.stopRequested || job.finalizing || job.manualPaused || job.video.readyState < 2) return;
         try {
           if (!job.recorder) await beginRecorder(job);
           else if (job.recorder.state === 'paused') job.recorder.resume();
@@ -3494,6 +3534,7 @@
     }
 
     function pauseForStatus(job, status) {
+      if (!job || job.stopRequested || job.finalizing) return;
       clearStableTimer(job);
       pauseClock(job);
       try { if (job.recorder?.state === 'recording') job.recorder.pause(); } catch (_) {}
@@ -3533,10 +3574,11 @@
     }
 
     async function finalizeJob(job) {
-      if (!job || job.finalizing) return;
+      if (!job || job.stopRequested || job.finalizing) return;
+      job.stopRequested = true;
       job.finalizing = true;
       job.status = 'finalizing';
-      pauseClock(job);
+      freezeClocks(job);
       clearStableTimer(job);
       clearTimeout(job.offlineTimer);
       job.finalizingProgress = 5;
@@ -3572,6 +3614,7 @@
       } catch (error) {
         job.status = 'error';
         job.error = String(error?.message || error);
+        job.stopRequested = false;
         job.finalizing = false;
         publishState();
       }
@@ -3606,7 +3649,7 @@
 
     function pauseJob(id) {
       const job = jobs.get(normalizeUsername(id));
-      if (!job || job.finalizing) return;
+      if (!job || job.stopRequested || job.finalizing) return;
       job.manualPaused = true;
       clearStableTimer(job);
       pauseClock(job);
@@ -3617,7 +3660,7 @@
 
     function resumeJob(id) {
       const job = jobs.get(normalizeUsername(id));
-      if (!job || job.finalizing) return;
+      if (!job || job.stopRequested || job.finalizing) return;
       job.manualPaused = false;
       job.error = '';
       if (job.sourceStatus === 'private') pauseForStatus(job, 'private');
@@ -3633,7 +3676,7 @@
 
     function retryJob(id) {
       const job = jobs.get(normalizeUsername(id));
-      if (!job || job.finalizing) return;
+      if (!job || job.stopRequested || job.finalizing) return;
       job.error = '';
       job.status = 'connecting';
       service.refresh(job.id);
@@ -3671,7 +3714,7 @@
     window.addEventListener('storage', event => { if (event.key === RECORDER_COMMAND_KEY) drainCommands(); });
     EventBus.on('room:online', ({ id, hlsSource }) => {
       const job = jobs.get(id);
-      if (!job) return;
+      if (!job || job.stopRequested || job.finalizing) return;
       job.sourceStatus = 'online';
       if (!job.video.isConnected) document.getElementById('rec-hidden-media')?.appendChild(job.video);
       service.attachVideo(id, job.video);
@@ -3680,7 +3723,7 @@
     });
     EventBus.on('room:status', ({ id, status }) => {
       const job = jobs.get(id);
-      if (!job || job.finalizing) return;
+      if (!job || job.stopRequested || job.finalizing) return;
       job.sourceStatus = status;
       if (status === 'private') pauseForStatus(job, 'private');
       else if (status === 'offline') pauseForStatus(job, 'offline');
@@ -3689,7 +3732,7 @@
     });
     EventBus.on('room:transient-error', ({ id }) => {
       const job = jobs.get(id);
-      if (job && !job.finalizing) pauseForStatus(job, 'reconnecting');
+      if (job && !job.stopRequested && !job.finalizing) pauseForStatus(job, 'reconnecting');
     });
     setInterval(() => { localStorage.setItem(RECORDER_HEARTBEAT_KEY, String(Date.now())); drainCommands(); publishState(); }, 1000);
     localStorage.setItem(RECORDER_HEARTBEAT_KEY, String(Date.now()));
@@ -8308,6 +8351,10 @@
         frame.name = 'ziggy-following-sync-frame';
         frame.title = 'Online Following synchronizer';
         frame.setAttribute('aria-hidden', 'true');
+        // Chaturbate's followed page tries to frame-bust with top.location.
+        // Keep scripts and same-origin DOM access for rendering, but explicitly
+        // deny top navigation so the hidden synchronizer cannot replace Workshop.
+        frame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
         Object.assign(frame.style, {
           position: 'fixed', left: '-100000px', top: '0', width: '1280px', height: '900px',
           opacity: '0.001', pointerEvents: 'none', border: '0', zIndex: '-1',
@@ -9674,20 +9721,26 @@
         };
         document.body.appendChild(menu);
         Object.assign(menu.style, { position: 'fixed', right: 'auto', bottom: 'auto' });
+        const viewport = window.visualViewport;
+        const viewportLeft = Number(viewport?.offsetLeft || 0);
+        const viewportTop = Number(viewport?.offsetTop || 0);
+        const viewportWidth = Number(viewport?.width || window.innerWidth);
+        const viewportHeight = Number(viewport?.height || window.innerHeight);
         const margin = 8;
-        const maxHeight = Math.max(120, window.innerHeight - margin * 2);
+        const maxHeight = Math.max(120, viewportHeight - margin * 2);
         menu.style.maxHeight = `${maxHeight}px`;
-        const menuWidth = Math.min(Math.max(menu.offsetWidth, 190), Math.max(190, window.innerWidth - margin * 2));
+        const menuWidth = Math.min(Math.max(menu.offsetWidth, 190), Math.max(190, viewportWidth - margin * 2));
         const menuHeight = Math.min(menu.scrollHeight, maxHeight);
         const anchorX = usePointer ? e.clientX : rect.right - menuWidth;
-        const left = Math.max(margin, Math.min(anchorX, window.innerWidth - menuWidth - margin));
+        const left = Math.max(viewportLeft + margin, Math.min(anchorX, viewportLeft + viewportWidth - menuWidth - margin));
         const belowTop = (usePointer ? e.clientY : rect.bottom) + 4;
         const aboveBottom = (usePointer ? e.clientY : rect.top) - 4;
-        const spaceBelow = window.innerHeight - belowTop - margin;
-        const spaceAbove = aboveBottom - margin;
+        const viewportBottom = viewportTop + viewportHeight;
+        const spaceBelow = viewportBottom - belowTop - margin;
+        const spaceAbove = aboveBottom - viewportTop - margin;
         const top = (spaceBelow >= menuHeight || spaceBelow >= spaceAbove)
-          ? Math.max(margin, Math.min(belowTop, window.innerHeight - menuHeight - margin))
-          : Math.max(margin, aboveBottom - menuHeight);
+          ? Math.max(viewportTop + margin, Math.min(belowTop, viewportBottom - menuHeight - margin))
+          : Math.max(viewportTop + margin, aboveBottom - menuHeight);
         menu.style.left = `${left}px`;
         menu.style.top = `${top}px`;
         window.addEventListener('resize', closeOnLayoutChange, { passive: true });

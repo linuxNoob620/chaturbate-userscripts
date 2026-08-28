@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.12
+// @version           16.5.13
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -1279,7 +1279,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.12',
+    version: '16.5.13',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -9058,7 +9058,15 @@
       if (!target || !isLikelyUsername(target)) return false;
 
       try {
-        const csrf = readSuiteCookie('csrftoken');
+        // This function runs inside the standalone Workshop scope, while the
+        // general Suite cookie helper belongs to the normal-site scope. Read
+        // the token locally so Workshop unfollow works independently.
+        const cookiePrefix = 'csrftoken=';
+        const cookiePart = String(document.cookie || '')
+          .split(';')
+          .map(value => value.trim())
+          .find(value => value.startsWith(cookiePrefix));
+        const csrf = cookiePart ? decodeURIComponent(cookiePart.slice(cookiePrefix.length)) : '';
         if (!csrf) throw new Error(t('unfollowSignInRequired'));
         // Match Chaturbate's native FollowButton request. In particular, keep
         // the CSRF value in the form body and do not add a second CSRF header.

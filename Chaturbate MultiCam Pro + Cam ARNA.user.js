@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.6
+// @version           16.5.7
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.6');
+  instanceMarker.setAttribute('data-suite-version', '16.5.7');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1269,7 +1269,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.6',
+    version: '16.5.7',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -1414,9 +1414,10 @@
       sortBy: 'manual',
       notifyOnline: true,
       notifyFavoritesOnly: true,
-      startOnOnlineFavorites: true,
+      startOnOnlineFavorites: false,
       startupView: 'last',        // 'last' | 'auto' | 'grid' | 'focus' | 'phone'
-      startupGroup: ONLINE_FAVORITES_GROUP_ID, // 'last' or a valid group id
+      startupGroup: 'last',       // 'last' or a valid group id
+      __startupGroupDefaultMigratedV1657: true,
       activeGroup: 'all',
       searchQuery: '',
       pureMode: false,
@@ -1661,15 +1662,21 @@
     out.settings.sidebarCollapsed = !!out.settings.sidebarCollapsed;
     out.settings.notifyOnline = out.settings.notifyOnline !== false;
     out.settings.notifyFavoritesOnly = out.settings.notifyFavoritesOnly !== false;
-    out.settings.startOnOnlineFavorites = out.settings.startOnOnlineFavorites !== false;
     out.settings.startupView = ['last', 'auto', 'grid', 'focus', 'phone'].includes(st.startupView)
       ? st.startupView
       : def.settings.startupView;
-    const legacyStartupGroup = st.startOnOnlineFavorites === false ? 'last' : ONLINE_FAVORITES_GROUP_ID;
-    const requestedStartupGroup = Object.prototype.hasOwnProperty.call(st, 'startupGroup') ? String(st.startupGroup || '') : legacyStartupGroup;
+    const legacyStartupGroup = st.startOnOnlineFavorites === true ? ONLINE_FAVORITES_GROUP_ID : 'last';
+    let requestedStartupGroup = Object.prototype.hasOwnProperty.call(st, 'startupGroup') ? String(st.startupGroup || '') : legacyStartupGroup;
+    // 16.5.6 and earlier silently made Online Favorites the default. Migrate
+    // that inherited value once; later explicit choices remain untouched.
+    if (st.__startupGroupDefaultMigratedV1657 !== true
+      && requestedStartupGroup === ONLINE_FAVORITES_GROUP_ID
+      && st.startOnOnlineFavorites !== false) requestedStartupGroup = 'last';
     out.settings.startupGroup = requestedStartupGroup === 'last' || out.groups.some(g => g.id === requestedStartupGroup)
       ? requestedStartupGroup
-      : legacyStartupGroup;
+      : 'last';
+    out.settings.startOnOnlineFavorites = out.settings.startupGroup === ONLINE_FAVORITES_GROUP_ID;
+    out.settings.__startupGroupDefaultMigratedV1657 = true;
     reconcileSplitState(out);
     out.settings.pollMs = { ...def.settings.pollMs, ...(st.pollMs && typeof st.pollMs === 'object' ? st.pollMs : {}) };
     for (const [k, fallback] of Object.entries(def.settings.pollMs)) {
@@ -1861,6 +1868,7 @@
         order, lastStatus: 'unknown', lastSeenOnline: 0, muted: false,
       }, order));
       this.save(s);
+      void queueGithubSettingsAutoExport(`added room ${id}`);
       return 'added';
     },
     remove(id) {
@@ -1877,7 +1885,6 @@
     const cleanState = sanitizeState(multicamState || Storage.load());
     const multicamSettings = {
       ...cleanState.settings,
-      activeGroup: DEFAULT_GROUP_ID,
       pageIndex: 0,
       focusedRoomId: null,
       searchQuery: '',
@@ -2160,25 +2167,48 @@
     const payload = buildSuiteSettingsPayload(multicamState);
     const envelope = await encryptSuiteSettingsPayload(payload, passphrase, config.deviceName);
     const url = githubContentsApiUrl(config);
-    const existing = await githubApiRequest(config, 'GET', `${url}?ref=${encodeURIComponent(config.branch)}`);
-    if (![200, 404].includes(existing.status)) throw githubResponseError(existing, 'Unable to read the current cloud backup');
-    const requestBody = {
-      message: `Update Chaturbate settings from ${config.deviceName}`,
-      content: textToBase64(JSON.stringify(envelope, null, 2)),
-      branch: config.branch,
-    };
-    if (existing.status === 200 && existing.data?.sha) requestBody.sha = existing.data.sha;
-    const uploaded = await githubApiRequest(config, 'PUT', url, requestBody);
-    if (![200, 201].includes(uploaded.status)) throw githubResponseError(uploaded, 'Unable to upload settings');
-    return {
-      payload,
-      envelope,
-      sha: uploaded.data?.content?.sha || '',
-      commit: uploaded.data?.commit?.sha || '',
-    };
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const existing = await githubApiRequest(config, 'GET', `${url}?ref=${encodeURIComponent(config.branch)}&cache_bust=${Date.now()}`);
+      if (![200, 404].includes(existing.status)) throw githubResponseError(existing, 'Unable to read the current cloud backup');
+      const requestBody = {
+        message: `Update Chaturbate settings from ${config.deviceName}`,
+        content: textToBase64(JSON.stringify(envelope, null, 2)),
+        branch: config.branch,
+      };
+      if (existing.status === 200 && existing.data?.sha) requestBody.sha = existing.data.sha;
+      const uploaded = await githubApiRequest(config, 'PUT', url, requestBody);
+      if ([200, 201].includes(uploaded.status)) {
+        return {
+          payload,
+          envelope,
+          sha: uploaded.data?.content?.sha || '',
+          commit: uploaded.data?.commit?.sha || '',
+        };
+      }
+      if (uploaded.status !== 409 || attempt === 2) throw githubResponseError(uploaded, 'Unable to upload settings');
+      await new Promise(resolve => setTimeout(resolve, 180 * (attempt + 1)));
+    }
+    throw new Error('GitHub settings upload did not complete');
   }
 
-  let githubBanExportQueue = Promise.resolve();
+  let githubAutoExportQueue = Promise.resolve();
+
+  function queueGithubSettingsAutoExport(reason = 'settings changed') {
+    const config = loadGithubSyncConfig();
+    const passphrase = config.passphrase || githubSessionPassphrase;
+    if (!config.token || String(passphrase).length < 8) return null;
+    const upload = githubAutoExportQueue
+      .catch(() => {})
+      .then(async () => {
+        const latestState = Storage.load();
+        const result = await uploadSuiteSettingsToGithub(config, passphrase, latestState);
+        await recordGithubSyncBaseline(result, latestState);
+        return result;
+      });
+    githubAutoExportQueue = upload;
+    upload.catch(error => console.warn(`[Rooms] automatic GitHub export failed after ${reason}`, error));
+    return upload;
+  }
 
   function readIgnoredRoomNames() {
     const seen = new Set();
@@ -2201,20 +2231,10 @@
     ignored.push(username);
     localStorage.setItem('ignoredusers', ignored.join(','));
 
-    const config = loadGithubSyncConfig();
-    const passphrase = config.passphrase || githubSessionPassphrase;
-    if (!config.token || String(passphrase).length < 8) {
+    const upload = queueGithubSettingsAutoExport(`banning ${username}`);
+    if (!upload) {
       return { added: true, cloud: 'not-configured' };
     }
-
-    const upload = githubBanExportQueue
-      .catch(() => {})
-      .then(async () => {
-        const result = await uploadSuiteSettingsToGithub(config, passphrase, Storage.load());
-        await recordGithubSyncBaseline(result, Storage.load());
-        return result;
-      });
-    githubBanExportQueue = upload;
     try {
       const result = await upload;
       return { added: true, cloud: 'exported', result };
@@ -2646,6 +2666,7 @@
         id = normalizeUsername(id);
         if (!isLikelyUsername(id)) return false;
         let changed = false;
+        let newRoomAdded = false;
         update(s => {
           normalizeStateMemberships(s);
           const ag = s.settings.activeGroup || DEFAULT_GROUP_ID;
@@ -2666,7 +2687,9 @@
             lastStatus: 'unknown', lastSeenOnline: 0, muted: false,
           }, allOrder));
           changed = true;
+          newRoomAdded = true;
         }, 'rooms');
+        if (newRoomAdded) void queueGithubSettingsAutoExport(`added room ${id}`);
         return changed;
       },
       removeRoom(id) { id = normalizeUsername(id); update(s => { s.rooms = s.rooms.filter(r => r.id !== id); reconcileSplitState(s); }, 'rooms'); },
@@ -8661,10 +8684,7 @@
     // v15.6-minimal: 临时 URL 窗口。只存在于当前页面内存，刷新后消失；不写入 localStorage。
     const tempRooms = [];
     function regularTemporaryRooms() { return tempRooms.filter(room => !room.onlineFollowing); }
-    function onlineFollowingRooms() {
-      const savedIds = new Set(store.state.rooms.map(room => room.id));
-      return tempRooms.filter(room => room.onlineFollowing && !savedIds.has(room.id));
-    }
+    function onlineFollowingRooms() { return tempRooms.filter(room => room.onlineFollowing); }
     function regularRoomsForView() { return [...store.state.rooms, ...regularTemporaryRooms()]; }
     function allRoomsForView() { return [...store.state.rooms, ...tempRooms]; }
     function findRoomAny(id) {
@@ -8752,7 +8772,7 @@
         // Chaturbate's followed page tries to frame-bust with top.location.
         // Keep scripts and same-origin DOM access for rendering, but explicitly
         // deny top navigation so the hidden synchronizer cannot replace Workshop.
-        frame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+        frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation');
         Object.assign(frame.style, {
           position: 'fixed', left: '-100000px', top: '0', width: '1280px', height: '900px',
           opacity: '0.001', pointerEvents: 'none', border: '0', zIndex: '-1',
@@ -8853,8 +8873,7 @@
       if (!force && Date.now() - onlineFollowingLastSync < 45000) return;
       onlineFollowingSyncBusy = true;
       try {
-        const savedIds = new Set(store.state.rooms.map(room => room.id));
-        const followed = (await loadAllOnlineFollowing()).filter(item => !savedIds.has(item.id));
+        const followed = await loadAllOnlineFollowing();
         const ids = followed.map(item => item.id);
         const currentFollowing = tempRooms.filter(room => room.onlineFollowing);
         const currentById = new Map(currentFollowing.map(room => [room.id, room]));
@@ -9008,8 +9027,6 @@
         privateLabel: room.privateLabel || '',
         muted: true,
       });
-      const index = tempRooms.indexOf(room);
-      if (index >= 0) tempRooms.splice(index, 1);
       service.setQualityCap(roomId, 0);
       scheduleSidebarRender();
       scheduleGridRender();
@@ -9128,7 +9145,7 @@
       }, room.displayName || room.id);
       const infoMeta = $('div', { class: 'cam-info-meta' }, statusMeta(room.lastStatus).label);
       const infoActions = $('div', { class: 'cam-info-actions' });
-      if (room.onlineFollowing) {
+      if (room.onlineFollowing && !store.state.rooms.some(item => item.id === room.id)) {
         const addRoomBtn = mkOp('plus', LANG === 'zh' ? '添加房间' : 'Add room', () => saveOnlineFollowingRoom(room.id));
         addRoomBtn.classList.add('quick-op', 'quick-add-room');
         infoActions.appendChild(addRoomBtn);
@@ -9853,7 +9870,7 @@
 
     function openStartupSettings() {
       openToolPanel(t('startupSettings'), (body, close) => {
-        const view = $('select', { class: 'ctrl-input' }, [
+        const view = $('select', { class: 'ctrl-input', 'aria-label': t('startupViewLabel') }, [
           $('option', { value: 'last' }, t('startupLastUsed')),
           $('option', { value: 'auto' }, t('startupAutomatic')),
           $('option', { value: 'grid' }, t('viewGrid')),
@@ -9871,7 +9888,7 @@
           if (group.name === '__fav__') return t('groupFav');
           return group.name;
         };
-        const group = $('select', { class: 'ctrl-input' }, [
+        const group = $('select', { class: 'ctrl-input', 'aria-label': t('startupGroupLabel') }, [
           $('option', { value: 'last' }, t('startupLastUsed')),
           ...[...store.state.groups]
             .sort((a, b) => numeric(a.order, 999) - numeric(b.order, 999))

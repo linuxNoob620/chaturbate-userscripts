@@ -93,6 +93,11 @@ for (const item of scripts) {
       if (source.includes(removedWindowFirstMarker)) failures.push(`${item.file}: removed Window-first mode marker remains: ${removedWindowFirstMarker}`);
     }
     if (!source.includes("startupView: 'last'") || !source.includes('function openStartupSettings()')) failures.push(`${item.file}: Workshop startup view/group settings are missing`);
+    if (!source.includes("startupGroup: 'last'") || !source.includes('__startupGroupDefaultMigratedV1657')) failures.push(`${item.file}: Workshop startup group does not default and migrate to Last used`);
+    if (!source.includes('queueGithubSettingsAutoExport(`added room ${id}`)')) failures.push(`${item.file}: new Workshop rooms do not trigger the scoped GitHub backup`);
+    if (!source.includes("allow-scripts allow-same-origin allow-presentation")) failures.push(`${item.file}: Online Following synchronizer sandbox is missing presentation support`);
+    if (!source.includes("'aria-label': t('startupViewLabel')") || !source.includes("'aria-label': t('startupGroupLabel')")) failures.push(`${item.file}: startup settings controls are missing distinct accessible labels`);
+    if (source.includes('(await loadAllOnlineFollowing()).filter(item => !savedIds.has(item.id))')) failures.push(`${item.file}: saved followed rooms are incorrectly omitted from Online Following`);
     if (!source.includes("findDesktopNavigationSlot('private')")) failures.push(`${item.file}: desktop Workshop navigation does not replace Private Shows`);
     if (!source.includes("const WORKSHOP_TAB_TITLE = 'Ziggy Room Suite'")) failures.push(`${item.file}: unique Workshop tab title is missing`);
     if (!source.includes("function canonicalWorkshopUrl()")) failures.push(`${item.file}: canonical Workshop URL helper is missing`);

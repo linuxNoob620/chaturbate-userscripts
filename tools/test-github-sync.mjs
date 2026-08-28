@@ -116,6 +116,25 @@ assert.equal(calls[0].method, 'GET');
 assert.equal(calls[1].method, 'PUT');
 assert.equal(JSON.parse(calls[1].data).sha, 'existing-sha', 'Existing GitHub file must be overwritten using its SHA');
 
+const retryCalls = [];
+let putAttempts = 0;
+context.GM_xmlhttpRequest = options => {
+  retryCalls.push({ method: options.method, url: options.url, data: options.data });
+  if (options.method === 'GET') {
+    const sha = putAttempts ? 'newer-sha' : 'stale-sha';
+    setTimeout(() => options.onload({ status: 200, responseText: JSON.stringify({ sha }) }), 0);
+  } else {
+    putAttempts += 1;
+    if (putAttempts === 1) setTimeout(() => options.onload({ status: 409, responseText: JSON.stringify({ message: 'Conflict' }) }), 0);
+    else setTimeout(() => options.onload({ status: 200, responseText: JSON.stringify({ content: { sha: 'retried-sha' }, commit: { sha: 'retried-commit' } }) }), 0);
+  }
+  return { abort() {} };
+};
+const retriedUpload = await api.uploadSuiteSettingsToGithub(config, passphrase, payload);
+assert.equal(retriedUpload.commit, 'retried-commit');
+assert.deepEqual(retryCalls.map(call => call.method), ['GET', 'PUT', 'GET', 'PUT']);
+assert.equal(JSON.parse(retryCalls[3].data).sha, 'newer-sha', 'A 409 retry must re-read and use the newest file SHA');
+
 context.GM_xmlhttpRequest = options => {
   setTimeout(() => options.onload({
     status: 200,
@@ -127,4 +146,4 @@ const downloaded = await api.downloadSuiteSettingsFromGithub(config, passphrase)
 assert.deepEqual(downloaded.payload, payload);
 assert.equal(downloaded.sha, 'new-commit-sha');
 
-console.log('GitHub sync tests passed: encryption, wrong-passphrase rejection, overwrite, and download/import.');
+console.log('GitHub sync tests passed: encryption, wrong-passphrase rejection, overwrite, 409 retry, and download/import.');

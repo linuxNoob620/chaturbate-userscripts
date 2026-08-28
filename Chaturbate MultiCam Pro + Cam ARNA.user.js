@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.5
+// @version           16.5.6
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.4');
+  instanceMarker.setAttribute('data-suite-version', '16.5.6');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1269,7 +1269,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.5',
+    version: '16.5.6',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -5807,7 +5807,6 @@
       document.head.appendChild(style);
 
       const settingDefinitions = [
-        { label: 'Thumbnail zoom', key: 'zoomoff', inverted: true },
         { label: 'Preview rooms', key: 'animationoff', inverted: true },
         { label: 'Open rooms in new tab', key: 'newtabon', inverted: true },
         { label: 'Auto refresh followed', key: 'refreshoff', inverted: false },
@@ -12286,7 +12285,6 @@
         }
 
         var preferences=makeSection('Preferences');
-        makeSwitch(preferences,'h1','a1','Thumbnail zoom',1,zoomoff,false);
         makeSwitch(preferences,'h2','a2','Preview rooms',1,anionoff,!!supporter);
         makeSwitch(preferences,'h3','a3','Open rooms in new tab',1,newtabon,false);
         makeSwitch(preferences,'h4','a4','Auto refresh followed',0,refreshoff,!login);
@@ -12377,11 +12375,6 @@
 
         newelem=document.createElement('span');
         newelem.innerHTML="--Script settings--<div style='float:right'>Off ↔ On</div>";
-        document.getElementById("scriptcontrols").appendChild(newelem);
-
-        newelem=document.createElement('span');
-        newelem.id="h1";
-        newelem.innerHTML="Thumbnail zoom : <input type='range' id='a1' min=0 max=1 value=1 style='width: 40px;height:11px;cursor: pointer;float: right;accent-color: #f47321;'>";
         document.getElementById("scriptcontrols").appendChild(newelem);
 
         newelem=document.createElement('span');
@@ -12492,11 +12485,6 @@
         }else{
             document.getElementById("a2").value=1;
         }
-        if (localStorage.getItem("zoomoff")){
-            document.getElementById("a1").value=0;
-        }else{
-            document.getElementById("a1").value=1;
-        }
         if (roomname!="discover"){
             document.body.classList.add("thumbpage");
             setclass();
@@ -12509,17 +12497,6 @@
         document.body.classList.remove("bigThumb");
         if(localStorage.getItem("bigthumb")){
             document.body.classList.add("bigThumb");
-        }
-        if(!localStorage.getItem("zoomoff")){
-            if(pageType=="profile"){
-                document.body.classList.add("zoom");
-                return;
-            }
-            if(localStorage.getItem("bigthumb")){
-                document.body.classList.add("bigzoom");
-            }else{
-                document.body.classList.add("zoom");
-            }
         }
     }
 
@@ -12535,14 +12512,6 @@
              localStorage.setItem("bigthumb","foo");
         }else{
             localStorage.removeItem("bigthumb");
-        }
-        setclass();
-    }
-    function zoomoff(){
-        if (document.getElementById("a1").value==0){
-            localStorage.setItem("zoomoff","foo");
-        }else{
-            localStorage.removeItem("zoomoff");
         }
         setclass();
     }
@@ -12897,16 +12866,12 @@
             ".bigThumb .RoomCardGrid{grid-template-columns:repeat(auto-fill, minmax(302px, 1fr)) !important}"+
             ".RoomCardGrid{grid-template-columns:repeat(auto-fill, minmax(174px, 1fr)) !important}"+
             ".RoomCardGrid {overflow:visible !important}"+
-            ".roomCard {transition: .5s}"+
-            ".roomCard:hover {border-color:red;z-index:50}"+
-            ".RoomCard {transition: .5s}"+
-            ".RoomCard:hover {border-color:red;z-index:20}"+
+            ".roomCard,.RoomCard {transition:border-color .12s ease,box-shadow .12s ease}"+
+            ".roomCard:hover,.RoomCard:hover {transform:none !important}"+
+            ".RoomCard.multicam-qa-host:hover {position:relative;z-index:60}"+
             ".thumbpage .content{overflow: visible; !important ;margin-right:12px !important;margin-left:12px !important}"+
             ".list{overflow: visible !important}"+
             ".MoreRooms{overflow: visible !important}"+
-            ".zoom .roomCard:hover {transform: scale(1.37)}"+
-            ".bigzoom .RoomCard:hover {transform: scale(1.23)}"+
-            ".zoom .RoomCard:hover {transform: scale(1.37)}"+
             ".FollowedDropdown__section-title{visibility:hidden !important}"+
             ".FollowedDropdown__rooms:nth-of-type(2n+1){display:none !important}"+
             ".FollowRecommendedRoomlist{display:none !important}"+

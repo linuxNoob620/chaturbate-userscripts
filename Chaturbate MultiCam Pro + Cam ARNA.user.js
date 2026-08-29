@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.14
+// @version           16.5.15
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -830,6 +830,10 @@
       recorderPrivate: 'Paused for private/secret show',
       recorderOffline: 'Offline',
       recorderFinalizing: 'Finalizing',
+      recorderStopped: 'Stopped',
+      recorderStoppedNoData: 'Stopped · Nothing was recorded',
+      recorderInterrupted: 'Stopped · Recorder Hub was reloaded; the in-memory recording could not be recovered',
+      recorderStopWaiting: 'Stop requested · waiting for Recorder Hub',
       recorderSaving: 'Saving file',
       recorderSaved: 'Download started',
       recorderAudioOn: 'Audio recorded',
@@ -1177,6 +1181,10 @@
       recorderPause: '暂停',
       recorderResume: '继续',
       recorderPausedManual: '手动暂停',
+      recorderStopped: '已停止',
+      recorderStoppedNoData: '已停止 · 没有录到可保存的数据',
+      recorderInterrupted: '已停止 · 录制中心已重新加载，无法恢复内存中的录制',
+      recorderStopWaiting: '已请求停止 · 正在等待录制中心',
       recorderHubTitle: '录制中心',
       recorderHubSubtitle: '房间工具和工作台共用一个持续录制服务。',
       recorderRecording: '录制中',
@@ -1280,7 +1288,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.14',
+    version: '16.5.15',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -2963,6 +2971,7 @@
     const sessions = new Map();   // id -> { hls, video, status, retryCount, pollTimer, userPaused }
     const qualityCaps = new Map(); // id -> maximum stream height for a specific virtual view/consumer
     const domain = safeChaturbateHost(window.location.hostname) ? window.location.hostname : 'chaturbate.com';
+    let rateLimitUntil = 0;
 
     function clearPoll(s) {
       if (s?.pollTimer) { clearTimeout(s.pollTimer); s.pollTimer = null; }
@@ -2987,7 +2996,15 @@
           referrer: `https://${domain}/${encodeURIComponent(id)}/`,
           referrerPolicy: 'strict-origin-when-cross-origin',
         });
-        if (!res.ok) throw new Error('http ' + res.status);
+        if (!res.ok) {
+          const error = new Error('http ' + res.status);
+          error.httpStatus = res.status;
+          if (res.status === 429) {
+            const retryAfter = Number(res.headers.get('retry-after')) || 0;
+            error.retryAfterMs = retryAfter > 0 ? retryAfter * 1000 : 0;
+          }
+          throw error;
+        }
         return res.json();
       } finally {
         clearTimeout(timeout);
@@ -3206,15 +3223,35 @@
       EventBus.emit('room:loading', id);
       setStatus(id, 'loading');
 
+      // A 429 applies to the shared Chaturbate endpoint, not just one room.
+      // Hold every session until the common cooldown expires so several cards
+      // cannot immediately amplify the throttle by retrying independently.
+      if (Date.now() < rateLimitUntil) {
+        const wait = Math.max(1000, rateLimitUntil - Date.now());
+        setStatus(id, 'error', { errorMsg: 'request throttled', transient: true });
+        EventBus.emit('room:transient-error', { id, error: 'request throttled' });
+        schedulePoll(id, wait);
+        return;
+      }
+
       let data;
       try {
         data = await fetchContext(id, ac.signal);
       } catch (e) {
         if (ac.signal.aborted || !sessions.has(id) || sessions.get(id) !== s) return;
-        setStatus(id, 'error', { errorMsg: 'request failed', transient: true });
-        EventBus.emit('room:transient-error', { id, error: 'request failed' });
         s.retryCount = (s.retryCount || 0) + 1;
-        const wait = Math.min(60000, store.state.settings.pollMs.error * Math.pow(1.6, s.retryCount));
+        const throttled = Number(e?.httpStatus || 0) === 429;
+        const errorText = throttled ? 'request throttled' : 'request failed';
+        setStatus(id, 'error', { errorMsg: errorText, transient: true });
+        EventBus.emit('room:transient-error', { id, error: errorText });
+        let wait;
+        if (throttled) {
+          const requestedWait = Math.max(0, Number(e?.retryAfterMs || 0));
+          wait = Math.max(requestedWait, Math.min(5 * 60 * 1000, 30000 * Math.pow(1.8, Math.min(5, s.retryCount - 1))));
+          rateLimitUntil = Math.max(rateLimitUntil, Date.now() + wait);
+        } else {
+          wait = Math.min(60000, store.state.settings.pollMs.error * Math.pow(1.6, s.retryCount));
+        }
         schedulePoll(id, wait);
         return;
       }
@@ -3393,7 +3430,9 @@
   const RECORDER_HEARTBEAT_KEY = 'ziggy_recorder_heartbeat_v1';
   const RECORDER_CHANNEL_NAME = 'ziggy_recorder_hub_v1';
   const RECORDER_OWNER_KEY = 'ziggy_recorder_owner_v1';
+  const RECORDER_ACK_KEY = 'ziggy_recorder_ack_v1';
   const RECORDER_OWNER_TTL_MS = 6500;
+  const RECORDER_STOP_ACK_TIMEOUT_MS = 30000;
   const RECORDER_HUB_WINDOW_NAME = 'ziggy-recorder-hub';
 
   function readRecorderOwnerLease() {
@@ -3468,6 +3507,7 @@
     const recordings = new Map();
     const listeners = new Set();
     const stopPending = new Map();
+    const completedStatuses = new Set(['saved', 'failed', 'stopped', 'interrupted']);
     let channel = null;
     try { channel = new BroadcastChannel(RECORDER_CHANNEL_NAME); } catch (_) {}
 
@@ -3485,23 +3525,48 @@
         const id = normalizeUsername(row?.id);
         if (!isLikelyUsername(id)) return;
         const local = previous.get(id);
-        const pendingAt = Number(stopPending.get(id) || 0);
-        if (pendingAt && local?.status === 'finalizing' && !['finalizing', 'saved', 'failed'].includes(row?.status)) {
+        const pending = stopPending.get(id);
+        if (pending && local?.status === 'finalizing' && row?.status !== 'finalizing' && !completedStatuses.has(row?.status)) {
           next.set(id, local);
           return;
         }
-        if (['finalizing', 'saved', 'failed'].includes(row?.status)) stopPending.delete(id);
+        if (completedStatuses.has(row?.status)) stopPending.delete(id);
         next.set(id, { ...row, id });
       });
-      stopPending.forEach((pendingAt, id) => {
+      stopPending.forEach((pending, id) => {
         if (next.has(id)) return;
         const local = previous.get(id);
-        if (local?.status === 'finalizing' && now - Number(pendingAt || 0) < 2500) next.set(id, local);
+        const age = now - Number(pending?.requestedAt || 0);
+        if (local?.status === 'finalizing' && age < RECORDER_STOP_ACK_TIMEOUT_MS && recorderServiceFresh()) next.set(id, local);
         else stopPending.delete(id);
       });
       recordings.clear();
       next.forEach((row, id) => recordings.set(id, row));
       notify();
+    }
+
+    function applyCommandAck(ack) {
+      if (!ack?.commandId) return;
+      const matches = [...stopPending.entries()].filter(([, pending]) => pending?.commandId === ack.commandId);
+      if (!matches.length) return;
+      matches.forEach(([id, pending]) => {
+        const row = recordings.get(id);
+        if (ack.status === 'accepted') {
+          pending.acknowledgedAt = Number(ack.ts || Date.now());
+          stopPending.set(id, pending);
+          if (row) recordings.set(id, {
+            ...row,
+            status: 'finalizing',
+            stopAcknowledged: true,
+            finalizingProgress: Math.max(5, Number(row.finalizingProgress || 0)),
+          });
+        } else if (ack.status === 'completed') {
+          stopPending.delete(id);
+          if (row && ack.result === 'missing') recordings.delete(id);
+        }
+      });
+      if (ack.status === 'completed') loadSnapshot();
+      else notify();
     }
 
     function loadSnapshot() {
@@ -3561,14 +3626,16 @@
       id = normalizeUsername(id);
       if (!id) return false;
       const row = recordings.get(id);
-      stopPending.set(id, Date.now());
+      const command = enqueue('stop', id);
+      stopPending.set(id, { commandId: command.commandId, requestedAt: Date.now(), acknowledgedAt: 0 });
       if (row) recordings.set(id, {
         ...row,
         status: 'finalizing',
+        stopRequestedAt: Date.now(),
+        stopAcknowledged: false,
         finalizingProgress: Math.max(1, Number(row.finalizingProgress || 0)),
       });
       notify();
-      enqueue('stop', id);
       ensureHub();
       return true;
     }
@@ -3597,23 +3664,53 @@
 
     function toggle(id) {
       id = normalizeUsername(id);
-      if (recordings.has(id) && heartbeatFresh()) return stop(id);
+      if (has(id)) return stop(id);
       if (recordings.has(id)) { recordings.delete(id); notify(); }
       return start(id);
     }
-    function stopAll() { enqueue('stop-all'); ensureHub(); }
+    function stopAll() {
+      const command = enqueue('stop-all');
+      const now = Date.now();
+      recordings.forEach((row, id) => {
+        if (completedStatuses.has(row?.status)) return;
+        stopPending.set(id, { commandId: command.commandId, requestedAt: now, acknowledgedAt: 0 });
+        recordings.set(id, {
+          ...row,
+          status: 'finalizing',
+          stopRequestedAt: now,
+          stopAcknowledged: false,
+          finalizingProgress: Math.max(1, Number(row.finalizingProgress || 0)),
+        });
+      });
+      notify();
+      ensureHub();
+    }
     function retry(id) { enqueue('retry', id); ensureHub(); }
-    function has(id) { return heartbeatFresh() && recordings.has(normalizeUsername(id)); }
+    function has(id) {
+      const row = recordings.get(normalizeUsername(id));
+      return heartbeatFresh() && !!row && !completedStatuses.has(row.status);
+    }
     function get(id) { return recordings.get(normalizeUsername(id)) || null; }
+    function countActive() {
+      let count = 0;
+      recordings.forEach(row => { if (!completedStatuses.has(row?.status)) count++; });
+      return heartbeatFresh() ? count : 0;
+    }
     function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 
     channel && (channel.onmessage = event => {
       if (event.data?.type === 'state') applySnapshot(event.data.snapshot || {});
+      else if (event.data?.type === 'command-ack') applyCommandAck(event.data.ack || {});
     });
-    window.addEventListener('storage', event => { if (event.key === RECORDER_STATE_KEY) loadSnapshot(); });
+    window.addEventListener('storage', event => {
+      if (event.key === RECORDER_STATE_KEY) loadSnapshot();
+      else if (event.key === RECORDER_ACK_KEY) {
+        try { applyCommandAck(JSON.parse(event.newValue || '{}')); } catch (_) {}
+      }
+    });
     loadSnapshot();
     if (!heartbeatFresh() && recordings.size) { recordings.clear(); notify(); }
-    return { recordings, start, pause, resume, stop, stopAll, retry, toggle, has, get, openHub, subscribe, loadSnapshot };
+    return { recordings, start, pause, resume, stop, stopAll, retry, toggle, has, get, countActive, openHub, subscribe, loadSnapshot };
   })();
   window.__ziggyUnifiedRecorder = UnifiedRecorder;
 
@@ -3731,7 +3828,7 @@
     }
 
     function summary(job) {
-      const terminal = !!job.finalizing || ['finalizing', 'saved', 'failed'].includes(job.status);
+      const terminal = !!job.finalizing || ['finalizing', 'saved', 'failed', 'stopped', 'interrupted'].includes(job.status);
       return {
         id: job.id,
         status: job.status,
@@ -3759,6 +3856,20 @@
       render();
     }
 
+    function publishCommandAck(command, status, result = '') {
+      if (!command?.commandId) return;
+      const ack = {
+        commandId: command.commandId,
+        action: command.action || '',
+        id: normalizeUsername(command.id),
+        status,
+        result,
+        ts: Date.now(),
+      };
+      try { localStorage.setItem(RECORDER_ACK_KEY, JSON.stringify(ack)); } catch (_) {}
+      try { channel?.postMessage({ type: 'command-ack', ack }); } catch (_) {}
+    }
+
     function statusLabel(job) {
       if (job.manualPaused || job.status === 'manual-paused') return t('recorderPausedManual');
       if (job.status === 'recording') return t('recorderRecording');
@@ -3768,8 +3879,10 @@
         const countdown = t('recorderPausedOffline', formatDuration(left));
         return job.status === 'reconnecting' ? `${t('recorderRetrying')} · ${countdown}` : countdown;
       }
-      if (job.status === 'finalizing') return `${t('recorderFinalizing')} ${Math.round(job.finalizingProgress || 0)}%`;
+      if (job.status === 'finalizing') return `${t('recorderStopped')} · ${t('recorderFinalizing')} ${Math.round(job.finalizingProgress || 0)}%`;
       if (job.status === 'saved') return t('recorderSaved');
+      if (job.status === 'stopped') return job.error || t('recorderStoppedNoData');
+      if (job.status === 'interrupted') return job.error || t('recorderInterrupted');
       if (job.status === 'failed') return job.error || t('recordingNoData');
       if (job.status === 'error') return job.error || t('recorderRetrying');
       return t('recorderConnecting');
@@ -3780,7 +3893,7 @@
       list.replaceChildren();
       if (!visibleJobs.size) { list.appendChild($('div', { class: 'rec-empty' }, t('recordingCenterEmpty'))); return; }
       visibleJobs.forEach(job => {
-        const terminal = !!job.finalizing || ['finalizing', 'saved', 'failed'].includes(job.status);
+        const terminal = !!job.finalizing || ['finalizing', 'saved', 'failed', 'stopped', 'interrupted'].includes(job.status);
         const recordedMs = terminal ? Number(job.recordedMs || 0) : currentRecordedMs(job);
         const waitingMs = terminal ? Number(job.waitingMs || 0) : currentWaitingMs(job);
         const resolution = job.resolution || (job.width && job.height ? `${job.width}×${job.height}` : '—');
@@ -3797,8 +3910,8 @@
           $('div', { class: 'rec-actions' }, [
             $('button', { class: 'rec-btn', onclick: () => openNoopener(`${location.origin}/${encodeURIComponent(job.id)}/`) }, t('recorderOpenRoom')),
             job.status === 'error' ? $('button', { class: 'rec-btn primary', onclick: () => ownsRecorder ? retryJob(job.id) : UnifiedRecorder.retry(job.id) }, t('recorderRetry')) : null,
-            !['finalizing', 'saved', 'failed'].includes(job.status) ? $('button', { class: 'rec-btn', onclick: () => ownsRecorder ? (job.manualPaused ? resumeJob(job.id) : pauseJob(job.id)) : (job.manualPaused ? UnifiedRecorder.resume(job.id) : UnifiedRecorder.pause(job.id)) }, job.manualPaused ? t('recorderResume') : t('recorderPause')) : null,
-            !['finalizing', 'saved', 'failed'].includes(job.status) ? $('button', { class: 'rec-btn danger', onclick: () => ownsRecorder ? stopJob(job.id) : UnifiedRecorder.stop(job.id) }, t('opRecordStop')) : null,
+            !['finalizing', 'saved', 'failed', 'stopped', 'interrupted'].includes(job.status) ? $('button', { class: 'rec-btn', onclick: () => ownsRecorder ? (job.manualPaused ? resumeJob(job.id) : pauseJob(job.id)) : (job.manualPaused ? UnifiedRecorder.resume(job.id) : UnifiedRecorder.pause(job.id)) }, job.manualPaused ? t('recorderResume') : t('recorderPause')) : null,
+            !['finalizing', 'saved', 'failed', 'stopped', 'interrupted'].includes(job.status) ? $('button', { class: 'rec-btn danger', onclick: () => ownsRecorder ? stopJob(job.id) : UnifiedRecorder.stop(job.id) }, t('opRecordStop')) : null,
           ]),
         ]);
         list.appendChild(row);
@@ -3993,10 +4106,16 @@
       publishState();
     }
 
-    async function finalizeJob(job, reason = 'manual') {
+    function waitForFinalizingMilestone(job, elapsedMs) {
+      const wait = Number(job?.finalizingStartedAt || 0) + Math.max(0, Number(elapsedMs || 0)) - Date.now();
+      return wait > 0 ? new Promise(resolve => setTimeout(resolve, wait)) : Promise.resolve();
+    }
+
+    async function finalizeJob(job, reason = 'manual', command = null) {
       if (!job || job.stopRequested || job.finalizing) return;
       job.stopRequested = true;
       job.finalizing = true;
+      job.finalizingStartedAt = Date.now();
       job.status = 'finalizing';
       freezeClocks(job);
       clearStableTimer(job);
@@ -4015,10 +4134,12 @@
             }), 8000, 'Timed out while stopping MediaRecorder');
           } catch (error) { pipelineError ||= error; }
         }
+        await waitForFinalizingMilestone(job, 250);
         job.acceptChunks = false;
         job.finalizingProgress = 35; publishState();
         try { await withTimeout(job.writeQueue, 20000, 'Timed out while flushing recording data'); }
         catch (error) { pipelineError ||= error; }
+        await waitForFinalizingMilestone(job, 550);
         job.finalizingProgress = 60; publishState();
         let blob = null;
         if (job.writer && job.fileHandle) {
@@ -4029,15 +4150,36 @@
         } else {
           blob = new Blob(job.chunks || [], { type: job.mimeType || 'video/webm' });
         }
+        await waitForFinalizingMilestone(job, 900);
         job.finalizingProgress = 82; publishState();
-        if (!blob?.size) throw pipelineError || new Error(t('recordingNoData'));
+        if (!blob?.size) {
+          await waitForFinalizingMilestone(job, 1400);
+          if (Number(job.bytes || 0) <= 0) {
+            cleanupJob(job);
+            job.status = 'stopped';
+            job.error = t('recorderStoppedNoData');
+            job.stopRequested = true;
+            job.finalizing = false;
+            job.acceptChunks = false;
+            job.finalizingProgress = 100;
+            publishState();
+            publishCommandAck(command, 'completed', 'stopped-empty');
+            setTimeout(() => removeJob(job.id), 12000);
+            return;
+          }
+          throw pipelineError || new Error(t('recordingNoData'));
+        }
         const ext = String(job.mimeType || '').includes('mp4') ? 'mp4' : 'webm';
         job.filename = `${safeFilePart(job.id)}_${fileStamp(job.startedAt)}.${ext}`;
         downloadBlob(blob, job.filename);
+        await waitForFinalizingMilestone(job, 1400);
+        cleanupJob(job);
         job.finalizingProgress = 100;
         job.status = 'saved';
+        job.finalizing = false;
         job.error = pipelineError ? `Saved partial recording after ${reason}: ${pipelineError.message || pipelineError}` : '';
         publishState();
+        publishCommandAck(command, 'completed', 'saved');
         setTimeout(() => removeJob(job.id), 8000);
       } catch (error) {
         cleanupJob(job);
@@ -4048,6 +4190,7 @@
         job.acceptChunks = false;
         job.finalizingProgress = 0;
         publishState();
+        publishCommandAck(command, 'completed', 'failed');
         setTimeout(() => removeJob(job.id), 15000);
       }
     }
@@ -4074,9 +4217,34 @@
       publishState();
     }
 
-    function stopJob(id, reason = 'manual') {
+    function recoverInterruptedSnapshot() {
+      let snapshot = null;
+      try { snapshot = JSON.parse(localStorage.getItem(RECORDER_STATE_KEY) || 'null'); } catch (_) {}
+      const rows = Array.isArray(snapshot?.recordings) ? snapshot.recordings : [];
+      rows.forEach(row => {
+        const id = normalizeUsername(row?.id);
+        if (!isLikelyUsername(id) || ['saved', 'failed', 'stopped', 'interrupted'].includes(row?.status)) return;
+        jobs.set(id, {
+          ...row,
+          id,
+          status: 'interrupted',
+          error: t('recorderInterrupted'),
+          stopRequested: true,
+          finalizing: false,
+          finalizingProgress: 0,
+          recordedMs: Number(row.recordedMs || 0),
+          waitingMs: Number(row.waitingMs || 0),
+          orphaned: true,
+        });
+        hubStore.state.rooms.push({ id, groups: [DEFAULT_GROUP_ID], lastStatus: row.sourceStatus || 'unknown', muted: true });
+        setTimeout(() => removeJob(id), 12000);
+      });
+    }
+
+    function stopJob(id, reason = 'manual', command = null) {
       const job = jobs.get(normalizeUsername(id));
-      if (job) finalizeJob(job, reason);
+      if (!job) return null;
+      return finalizeJob(job, reason, command);
     }
 
     function pauseJob(id) {
@@ -4119,12 +4287,38 @@
       if (!ownsRecorder) return;
       if (!command?.commandId || processedCommands.has(command.commandId)) return;
       processedCommands.add(command.commandId);
-      if (command.action === 'start') startJob(command.id);
-      else if (command.action === 'pause') pauseJob(command.id);
-      else if (command.action === 'resume') resumeJob(command.id);
-      else if (command.action === 'stop') stopJob(command.id);
-      else if (command.action === 'stop-all') [...jobs.keys()].forEach(stopJob);
-      else if (command.action === 'retry') retryJob(command.id);
+      publishCommandAck(command, 'accepted');
+      if (command.action === 'start') {
+        Promise.resolve(startJob(command.id)).finally(() => publishCommandAck(command, 'completed', 'started'));
+      } else if (command.action === 'pause') {
+        pauseJob(command.id);
+        publishCommandAck(command, 'completed', 'paused');
+      } else if (command.action === 'resume') {
+        resumeJob(command.id);
+        publishCommandAck(command, 'completed', 'resumed');
+      } else if (command.action === 'stop') {
+        const task = stopJob(command.id, 'manual', command);
+        if (!task) {
+          // The previous Hub may have disappeared with an in-memory job. A
+          // stale Stop still succeeds by publishing the authoritative empty
+          // snapshot and acknowledging that there was nothing left to save.
+          publishState();
+          publishCommandAck(command, 'completed', 'missing');
+        }
+      } else if (command.action === 'stop-all') {
+        const tasks = [...jobs.keys()].map(id => stopJob(id, 'manual')).filter(Boolean);
+        if (!tasks.length) {
+          publishState();
+          publishCommandAck(command, 'completed', 'missing');
+        } else {
+          Promise.allSettled(tasks).finally(() => publishCommandAck(command, 'completed', 'stopped-all'));
+        }
+      } else if (command.action === 'retry') {
+        retryJob(command.id);
+        publishCommandAck(command, 'completed', 'retrying');
+      } else {
+        publishCommandAck(command, 'completed', 'ignored');
+      }
     }
 
     function drainCommands() {
@@ -4189,6 +4383,7 @@
       } else render();
     }, 1000);
     if (ownsRecorder) {
+      recoverInterruptedSnapshot();
       renewRecorderOwner(hubInstanceId);
       drainCommands();
       publishState();
@@ -4197,7 +4392,7 @@
       render();
     }
     window.addEventListener('beforeunload', event => {
-      if (!ownsRecorder || ![...jobs.values()].some(job => !['saved', 'failed'].includes(job.status))) return;
+      if (!ownsRecorder || ![...jobs.values()].some(job => !['saved', 'failed', 'stopped', 'interrupted'].includes(job.status))) return;
       event.preventDefault();
       event.returnValue = t('recorderHubCloseWarning');
     });
@@ -8419,7 +8614,7 @@
     const recorderHeaderCount = $('span', { class: 'rg-recorder-header-count', 'aria-hidden': 'true' });
     recorderHeaderBtn.appendChild(recorderHeaderCount);
     function syncRecorderHeaderButton() {
-      const count = UnifiedRecorder.recordings.size;
+      const count = UnifiedRecorder.countActive();
       recorderHeaderCount.textContent = String(count);
       recorderHeaderCount.classList.toggle('active', count > 0);
       recorderHeaderBtn.title = count > 0 ? `${t('recorderOpenHub')} · ${count}` : t('recorderOpenHub');
@@ -10021,7 +10216,13 @@
         rows.forEach(([id, rec]) => {
           const status = rec.manualPaused || rec.status === 'manual-paused'
             ? t('recorderPausedManual')
-            : (rec.status === 'recording' ? t('recordingActive') : (rec.status === 'finalizing' ? `${t('recorderFinalizing')} ${Math.round(rec.finalizingProgress || 0)}%` : (rec.status || t('recordingWaitingShort'))));
+            : (rec.status === 'recording'
+              ? t('recordingActive')
+              : (rec.status === 'finalizing'
+                ? `${t('recorderStopped')} · ${t('recorderFinalizing')} ${Math.round(rec.finalizingProgress || 0)}%`
+                : (rec.status === 'stopped'
+                  ? (rec.error || t('recorderStoppedNoData'))
+                  : (rec.status === 'interrupted' ? (rec.error || t('recorderInterrupted')) : (rec.status || t('recordingWaitingShort'))))));
           const duration = fmtDuration(rec.recordedMs || 0);
           table.appendChild($('div', { style: { border: '1px solid var(--border)', borderRadius: '8px', padding: '10px', display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px', alignItems: 'center' } }, [
             $('div', {}, [
@@ -10030,11 +10231,11 @@
                 `${status} · ${t('recordingDuration')}: ${duration} · ${rec.resolution || '—'} · ${(rec.audio || rec.audioEnabled) ? t('recorderAudioOn') : t('recorderAudioOff')} · ${fmtBytes(rec.bytes)}`),
             ]),
             $('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' } }, [
-              !['finalizing', 'saved'].includes(rec.status) ? $('button', {
+              !['finalizing', 'saved', 'failed', 'stopped', 'interrupted'].includes(rec.status) ? $('button', {
                 class: 'ctrl-btn',
                 onclick: () => (rec.manualPaused || rec.status === 'manual-paused') ? UnifiedRecorder.resume(id) : UnifiedRecorder.pause(id),
               }, (rec.manualPaused || rec.status === 'manual-paused') ? t('recorderResume') : t('recorderPause')) : null,
-              !['finalizing', 'saved'].includes(rec.status) ? $('button', { class: 'ctrl-btn danger', onclick: () => UnifiedRecorder.stop(id) }, t('opRecordStop')) : null,
+              !['finalizing', 'saved', 'failed', 'stopped', 'interrupted'].includes(rec.status) ? $('button', { class: 'ctrl-btn danger', onclick: () => UnifiedRecorder.stop(id) }, t('opRecordStop')) : null,
             ]),
           ]));
         });
@@ -12484,7 +12685,7 @@
         makeRow(workspace,'suitecamarna','Cam ARNA',function(){dispatchSuite('ziggy-suite:toggle-roomgrid',{tab:'arna'});},{icon:'⌕'});
         var recorderRow=makeRow(workspace,'suiterecorderhub','Recorder Hub',function(){window.__ziggyUnifiedRecorder?.openHub?.(true);},{icon:'●'});
         function syncRecorderRow(){
-            var count=window.__ziggyUnifiedRecorder?.recordings?.size||0;
+            var count=window.__ziggyUnifiedRecorder?.countActive?.()||0;
             var label=recorderRow.querySelector('.suite-menu-row-label');
             if(label) label.textContent='Recorder Hub'+(count?' · '+count+' active':'');
         }

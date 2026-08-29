@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.15
+// @version           16.5.16
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -1288,7 +1288,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.15',
+    version: '16.5.16',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -8912,6 +8912,15 @@
           }, '•••'));
         }
         sidebar.appendChild(row);
+        if (g.id === ONLINE_FOLLOWING_GROUP_ID && onlineFollowingStatus.kind !== 'ready' && onlineFollowingStatus.kind !== 'idle') {
+          sidebar.appendChild($('div', {
+            class: 'online-following-sync-status',
+            style: {
+              color: 'var(--text-muted)', fontSize: '11px', lineHeight: '1.35',
+              padding: '0 10px 7px', overflowWrap: 'anywhere',
+            },
+          }, onlineFollowingStatus.message));
+        }
       };
 
       const byId = new Map(store.state.groups.map(g => [g.id, g]));
@@ -8974,6 +8983,15 @@
     const cardMap = new Map();   // id -> {root, video, statusEl, badgeEl}
     const mediaViewportIds = new Set();
     const mediaAttachPendingIds = new Set();
+    const mediaRequestQueue = [];
+    const mediaRequestQueuedIds = new Set();
+    let mediaRequestPumpTimer = 0;
+    const MEDIA_REQUEST_STAGGER_MS = 750;
+
+    const backgroundServiceQueue = [];
+    const backgroundServiceQueuedIds = new Set();
+    let backgroundServicePumpTimer = 0;
+    const BACKGROUND_SERVICE_STAGGER_MS = 900;
 
     function isRoomMediaProtected(roomId) {
       const room = findRoomAny(roomId);
@@ -8996,7 +9014,7 @@
       return isRoomMediaProtected(roomId) || isCardNearViewport(roomId);
     }
 
-    function requestRoomMediaIfNeeded(roomId) {
+    function requestRoomMediaNow(roomId) {
       const room = findRoomAny(roomId);
       const cardEntry = cardMap.get(roomId);
       if (!room || !cardEntry || cardEntry.video || !shouldAttachRoomMedia(roomId)) return;
@@ -9004,11 +9022,67 @@
         attachTemporarySource(room);
         return;
       }
-      if (!service.has(roomId)) service.start(roomId);
-      if (room.lastStatus !== 'online' || mediaAttachPendingIds.has(roomId)) return;
+      if (mediaAttachPendingIds.has(roomId)) return;
       mediaAttachPendingIds.add(roomId);
+      if (!service.has(roomId)) {
+        service.start(roomId);
+        setTimeout(() => mediaAttachPendingIds.delete(roomId), 6000);
+        return;
+      }
+      if (room.lastStatus !== 'online') {
+        mediaAttachPendingIds.delete(roomId);
+        return;
+      }
       service.refresh(roomId);
       setTimeout(() => mediaAttachPendingIds.delete(roomId), 5000);
+    }
+
+    function pumpRoomMediaQueue() {
+      clearTimeout(mediaRequestPumpTimer);
+      mediaRequestPumpTimer = 0;
+      while (mediaRequestQueue.length) {
+        const roomId = mediaRequestQueue.shift();
+        mediaRequestQueuedIds.delete(roomId);
+        if (!cardMap.get(roomId)?.root?.isConnected || !shouldAttachRoomMedia(roomId)) continue;
+        requestRoomMediaNow(roomId);
+        break;
+      }
+      if (mediaRequestQueue.length) mediaRequestPumpTimer = setTimeout(pumpRoomMediaQueue, MEDIA_REQUEST_STAGGER_MS);
+    }
+
+    function requestRoomMediaIfNeeded(roomId) {
+      const room = findRoomAny(roomId);
+      if (!room || cardMap.get(roomId)?.video || !shouldAttachRoomMedia(roomId)) return;
+      if (room.sourceUrl) {
+        requestRoomMediaNow(roomId);
+        return;
+      }
+      if (mediaRequestQueuedIds.has(roomId) || mediaAttachPendingIds.has(roomId)) return;
+      mediaRequestQueuedIds.add(roomId);
+      if (isRoomMediaProtected(roomId)) mediaRequestQueue.unshift(roomId);
+      else mediaRequestQueue.push(roomId);
+      if (!mediaRequestPumpTimer) mediaRequestPumpTimer = setTimeout(pumpRoomMediaQueue, 0);
+    }
+
+    function pumpBackgroundServiceQueue() {
+      clearTimeout(backgroundServicePumpTimer);
+      backgroundServicePumpTimer = 0;
+      while (backgroundServiceQueue.length) {
+        const roomId = backgroundServiceQueue.shift();
+        backgroundServiceQueuedIds.delete(roomId);
+        if (!findRoomAny(roomId) || service.has(roomId)) continue;
+        service.start(roomId);
+        break;
+      }
+      if (backgroundServiceQueue.length) backgroundServicePumpTimer = setTimeout(pumpBackgroundServiceQueue, BACKGROUND_SERVICE_STAGGER_MS);
+    }
+
+    function queueBackgroundServiceStart(roomId) {
+      roomId = normalizeUsername(roomId);
+      if (!roomId || service.has(roomId) || backgroundServiceQueuedIds.has(roomId)) return;
+      backgroundServiceQueuedIds.add(roomId);
+      backgroundServiceQueue.push(roomId);
+      if (!backgroundServicePumpTimer) backgroundServicePumpTimer = setTimeout(pumpBackgroundServiceQueue, BACKGROUND_SERVICE_STAGGER_MS);
     }
 
     function releaseRoomMediaIfPossible(roomId) {
@@ -9055,6 +9129,7 @@
       if (card && cardMediaObserver) cardMediaObserver.unobserve(card);
       mediaViewportIds.delete(roomId);
       mediaAttachPendingIds.delete(roomId);
+      mediaRequestQueuedIds.delete(roomId);
     }
 
     // v15.6-minimal: 临时 URL 窗口。只存在于当前页面内存，刷新后消失；不写入 localStorage。
@@ -9072,6 +9147,79 @@
     let onlineFollowingInitialOrderReady = false;
     let onlineFollowingNextOrder = 0;
     const onlineFollowingSuppressedUntil = new Map();
+    const ONLINE_FOLLOWING_CACHE_KEY = 'ziggy_online_following_cache_v1';
+    const ONLINE_FOLLOWING_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+    let onlineFollowingRateLimitUntil = 0;
+    let onlineFollowingRetryDelayMs = 30000;
+    let onlineFollowingRetryTimer = 0;
+    let onlineFollowingStatus = { kind: 'idle', message: '' };
+
+    function setOnlineFollowingStatus(kind, message = '') {
+      onlineFollowingStatus = { kind, message };
+      scheduleSidebarRender();
+    }
+
+    function readOnlineFollowingCache() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(ONLINE_FOLLOWING_CACHE_KEY) || 'null');
+        const savedAt = Number(parsed?.savedAt || 0);
+        if (!savedAt || Date.now() - savedAt > ONLINE_FOLLOWING_CACHE_MAX_AGE_MS || !Array.isArray(parsed?.rooms)) return null;
+        const rooms = parsed.rooms.map(item => ({
+          id: normalizeUsername(item?.id),
+          lastStatus: item?.lastStatus === 'private' ? 'private' : 'online',
+        })).filter(item => isLikelyUsername(item.id));
+        return rooms.length ? { savedAt, rooms } : null;
+      } catch (_) { return null; }
+    }
+
+    function writeOnlineFollowingCache(rooms) {
+      try {
+        localStorage.setItem(ONLINE_FOLLOWING_CACHE_KEY, JSON.stringify({
+          savedAt: Date.now(),
+          rooms: rooms.map(item => ({ id: item.id, lastStatus: item.lastStatus === 'private' ? 'private' : 'online' })),
+        }));
+      } catch (_) {}
+    }
+
+    function onlineFollowingRetryAfterMs(response) {
+      const value = String(response?.headers?.get?.('Retry-After') || '').trim();
+      if (!value) return 0;
+      const seconds = Number(value);
+      if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+      const date = Date.parse(value);
+      return Number.isFinite(date) ? Math.max(0, date - Date.now()) : 0;
+    }
+
+    function onlineFollowingHttpError(response) {
+      const error = new Error(`HTTP ${response.status}`);
+      error.httpStatus = Number(response.status || 0);
+      error.retryAfterMs = onlineFollowingRetryAfterMs(response);
+      return error;
+    }
+
+    function scheduleOnlineFollowingRetry(waitMs) {
+      clearTimeout(onlineFollowingRetryTimer);
+      const wait = Math.max(1000, Number(waitMs) || 30000);
+      onlineFollowingRetryTimer = setTimeout(() => {
+        onlineFollowingRetryTimer = 0;
+        syncOnlineFollowing(true);
+      }, wait + 250);
+    }
+
+    function registerOnlineFollowingFailure(error, cachedAvailable = onlineFollowingRooms().length > 0) {
+      const throttled = Number(error?.httpStatus || 0) === 429;
+      const requestedWait = Math.max(0, Number(error?.retryAfterMs || 0));
+      const wait = throttled
+        ? Math.max(requestedWait, onlineFollowingRetryDelayMs)
+        : Math.max(30000, Math.min(2 * 60 * 1000, onlineFollowingRetryDelayMs));
+      onlineFollowingRateLimitUntil = Math.max(onlineFollowingRateLimitUntil, Date.now() + wait);
+      onlineFollowingRetryDelayMs = Math.min(5 * 60 * 1000, Math.max(30000, Math.round(wait * 1.8)));
+      const seconds = Math.max(1, Math.ceil(wait / 1000));
+      setOnlineFollowingStatus('retrying', cachedAvailable
+        ? `Showing the last successful list · retrying in ${seconds}s`
+        : `Following list temporarily unavailable · retrying in ${seconds}s`);
+      scheduleOnlineFollowingRetry(wait);
+    }
 
     function onlineFollowingIsSuppressed(roomId) {
       const until = Number(onlineFollowingSuppressedUntil.get(roomId) || 0);
@@ -9211,13 +9359,29 @@
       });
     }
 
+    function onlineFollowingDocumentIsChallenge(doc) {
+      const text = `${doc?.title || ''} ${doc?.body?.textContent || ''}`.slice(0, 12000).toLowerCase();
+      return /cloudflare|verify you are human|verification|checking your browser|just a moment|challenge-platform/.test(text);
+    }
+
+    async function fetchOnlineFollowingDocument(url) {
+      const response = await fetch(url, { credentials: 'include', cache: 'default' });
+      if (!response.ok) throw onlineFollowingHttpError(response);
+      return new DOMParser().parseFromString(await response.text(), 'text/html');
+    }
+
     async function loadAllOnlineFollowing() {
       const firstUrl = `${location.origin}/followed-cams/`;
-      const firstResponse = await fetch(firstUrl, { credentials: 'include', cache: 'no-store' });
-      if (!firstResponse.ok) throw new Error(`HTTP ${firstResponse.status}`);
-      const firstDocument = new DOMParser().parseFromString(await firstResponse.text(), 'text/html');
+      const firstDocument = await fetchOnlineFollowingDocument(firstUrl);
       let firstRooms = parseOnlineFollowingDocument(firstDocument);
-      if (!firstRooms.length) firstRooms = await loadRenderedOnlineFollowing(firstUrl);
+      if (!firstRooms.length && onlineFollowingDocumentIsChallenge(firstDocument)) {
+        const error = new Error('Browser verification interrupted the Following list');
+        error.httpStatus = 429;
+        throw error;
+      }
+      if (!firstRooms.length && !firstDocument.querySelector('.HomepagePaginatedRoomlist')) {
+        firstRooms = await loadRenderedOnlineFollowing(firstUrl);
+      }
       const merged = new Map();
       const mergeRooms = rooms => rooms.forEach(item => {
         const previous = merged.get(item.id);
@@ -9232,9 +9396,12 @@
       for (let page = 2; page <= 50 && (!expectedCount || merged.size < expectedCount); page += 1) {
         const pageUrl = new URL(firstUrl);
         pageUrl.searchParams.set('page', String(page));
-        const response = await fetch(pageUrl.href, { credentials: 'include', cache: 'no-store' });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
+        let doc;
+        try {
+          doc = await fetchOnlineFollowingDocument(pageUrl.href);
+        } catch (error) {
+          return { rooms: [...merged.values()], complete: false, expectedCount, error };
+        }
         let rooms = parseOnlineFollowingDocument(doc);
         if (!rooms.length && page === 2) {
           try { rooms = await loadRenderedOnlineFollowing(pageUrl.href); } catch (_) {}
@@ -9245,7 +9412,7 @@
         if (merged.size === before) break;
         if (rooms.length < firstPageSize && (!expectedCount || merged.size >= expectedCount)) break;
       }
-      return [...merged.values()];
+      return { rooms: [...merged.values()], complete: !expectedCount || merged.size >= expectedCount, expectedCount, error: null };
     }
 
     function syncOnlineFollowingQualityCaps() {
@@ -9253,69 +9420,106 @@
       onlineFollowingRooms().forEach(room => service.setQualityCap(room.id, active ? 480 : 0));
     }
 
+    function applyOnlineFollowingRooms(followed, { preserveMissing = false } = {}) {
+      const ids = followed.map(item => item.id);
+      const currentFollowing = tempRooms.filter(room => room.onlineFollowing);
+      const currentById = new Map(currentFollowing.map(room => [room.id, room]));
+      const incomingById = new Map(followed.map(item => [item.id, item]));
+      const oldIds = new Set(currentById.keys());
+      const nextFollowing = [];
+      const createRoom = (item, order) => ({
+        id: item.id, displayName: item.id, temporary: true, onlineFollowing: true,
+        lastStatus: item.lastStatus, privateLabel: item.lastStatus === 'private' ? 'Private' : '', addedAt: Date.now(),
+        lastSeenOnline: item.lastStatus === 'online' ? Date.now() : 0, order,
+        groups: [], groupOrder: {}, muted: true,
+      });
+
+      if (!onlineFollowingInitialOrderReady) {
+        followed.slice().sort((a, b) => a.id.localeCompare(b.id)).forEach(item => {
+          nextFollowing.push(createRoom(item, onlineFollowingNextOrder++));
+        });
+        onlineFollowingInitialOrderReady = true;
+      } else {
+        onlineFollowingNextOrder = Math.max(
+          onlineFollowingNextOrder,
+          ...currentFollowing.map(room => numeric(room.order, -1) + 1),
+        );
+        currentFollowing
+          .slice()
+          .sort((a, b) => numeric(a.order, 0) - numeric(b.order, 0))
+          .forEach(room => {
+            const item = incomingById.get(room.id);
+            if (!item) {
+              if (preserveMissing) nextFollowing.push(room);
+              return;
+            }
+            room.lastStatus = item.lastStatus;
+            room.privateLabel = item.lastStatus === 'private' ? 'Private' : '';
+            if (item.lastStatus === 'online') room.lastSeenOnline = Date.now();
+            nextFollowing.push(room);
+          });
+        followed.forEach(item => {
+          if (!currentById.has(item.id)) nextFollowing.push(createRoom(item, onlineFollowingNextOrder++));
+        });
+      }
+      for (let index = tempRooms.length - 1; index >= 0; index--) {
+        if (tempRooms[index]?.onlineFollowing) tempRooms.splice(index, 1);
+      }
+      tempRooms.push(...nextFollowing);
+      const nextIds = new Set(preserveMissing ? nextFollowing.map(item => item.id) : ids);
+      oldIds.forEach(id => {
+        if (nextIds.has(id)) return;
+        service.setQualityCap(id, 0);
+        if (!store.state.rooms.some(room => room.id === id)) service.stop(id);
+      });
+      onlineFollowingLastSync = Date.now();
+      syncOnlineFollowingQualityCaps();
+      scheduleSidebarRender();
+      if (store.state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID) scheduleGridRender();
+    }
+
+    function hydrateOnlineFollowingCache() {
+      const cached = readOnlineFollowingCache();
+      if (!cached) return false;
+      const rooms = cached.rooms.filter(item => !onlineFollowingIsSuppressed(item.id));
+      applyOnlineFollowingRooms(rooms);
+      setOnlineFollowingStatus('cached', 'Showing the last successful list · checking for updates');
+      return true;
+    }
+
     async function syncOnlineFollowing(force = false) {
       if (onlineFollowingSyncBusy) return;
       if (!force && Date.now() - onlineFollowingLastSync < 45000) return;
+      if (Date.now() < onlineFollowingRateLimitUntil) {
+        const wait = onlineFollowingRateLimitUntil - Date.now();
+        const seconds = Math.max(1, Math.ceil(wait / 1000));
+        setOnlineFollowingStatus('retrying', onlineFollowingRooms().length
+          ? `Showing the last successful list · retrying in ${seconds}s`
+          : `Following list temporarily unavailable · retrying in ${seconds}s`);
+        scheduleOnlineFollowingRetry(wait);
+        return;
+      }
       onlineFollowingSyncBusy = true;
+      setOnlineFollowingStatus(onlineFollowingRooms().length ? 'cached' : 'loading', onlineFollowingRooms().length
+        ? 'Showing the last successful list · checking for updates'
+        : 'Loading followed rooms…');
       try {
-        const followed = (await loadAllOnlineFollowing()).filter(item => !onlineFollowingIsSuppressed(item.id));
-        const ids = followed.map(item => item.id);
-        const currentFollowing = tempRooms.filter(room => room.onlineFollowing);
-        const currentById = new Map(currentFollowing.map(room => [room.id, room]));
-        const incomingById = new Map(followed.map(item => [item.id, item]));
-        const oldIds = new Set(currentById.keys());
-        const nextFollowing = [];
-        const createRoom = (item, order) => ({
-          id: item.id, displayName: item.id, temporary: true, onlineFollowing: true,
-          lastStatus: item.lastStatus, privateLabel: item.lastStatus === 'private' ? 'Private' : '', addedAt: Date.now(),
-          lastSeenOnline: item.lastStatus === 'online' ? Date.now() : 0, order,
-          groups: [], groupOrder: {}, muted: true,
-        });
-
-        if (!onlineFollowingInitialOrderReady) {
-          followed.slice().sort((a, b) => a.id.localeCompare(b.id)).forEach(item => {
-            nextFollowing.push(createRoom(item, onlineFollowingNextOrder++));
-          });
-          onlineFollowingInitialOrderReady = true;
+        const result = await loadAllOnlineFollowing();
+        const followed = result.rooms.filter(item => !onlineFollowingIsSuppressed(item.id));
+        applyOnlineFollowingRooms(followed, { preserveMissing: !result.complete });
+        if (result.complete) {
+          writeOnlineFollowingCache(followed);
+          onlineFollowingRetryDelayMs = 30000;
+          onlineFollowingRateLimitUntil = 0;
+          clearTimeout(onlineFollowingRetryTimer);
+          onlineFollowingRetryTimer = 0;
+          setOnlineFollowingStatus('ready', '');
         } else {
-          onlineFollowingNextOrder = Math.max(
-            onlineFollowingNextOrder,
-            ...currentFollowing.map(room => numeric(room.order, -1) + 1),
-          );
-          currentFollowing
-            .slice()
-            .sort((a, b) => numeric(a.order, 0) - numeric(b.order, 0))
-            .forEach(room => {
-              const item = incomingById.get(room.id);
-              if (!item) return;
-              room.lastStatus = item.lastStatus;
-              room.privateLabel = item.lastStatus === 'private' ? 'Private' : '';
-              if (item.lastStatus === 'online') room.lastSeenOnline = Date.now();
-              nextFollowing.push(room);
-            });
-          // Existing rooms keep their positions. Broadcasters who have just
-          // appeared online are appended so periodic refreshes never reshuffle
-          // the grid the user is already watching.
-          followed.forEach(item => {
-            if (!currentById.has(item.id)) nextFollowing.push(createRoom(item, onlineFollowingNextOrder++));
-          });
+          registerOnlineFollowingFailure(result.error || new Error('Following list was incomplete'), true);
         }
-        for (let index = tempRooms.length - 1; index >= 0; index--) {
-          if (tempRooms[index]?.onlineFollowing) tempRooms.splice(index, 1);
-        }
-        tempRooms.push(...nextFollowing);
-        const nextIds = new Set(ids);
-        oldIds.forEach(id => {
-          if (nextIds.has(id)) return;
-          service.setQualityCap(id, 0);
-          if (!store.state.rooms.some(room => room.id === id)) service.stop(id);
-        });
-        onlineFollowingLastSync = Date.now();
-        syncOnlineFollowingQualityCaps();
-        scheduleSidebarRender();
-        if (store.state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID) scheduleGridRender();
       } catch (error) {
         console.warn('[RoomGrid] Online Following sync failed', error);
+        registerOnlineFollowingFailure(error);
       } finally {
         onlineFollowingSyncBusy = false;
       }
@@ -9457,8 +9661,10 @@
         let stillFollowed = true;
         for (let attempt = 0; attempt < 3 && stillFollowed; attempt += 1) {
           if (attempt) await new Promise(resolve => setTimeout(resolve, 700 * attempt));
-          const followed = await loadAllOnlineFollowing();
-          stillFollowed = followed.some(item => item.id === target);
+          const result = await loadAllOnlineFollowing();
+          // Never treat a throttled/partial followed list as proof that the
+          // account unfollow succeeded.
+          stillFollowed = !result.complete || result.rooms.some(item => item.id === target);
         }
         if (stillFollowed) throw new Error('Chaturbate still reports this room as followed');
 
@@ -12064,11 +12270,15 @@
     // 这样切到其它分组时，被隐藏房间的上线事件也能被检测到并触发桌面通知。
     loadSharedWorkspaceFromHash();
     loadSavedTemporarySources();
+    hydrateOnlineFollowingCache();
     renderSidebar();
     renderGrid();
     applyPureModeState();
-    for (const r of store.state.rooms) service.start(r.id);
-    syncOnlineFollowing(true);
+    syncOnlineFollowing(true).finally(() => {
+      // Avoid a cold-start request storm: let the followed-room list finish
+      // first, then bring saved-room background monitoring online gradually.
+      for (const r of store.state.rooms) queueBackgroundServiceStart(r.id);
+    });
     UnifiedRecorder.subscribe(() => {
       cardMap.forEach((_, id) => updateCardButtons(id));
       if (store.state.settings.showRecordingOnly) scheduleGridRender();
@@ -12078,7 +12288,7 @@
     // 兜底：定期检查 sessions 与 rooms 是否一致（防止某些边缘 case 数据漂移）
     setInterval(() => {
       for (const r of store.state.rooms) {
-        if (!service.has(r.id)) service.start(r.id);
+        if (!service.has(r.id)) queueBackgroundServiceStart(r.id);
       }
       syncOnlineFollowing();
     }, 60000);

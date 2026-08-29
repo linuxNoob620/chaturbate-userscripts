@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.13
+// @version           16.5.14
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -497,7 +497,8 @@
     const a = $('a', { href: URL.createObjectURL(blob), download: filename });
     document.body.appendChild(a);
     a.click();
-    setTimeout(() => { try { URL.revokeObjectURL(a.href); a.remove(); } catch (_) {} }, 1200);
+    // Large recordings need time for the browser to attach to the object URL.
+    setTimeout(() => { try { URL.revokeObjectURL(a.href); a.remove(); } catch (_) {} }, 60000);
   }
 
   function openNoopener(url, target = '_blank') {
@@ -1279,7 +1280,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.13',
+    version: '16.5.14',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3391,6 +3392,77 @@
   const RECORDER_STATE_KEY = 'ziggy_recorder_state_v1';
   const RECORDER_HEARTBEAT_KEY = 'ziggy_recorder_heartbeat_v1';
   const RECORDER_CHANNEL_NAME = 'ziggy_recorder_hub_v1';
+  const RECORDER_OWNER_KEY = 'ziggy_recorder_owner_v1';
+  const RECORDER_OWNER_TTL_MS = 6500;
+  const RECORDER_HUB_WINDOW_NAME = 'ziggy-recorder-hub';
+
+  function readRecorderOwnerLease() {
+    try {
+      const lease = JSON.parse(localStorage.getItem(RECORDER_OWNER_KEY) || 'null');
+      return lease && typeof lease.id === 'string' && Number.isFinite(Number(lease.ts)) ? lease : null;
+    } catch (_) { return null; }
+  }
+
+  function recorderOwnerLeaseFresh(lease = readRecorderOwnerLease()) {
+    return !!lease && Date.now() - Number(lease.ts || 0) < RECORDER_OWNER_TTL_MS;
+  }
+
+  function legacyRecorderHeartbeatFresh() {
+    return Date.now() - Number(localStorage.getItem(RECORDER_HEARTBEAT_KEY) || 0) < RECORDER_OWNER_TTL_MS;
+  }
+
+  function recorderServiceFresh() {
+    return recorderOwnerLeaseFresh() || legacyRecorderHeartbeatFresh();
+  }
+
+  function reserveRecorderOwner() {
+    if (recorderServiceFresh()) return false;
+    const id = `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    try {
+      const now = Date.now();
+      localStorage.setItem(RECORDER_OWNER_KEY, JSON.stringify({ id, ts: now }));
+      localStorage.setItem(RECORDER_HEARTBEAT_KEY, String(now));
+      return readRecorderOwnerLease()?.id === id;
+    } catch (_) { return false; }
+  }
+
+  function claimRecorderOwner(instanceId) {
+    const lease = readRecorderOwnerLease();
+    if (recorderOwnerLeaseFresh(lease)) {
+      if (lease.id === instanceId) return true;
+      if (!lease.id.startsWith('pending-')) return false;
+    } else if (legacyRecorderHeartbeatFresh()) {
+      // Compatibility with an older Hub that has no owner lease but is still
+      // actively recording.
+      return false;
+    }
+    try {
+      const now = Date.now();
+      localStorage.setItem(RECORDER_OWNER_KEY, JSON.stringify({ id: instanceId, ts: now }));
+      localStorage.setItem(RECORDER_HEARTBEAT_KEY, String(now));
+      return readRecorderOwnerLease()?.id === instanceId;
+    } catch (_) { return false; }
+  }
+
+  function renewRecorderOwner(instanceId) {
+    const lease = readRecorderOwnerLease();
+    if (lease?.id !== instanceId) return false;
+    try {
+      const now = Date.now();
+      localStorage.setItem(RECORDER_OWNER_KEY, JSON.stringify({ id: instanceId, ts: now }));
+      localStorage.setItem(RECORDER_HEARTBEAT_KEY, String(now));
+      return true;
+    } catch (_) { return false; }
+  }
+
+  function releaseRecorderOwner(instanceId) {
+    const lease = readRecorderOwnerLease();
+    if (lease?.id !== instanceId) return;
+    try {
+      localStorage.removeItem(RECORDER_OWNER_KEY);
+      localStorage.setItem(RECORDER_HEARTBEAT_KEY, '0');
+    } catch (_) {}
+  }
 
   const UnifiedRecorder = (() => {
     const recordings = new Map();
@@ -3414,11 +3486,11 @@
         if (!isLikelyUsername(id)) return;
         const local = previous.get(id);
         const pendingAt = Number(stopPending.get(id) || 0);
-        if (pendingAt && local?.status === 'finalizing' && !['finalizing', 'saved'].includes(row?.status)) {
+        if (pendingAt && local?.status === 'finalizing' && !['finalizing', 'saved', 'failed'].includes(row?.status)) {
           next.set(id, local);
           return;
         }
-        if (['finalizing', 'saved'].includes(row?.status)) stopPending.delete(id);
+        if (['finalizing', 'saved', 'failed'].includes(row?.status)) stopPending.delete(id);
         next.set(id, { ...row, id });
       });
       stopPending.forEach((pendingAt, id) => {
@@ -3449,10 +3521,18 @@
     }
 
     function heartbeatFresh() {
-      return Date.now() - Number(localStorage.getItem(RECORDER_HEARTBEAT_KEY) || 0) < 6500;
+      return recorderServiceFresh();
     }
 
     function openHub(active = false) {
+      if (heartbeatFresh()) {
+        try { channel?.postMessage({ type: 'focus-hub', active: !!active }); } catch (_) {}
+        return null;
+      }
+      if (!reserveRecorderOwner()) {
+        try { channel?.postMessage({ type: 'focus-hub', active: !!active }); } catch (_) {}
+        return null;
+      }
       const url = canonicalRecorderHubUrl();
       try {
         if (typeof GM_openInTab === 'function') return GM_openInTab(url, { active: !!active, insert: true, setParent: true });
@@ -3461,12 +3541,7 @@
     }
 
     function ensureHub() {
-      if (!heartbeatFresh()) {
-        // Reserve the Hub briefly while its background tab is starting so a
-        // rapid series of Record clicks cannot create duplicate Hub tabs.
-        localStorage.setItem(RECORDER_HEARTBEAT_KEY, String(Date.now()));
-        openHub(false);
-      }
+      if (!heartbeatFresh()) openHub(false);
     }
 
     function start(id) {
@@ -3545,9 +3620,12 @@
   function initRecorderHub() {
     stopAllPageMedia();
     document.title = RECORDER_TAB_TITLE;
+    try { window.name = RECORDER_HUB_WINDOW_NAME; } catch (_) {}
     document.documentElement.classList.add('ziggy-recorder-hub');
     document.body.replaceChildren();
 
+    const hubInstanceId = crypto.randomUUID?.() || `hub-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    let ownsRecorder = claimRecorderOwner(hubInstanceId);
     const jobs = new Map();
     const processedCommands = new Set();
     const channel = (() => { try { return new BroadcastChannel(RECORDER_CHANNEL_NAME); } catch (_) { return null; } })();
@@ -3589,7 +3667,7 @@
         ]),
         $('div', { class: 'rec-actions' }, [
           $('button', { class: 'rec-btn', onclick: () => openNoopener(canonicalWorkshopUrl()) }, t('dockOpen')),
-          $('button', { class: 'rec-btn danger', onclick: () => [...jobs.keys()].forEach(stopJob) }, t('stopAllRecordings')),
+          $('button', { class: 'rec-btn danger', onclick: () => ownsRecorder ? [...jobs.keys()].forEach(stopJob) : UnifiedRecorder.stopAll() }, t('stopAllRecordings')),
         ]),
       ]),
       list,
@@ -3653,7 +3731,7 @@
     }
 
     function summary(job) {
-      const terminal = !!job.finalizing || ['finalizing', 'saved'].includes(job.status);
+      const terminal = !!job.finalizing || ['finalizing', 'saved', 'failed'].includes(job.status);
       return {
         id: job.id,
         status: job.status,
@@ -3674,6 +3752,7 @@
     }
 
     function publishState() {
+      if (!ownsRecorder) { UnifiedRecorder.loadSnapshot(); render(); return; }
       const snapshot = { updatedAt: Date.now(), recordings: [...jobs.values()].map(summary) };
       try { localStorage.setItem(RECORDER_STATE_KEY, JSON.stringify(snapshot)); } catch (_) {}
       try { channel?.postMessage({ type: 'state', snapshot }); } catch (_) {}
@@ -3684,38 +3763,42 @@
       if (job.manualPaused || job.status === 'manual-paused') return t('recorderPausedManual');
       if (job.status === 'recording') return t('recorderRecording');
       if (job.status === 'private') return t('recorderPausedPrivate');
-      if (job.status === 'offline') {
+      if (job.status === 'offline' || job.status === 'reconnecting') {
         const left = Math.max(0, Number(job.offlineDeadline || 0) - Date.now());
-        return t('recorderPausedOffline', formatDuration(left));
+        const countdown = t('recorderPausedOffline', formatDuration(left));
+        return job.status === 'reconnecting' ? `${t('recorderRetrying')} · ${countdown}` : countdown;
       }
       if (job.status === 'finalizing') return `${t('recorderFinalizing')} ${Math.round(job.finalizingProgress || 0)}%`;
       if (job.status === 'saved') return t('recorderSaved');
+      if (job.status === 'failed') return job.error || t('recordingNoData');
       if (job.status === 'error') return job.error || t('recorderRetrying');
       return t('recorderConnecting');
     }
 
     function render() {
+      const visibleJobs = ownsRecorder ? jobs : UnifiedRecorder.recordings;
       list.replaceChildren();
-      if (!jobs.size) { list.appendChild($('div', { class: 'rec-empty' }, t('recordingCenterEmpty'))); return; }
-      jobs.forEach(job => {
-        const terminal = !!job.finalizing || ['finalizing', 'saved'].includes(job.status);
+      if (!visibleJobs.size) { list.appendChild($('div', { class: 'rec-empty' }, t('recordingCenterEmpty'))); return; }
+      visibleJobs.forEach(job => {
+        const terminal = !!job.finalizing || ['finalizing', 'saved', 'failed'].includes(job.status);
         const recordedMs = terminal ? Number(job.recordedMs || 0) : currentRecordedMs(job);
         const waitingMs = terminal ? Number(job.waitingMs || 0) : currentWaitingMs(job);
+        const resolution = job.resolution || (job.width && job.height ? `${job.width}×${job.height}` : '—');
         const row = $('section', { class: `rec-row is-${job.status === 'recording' ? 'recording' : (job.status === 'finalizing' ? 'finalizing' : 'waiting')}` }, [
           $('div', {}, [
             $('div', { class: 'rec-name' }, job.id),
             $('div', { class: 'rec-meta' }, [
               document.createTextNode(`${statusLabel(job)} · ${t('recordingDuration')}: ${formatDuration(recordedMs)} · ${t('recorderWaitingTime')}: ${formatDuration(waitingMs)}`),
               $('br'),
-              document.createTextNode(`${job.width ? `${job.width}×${job.height}` : '—'} · ${job.audioEnabled ? t('recorderAudioOn') : t('recorderAudioOff')} · ${formatBytes(job.bytes)}`),
+              document.createTextNode(`${resolution} · ${job.audioEnabled || job.audio ? t('recorderAudioOn') : t('recorderAudioOff')} · ${formatBytes(job.bytes)}`),
             ]),
             job.status === 'finalizing' ? $('div', { class: 'rec-progress' }, [$('i', { style: { width: `${Math.max(1, job.finalizingProgress || 0)}%` } })]) : null,
           ]),
           $('div', { class: 'rec-actions' }, [
             $('button', { class: 'rec-btn', onclick: () => openNoopener(`${location.origin}/${encodeURIComponent(job.id)}/`) }, t('recorderOpenRoom')),
-            job.status === 'error' ? $('button', { class: 'rec-btn primary', onclick: () => retryJob(job.id) }, t('recorderRetry')) : null,
-            !['finalizing', 'saved'].includes(job.status) ? $('button', { class: 'rec-btn', onclick: () => job.manualPaused ? resumeJob(job.id) : pauseJob(job.id) }, job.manualPaused ? t('recorderResume') : t('recorderPause')) : null,
-            !['finalizing', 'saved'].includes(job.status) ? $('button', { class: 'rec-btn danger', onclick: () => stopJob(job.id) }, t('opRecordStop')) : null,
+            job.status === 'error' ? $('button', { class: 'rec-btn primary', onclick: () => ownsRecorder ? retryJob(job.id) : UnifiedRecorder.retry(job.id) }, t('recorderRetry')) : null,
+            !['finalizing', 'saved', 'failed'].includes(job.status) ? $('button', { class: 'rec-btn', onclick: () => ownsRecorder ? (job.manualPaused ? resumeJob(job.id) : pauseJob(job.id)) : (job.manualPaused ? UnifiedRecorder.resume(job.id) : UnifiedRecorder.pause(job.id)) }, job.manualPaused ? t('recorderResume') : t('recorderPause')) : null,
+            !['finalizing', 'saved', 'failed'].includes(job.status) ? $('button', { class: 'rec-btn danger', onclick: () => ownsRecorder ? stopJob(job.id) : UnifiedRecorder.stop(job.id) }, t('opRecordStop')) : null,
           ]),
         ]);
         list.appendChild(row);
@@ -3725,8 +3808,12 @@
     async function prepareSink(job) {
       job.chunks = [];
       job.writeQueue = Promise.resolve();
+      job.storageFailed = false;
+      job.storageError = '';
+      job.lastStorageEstimateAt = 0;
       if (!navigator.storage?.getDirectory) return;
       try {
+        await navigator.storage.persist?.().catch(() => false);
         const root = await navigator.storage.getDirectory();
         const dir = await root.getDirectoryHandle('ziggy-recorder', { create: true });
         job.opfsDir = dir;
@@ -3739,10 +3826,55 @@
       }
     }
 
+    function isQuotaError(error) {
+      return error?.name === 'QuotaExceededError' || /quota|storage.*full|disk.*full|not enough space/i.test(String(error?.message || error || ''));
+    }
+
+    function withTimeout(promise, timeoutMs, message) {
+      let timer = 0;
+      return Promise.race([
+        Promise.resolve(promise),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), timeoutMs); }),
+      ]).finally(() => clearTimeout(timer));
+    }
+
+    async function assertStorageHeadroom(job, incomingBytes) {
+      if (!navigator.storage?.estimate || Date.now() - Number(job.lastStorageEstimateAt || 0) < 30000) return;
+      job.lastStorageEstimateAt = Date.now();
+      const estimate = await navigator.storage.estimate();
+      const quota = Number(estimate.quota || 0);
+      const usage = Number(estimate.usage || 0);
+      if (!quota) return;
+      const reserve = Math.max(512 * 1024 * 1024, Math.min(2 * 1024 * 1024 * 1024, quota * 0.05));
+      if (quota - usage - Number(incomingBytes || 0) >= reserve) return;
+      const error = new Error('Storage is nearly full; saving the recorded part now');
+      error.name = 'QuotaExceededError';
+      throw error;
+    }
+
+    function handleStorageFailure(job, error) {
+      if (!job || job.storageFailed) return;
+      job.storageFailed = true;
+      job.storageError = String(error?.message || error || 'Recording storage failed');
+      job.error = isQuotaError(error) ? `Storage limit reached. Saving the recorded part…` : `${job.storageError}. Saving the recorded part…`;
+      job.status = 'error';
+      pauseClock(job);
+      try { if (job.recorder?.state === 'recording') job.recorder.pause(); } catch (_) {}
+      publishState();
+      setTimeout(() => finalizeJob(job, 'storage-error'), 0);
+    }
+
     function queueChunk(job, chunk) {
-      if (!chunk?.size) return;
+      if (!chunk?.size || job.storageFailed || job.acceptChunks === false) return;
       job.bytes += chunk.size;
-      if (job.writer) job.writeQueue = job.writeQueue.then(() => job.writer.write(chunk));
+      if (job.writer) {
+        job.writeQueue = job.writeQueue
+          .then(async () => {
+            await assertStorageHeadroom(job, chunk.size);
+            await job.writer.write(chunk);
+          })
+          .catch(error => { handleStorageFailure(job, error); });
+      }
       else job.chunks.push(chunk);
     }
 
@@ -3783,6 +3915,7 @@
       if (!job.mimeType) throw new Error('MediaRecorder format unavailable');
       const videoBitsPerSecond = job.height >= 1080 ? 10000000 : (job.height >= 720 ? 6000000 : Math.max(2500000, Math.round(job.width * job.height * 8)));
       job.recorder = new MediaRecorder(job.captureStream, { mimeType: job.mimeType, videoBitsPerSecond: Math.min(12000000, videoBitsPerSecond), audioBitsPerSecond: 192000 });
+      job.acceptChunks = true;
       job.recorder.ondataavailable = event => queueChunk(job, event.data);
       job.recorder.onerror = event => { job.error = event.error?.message || 'Recorder error'; job.status = 'error'; pauseClock(job); publishState(); };
       job.recorder.start(2000);
@@ -3827,11 +3960,11 @@
       try { if (job.recorder?.state === 'recording') job.recorder.pause(); } catch (_) {}
       job.sourceStatus = status;
       job.status = job.manualPaused ? 'manual-paused' : status;
-      if (status === 'offline') {
+      if (status === 'offline' || status === 'reconnecting') {
         if (!job.offlineDeadline) job.offlineDeadline = Date.now() + 10 * 60 * 1000;
         clearTimeout(job.offlineTimer);
         job.offlineTimer = setTimeout(() => {
-          if (jobs.get(job.id)?.sourceStatus === 'offline') stopJob(job.id, 'offline-timeout');
+          if (['offline', 'reconnecting'].includes(jobs.get(job.id)?.sourceStatus)) stopJob(job.id, 'offline-timeout');
         }, Math.max(0, job.offlineDeadline - Date.now()));
       } else {
         job.offlineDeadline = 0;
@@ -3860,7 +3993,7 @@
       publishState();
     }
 
-    async function finalizeJob(job) {
+    async function finalizeJob(job, reason = 'manual') {
       if (!job || job.stopRequested || job.finalizing) return;
       job.stopRequested = true;
       job.finalizing = true;
@@ -3870,40 +4003,52 @@
       clearTimeout(job.offlineTimer);
       job.finalizingProgress = 5;
       publishState();
+      let pipelineError = job.storageError ? new Error(job.storageError) : null;
       try {
         if (job.recorder && job.recorder.state !== 'inactive') {
-          await new Promise(resolve => {
-            const done = () => resolve();
-            job.recorder.addEventListener('stop', done, { once: true });
-            try { job.recorder.requestData?.(); } catch (_) {}
-            try { job.recorder.stop(); } catch (_) { resolve(); }
-          });
+          try {
+            await withTimeout(new Promise(resolve => {
+              const done = () => resolve();
+              job.recorder.addEventListener('stop', done, { once: true });
+              try { job.recorder.requestData?.(); } catch (_) {}
+              try { job.recorder.stop(); } catch (_) { resolve(); }
+            }), 8000, 'Timed out while stopping MediaRecorder');
+          } catch (error) { pipelineError ||= error; }
         }
+        job.acceptChunks = false;
         job.finalizingProgress = 35; publishState();
-        await job.writeQueue;
+        try { await withTimeout(job.writeQueue, 20000, 'Timed out while flushing recording data'); }
+        catch (error) { pipelineError ||= error; }
         job.finalizingProgress = 60; publishState();
-        let blob;
+        let blob = null;
         if (job.writer && job.fileHandle) {
-          await job.writer.close();
-          blob = await job.fileHandle.getFile();
+          try { await withTimeout(job.writer.close(), 20000, 'Timed out while closing the recording file'); }
+          catch (error) { pipelineError ||= error; }
+          try { blob = await withTimeout(job.fileHandle.getFile(), 10000, 'Timed out while reading the recorded file'); }
+          catch (error) { pipelineError ||= error; }
         } else {
           blob = new Blob(job.chunks || [], { type: job.mimeType || 'video/webm' });
         }
         job.finalizingProgress = 82; publishState();
-        if (!blob?.size) throw new Error(t('recordingNoData'));
+        if (!blob?.size) throw pipelineError || new Error(t('recordingNoData'));
         const ext = String(job.mimeType || '').includes('mp4') ? 'mp4' : 'webm';
         job.filename = `${safeFilePart(job.id)}_${fileStamp(job.startedAt)}.${ext}`;
         downloadBlob(blob, job.filename);
         job.finalizingProgress = 100;
         job.status = 'saved';
+        job.error = pipelineError ? `Saved partial recording after ${reason}: ${pipelineError.message || pipelineError}` : '';
         publishState();
         setTimeout(() => removeJob(job.id), 8000);
       } catch (error) {
-        job.status = 'error';
-        job.error = String(error?.message || error);
-        job.stopRequested = false;
+        cleanupJob(job);
+        job.status = 'failed';
+        job.error = `Recording stopped, but no playable file could be saved: ${String(error?.message || error)}`;
+        job.stopRequested = true;
         job.finalizing = false;
+        job.acceptChunks = false;
+        job.finalizingProgress = 0;
         publishState();
+        setTimeout(() => removeJob(job.id), 15000);
       }
     }
 
@@ -3929,9 +4074,9 @@
       publishState();
     }
 
-    function stopJob(id) {
+    function stopJob(id, reason = 'manual') {
       const job = jobs.get(normalizeUsername(id));
-      if (job) finalizeJob(job);
+      if (job) finalizeJob(job, reason);
     }
 
     function pauseJob(id) {
@@ -3951,7 +4096,7 @@
       job.manualPaused = false;
       job.error = '';
       if (job.sourceStatus === 'private') pauseForStatus(job, 'private');
-      else if (job.sourceStatus === 'offline') pauseForStatus(job, 'offline');
+      else if (job.sourceStatus === 'offline' || job.sourceStatus === 'reconnecting') pauseForStatus(job, job.sourceStatus);
       else if (job.video?.readyState >= 2) waitForStablePublic(job);
       else {
         job.status = 'connecting';
@@ -3971,6 +4116,7 @@
     }
 
     function processCommand(command) {
+      if (!ownsRecorder) return;
       if (!command?.commandId || processedCommands.has(command.commandId)) return;
       processedCommands.add(command.commandId);
       if (command.action === 'start') startJob(command.id);
@@ -3982,6 +4128,7 @@
     }
 
     function drainCommands() {
+      if (!ownsRecorder) return;
       let queue = [];
       try { queue = JSON.parse(localStorage.getItem(RECORDER_COMMAND_KEY) || '[]'); } catch (_) {}
       if (Array.isArray(queue)) queue.forEach(processCommand);
@@ -3997,8 +4144,15 @@
       }
     }
 
-    channel && (channel.onmessage = event => { if (event.data?.type === 'command') processCommand(event.data.command); });
-    window.addEventListener('storage', event => { if (event.key === RECORDER_COMMAND_KEY) drainCommands(); });
+    channel && (channel.onmessage = event => {
+      if (event.data?.type === 'focus-hub' && ownsRecorder && event.data.active) {
+        try { window.focus(); } catch (_) {}
+      } else if (event.data?.type === 'command' && ownsRecorder) processCommand(event.data.command);
+    });
+    window.addEventListener('storage', event => {
+      if (event.key === RECORDER_COMMAND_KEY && ownsRecorder) drainCommands();
+      else if (event.key === RECORDER_STATE_KEY && !ownsRecorder) { UnifiedRecorder.loadSnapshot(); render(); }
+    });
     EventBus.on('room:online', ({ id, hlsSource }) => {
       const job = jobs.get(id);
       if (!job || job.stopRequested || job.finalizing) return;
@@ -4021,16 +4175,33 @@
       const job = jobs.get(id);
       if (job && !job.stopRequested && !job.finalizing) pauseForStatus(job, 'reconnecting');
     });
-    setInterval(() => { localStorage.setItem(RECORDER_HEARTBEAT_KEY, String(Date.now())); drainCommands(); publishState(); }, 1000);
-    localStorage.setItem(RECORDER_HEARTBEAT_KEY, String(Date.now()));
-    drainCommands();
-    render();
+    UnifiedRecorder.subscribe(() => { if (!ownsRecorder) render(); });
+    setInterval(() => {
+      if (ownsRecorder) {
+        if (!renewRecorderOwner(hubInstanceId)) ownsRecorder = false;
+        else { drainCommands(); publishState(); return; }
+      }
+      UnifiedRecorder.loadSnapshot();
+      if (!recorderServiceFresh() && claimRecorderOwner(hubInstanceId)) {
+        ownsRecorder = true;
+        drainCommands();
+        publishState();
+      } else render();
+    }, 1000);
+    if (ownsRecorder) {
+      renewRecorderOwner(hubInstanceId);
+      drainCommands();
+      publishState();
+    } else {
+      UnifiedRecorder.loadSnapshot();
+      render();
+    }
     window.addEventListener('beforeunload', event => {
-      if (![...jobs.values()].some(job => !['saved', 'error'].includes(job.status))) return;
+      if (!ownsRecorder || ![...jobs.values()].some(job => !['saved', 'failed'].includes(job.status))) return;
       event.preventDefault();
       event.returnValue = t('recorderHubCloseWarning');
     });
-    window.addEventListener('pagehide', () => localStorage.setItem(RECORDER_HEARTBEAT_KEY, '0'));
+    window.addEventListener('pagehide', () => { if (ownsRecorder) releaseRecorderOwner(hubInstanceId); });
   }
 
   /* =============================================================

@@ -111,6 +111,15 @@ for (const item of scripts) {
     if (source.includes("['openRoom', t('shortcutOpenRoom')]")) failures.push(`${item.file}: removed Workshop Open-room shortcut returned`);
     if (source.includes("const openBtn = mkOp('external'") || source.includes("const pipBtn = mkOp('pip'")) failures.push(`${item.file}: removed Workshop card quick action returned`);
     if (!source.includes("title: t('modelNameBackgroundTab')")) failures.push(`${item.file}: Workshop model-name background-tab hint is missing`);
+    if (!source.includes("const RECORDER_OWNER_KEY = 'ziggy_recorder_owner_v1'")) failures.push(`${item.file}: Recorder Hub single-owner lease is missing`);
+    if (!source.includes('let ownsRecorder = claimRecorderOwner(hubInstanceId)')) failures.push(`${item.file}: Recorder Hub owner claim is missing`);
+    if (!source.includes('const visibleJobs = ownsRecorder ? jobs : UnifiedRecorder.recordings')) failures.push(`${item.file}: duplicate Recorder Hubs do not render the owner snapshot`);
+    if (!source.includes("channel?.postMessage({ type: 'focus-hub'")) failures.push(`${item.file}: existing Recorder Hub focus/reuse request is missing`);
+    if (!source.includes("status === 'offline' || status === 'reconnecting'")) failures.push(`${item.file}: recorder reconnects do not preserve the offline timeout`);
+    if (!source.includes("['offline', 'reconnecting'].includes(jobs.get(job.id)?.sourceStatus)")) failures.push(`${item.file}: recorder offline timeout cannot stop reconnecting jobs`);
+    if (!source.includes('function handleStorageFailure(job, error)')) failures.push(`${item.file}: recorder storage failure salvage path is missing`);
+    if (!source.includes("finalizeJob(job, 'storage-error')")) failures.push(`${item.file}: storage failures do not automatically finalize partial recordings`);
+    if (!source.includes("withTimeout(job.writeQueue, 20000")) failures.push(`${item.file}: recorder finalization write timeout is missing`);
     if (!source.includes("findDesktopNavigationSlot('private')")) failures.push(`${item.file}: desktop Workshop navigation does not replace Private Shows`);
     if (!source.includes("const WORKSHOP_TAB_TITLE = 'Ziggy Room Suite'")) failures.push(`${item.file}: unique Workshop tab title is missing`);
     if (!source.includes("function canonicalWorkshopUrl()")) failures.push(`${item.file}: canonical Workshop URL helper is missing`);

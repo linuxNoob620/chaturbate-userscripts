@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.16
+// @version           16.5.17
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -662,6 +662,8 @@
       opResetView: 'Reset view',
       opOpenRoom: 'Open room',
       opCopyUsername: 'Copy username',
+      opCopyRoomLink: 'Copy room link',
+      opOpenRecu: 'Open Recu.me profile',
       modelNameBackgroundTab: 'Open model in a background tab',
       opUnfollowAccount: 'Unfollow on Chaturbate',
       unfollowAccountConfirm: (n) => `Unfollow ${n} on Chaturbate? This changes your actual Chaturbate account.`,
@@ -1025,6 +1027,8 @@
       opResetView: '重置画面',
       opOpenRoom: '打开房间',
       opCopyUsername: '复制用户名',
+      opCopyRoomLink: '复制房间链接',
+      opOpenRecu: '打开 Recu.me 资料页',
       modelNameBackgroundTab: '在后台标签页打开主播',
       opUnfollowAccount: '在 Chaturbate 取消关注',
       unfollowAccountConfirm: (n) => `确定要在 Chaturbate 取消关注 ${n} 吗？这会修改你的 Chaturbate 账号。`,
@@ -1288,7 +1292,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.16',
+    version: '16.5.17',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3407,6 +3411,29 @@
     if (!name) return false;
     if (USERNAME_EXCLUDE.has(name.toLowerCase())) return false;
     return usernameSyntaxOk(name);
+  }
+
+  function roomPageUrl(name) {
+    const username = normalizeUsername(name);
+    return username ? `${location.origin}/${encodeURIComponent(username)}/` : '';
+  }
+
+  function recuProfileUrl(name) {
+    const username = normalizeUsername(name);
+    return username ? `https://recu.me/performer/${encodeURIComponent(username)}` : '';
+  }
+
+  async function copyRoomPageLink(name) {
+    const url = roomPageUrl(name);
+    if (!url) return false;
+    const copied = await copyText(url);
+    toast(copied ? t('copied') : (LANG === 'zh' ? '复制失败' : 'Copy failed'));
+    return copied;
+  }
+
+  function openRoomRecuProfile(name) {
+    const url = recuProfileUrl(name);
+    if (url) openBackgroundTab(url);
   }
 
   /* =============================================================
@@ -7938,6 +7965,8 @@
         .cam-info-actions .favorite-toggle:hover,
         .cam-info-actions .favorite-toggle.favorite-active { position:static!important; background:#17202a!important; border-color:#2d3e50!important; transform:none!important; }
         .cam-info-actions .favorite-toggle.favorite-active { color:#f59e0b!important; }
+        .cam-info-actions .quick-recu { color:#d8a7f0!important; border-color:#6f3e87!important; }
+        .cam-info-actions .quick-recu:hover,.cam-info-actions .quick-recu:focus-visible { color:#fff!important; background:#5b2b73!important; border-color:#8d55a5!important; }
         .cam-card .name-label,.cam-card > .pill,.cam-card > .favorite-toggle,.cam-card > .split-toggle { display:none!important; }
         .cam-card .ops-row { top:auto!important; right:6px!important; bottom:52px!important; left:auto!important; transform:none!important; padding:4px!important; border:1px solid #2d3e50!important; border-radius:4px!important; background:#202c39!important; }
         .status-layer { pointer-events:none; }.status-layer .status-retry { pointer-events:auto; margin-top:8px; min-height:32px; padding:5px 10px; border:1px solid #0c6a93; border-radius:3px; background:#0c6a93; color:#fff; cursor:pointer; }
@@ -9763,6 +9792,14 @@
         store.toggleRoomInGroup(room.id, FAVORITE_GROUP_ID);
       });
       favoriteBtn?.classList.add('favorite-toggle');
+      const copyLinkBtn = isLikelyUsername(room.id) ? mkOp('copy', t('opCopyRoomLink'), () => {
+        void copyRoomPageLink(room.id);
+      }) : null;
+      copyLinkBtn?.classList.add('quick-op', 'quick-copy-link');
+      const recuProfileBtn = isLikelyUsername(room.id) ? mkOp('external', t('opOpenRecu'), () => {
+        openRoomRecuProfile(room.id);
+      }) : null;
+      recuProfileBtn?.classList.add('quick-op', 'quick-recu');
       const splitBtn = room.temporary ? null : mkOp('split', t('opAddSplit'), () => handleAddRoomToSplit(room.id));
       splitBtn?.classList.add('split-toggle');
       muteBtn.classList.add('quick-op', 'quick-mute');
@@ -9797,6 +9834,8 @@
         infoActions.appendChild(addRoomBtn);
       }
       if (favoriteBtn) infoActions.appendChild(favoriteBtn);
+      if (copyLinkBtn) infoActions.appendChild(copyLinkBtn);
+      if (recuProfileBtn) infoActions.appendChild(recuProfileBtn);
       infoActions.appendChild(moreOpsBtn);
       const info = $('div', { class: 'cam-info' }, [
         $('div', { class: 'cam-info-copy' }, [infoName, infoMeta]),
@@ -10814,6 +10853,13 @@
         unfollowItem.style.color = '#f87171';
         menu.appendChild(unfollowItem);
       }
+      if (isLikelyUsername(roomId)) {
+        menu.appendChild(item('', t('opCopyRoomLink'), () => { void copyRoomPageLink(roomId); }));
+        const recuItem = item('', t('opOpenRecu'), () => openRoomRecuProfile(roomId));
+        recuItem.classList.add('card-menu-recu');
+        recuItem.style.color = '#d8a7f0';
+        menu.appendChild(recuItem);
+      }
       if (currentRoom) {
         menu.appendChild(item('', currentRoom.muted ? (LANG === 'zh' ? '取消静音' : 'Unmute') : (LANG === 'zh' ? '静音' : 'Mute'), () => {
           store.patchRoom(roomId, { muted: !currentRoom.muted });
@@ -10823,15 +10869,11 @@
       const inFav = currentRoom ? roomInGroup(currentRoom, FAVORITE_GROUP_ID) : false;
       if (currentRoom) {
         menu.appendChild(item(inFav ? '' : '', inFav ? t('opFavoriteRemove') : t('opFavoriteAdd'), () => store.toggleRoomInGroup(roomId, FAVORITE_GROUP_ID)));
-        if (!inFav) menu.appendChild(item('', t('opMoveToFavorites'), () => store.moveOnlyToGroup(roomId, FAVORITE_GROUP_ID)));
         menu.appendChild(item('', t('opAddSplit'), () => handleAddRoomToSplit(roomId)));
       }
       menu.appendChild(item('', t('opScreenshot'), () => captureCardScreenshot(roomId)));
       menu.appendChild(item('', recordings.has(roomId) ? t('opRecordStop') : t('opRecordStart'), () => toggleCardRecording(roomId)));
       menu.appendChild(item('', t('opCopyUsername'), async () => { await copyText(roomId); toast(t('copied')); }));
-      menu.appendChild(item('', t('opFullscreen'), () => {
-        document.fullscreenElement ? document.exitFullscreen() : card.requestFullscreen().catch(() => {});
-      }));
       if (currentRoom) {
         menu.appendChild(item('', t('opMoveGroup'), () => openMoveMenu(e, roomId)));
         menu.appendChild(item('', t('opDeleteRoom'), () => { stopCardRecording(roomId, true); service.stop(roomId); store.removeRoom(roomId); }));

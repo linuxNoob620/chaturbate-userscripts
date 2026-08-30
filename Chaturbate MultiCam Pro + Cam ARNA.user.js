@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.26
+// @version           16.5.27
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.26');
+  instanceMarker.setAttribute('data-suite-version', '16.5.27');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1296,7 +1296,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.26',
+    version: '16.5.27',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -4071,7 +4071,8 @@
     }
 
     async function beginRecorder(job) {
-      if (job.recorder || job.finalizing || !job.video.videoWidth || !job.video.videoHeight) return;
+      if (job.recorder) return true;
+      if (job.finalizing || !job.video.videoWidth || !job.video.videoHeight) return false;
       const sourceW = job.video.videoWidth;
       const sourceH = job.video.videoHeight;
       const scale = Math.min(1, 1920 / sourceW, 1080 / sourceH);
@@ -4084,8 +4085,16 @@
       const canvasStream = job.canvas.captureStream(30);
       const tracks = [...canvasStream.getVideoTracks()];
       try {
+        const capture = job.video.captureStream || job.video.mozCaptureStream;
+        if (typeof capture === 'function') {
+          job.mediaElementStream = capture.call(job.video);
+          const audioTrack = job.mediaElementStream?.getAudioTracks?.()[0];
+          if (audioTrack) { tracks.push(audioTrack); job.audioEnabled = true; }
+        }
+      } catch (_) { job.mediaElementStream = null; }
+      try {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        if (AudioCtx) {
+        if (!job.audioEnabled && AudioCtx) {
           job.audioContext = new AudioCtx();
           job.audioDestination = job.audioContext.createMediaStreamDestination();
           job.audioSource = job.audioContext.createMediaElementSource(job.video);
@@ -4105,13 +4114,40 @@
       job.recorder.onerror = event => { job.error = event.error?.message || 'Recorder error'; job.status = 'error'; pauseClock(job); publishState(); };
       job.recorder.start(2000);
       job.drawTimer = setInterval(() => drawFrame(job), 1000 / 30);
+      return true;
     }
 
     function clearStableTimer(job) { if (job.stableTimer) clearTimeout(job.stableTimer); job.stableTimer = 0; }
 
+    function clearPlaybackRetry(job) {
+      if (job.playbackRetryTimer) clearTimeout(job.playbackRetryTimer);
+      job.playbackRetryTimer = 0;
+    }
+
+    function ensureRecorderPlayback(job, delay = 0) {
+      if (!job || job.stopRequested || job.finalizing || job.manualPaused || job.sourceStatus !== 'online') return;
+      clearPlaybackRetry(job);
+      const attempt = () => {
+        if (!jobs.has(job.id) || job.stopRequested || job.finalizing || job.manualPaused || job.sourceStatus !== 'online') return;
+        // The Hub is normally opened in a background tab. Muted autoplay is
+        // required there; captureStream/Web Audio still captures source audio.
+        job.video.muted = true;
+        let playResult = null;
+        try { playResult = job.video.play(); } catch (_) {}
+        withTimeout(Promise.resolve(playResult), 5000, 'Timed out while starting recorder playback').catch(() => {}).finally(() => {
+          if (!jobs.has(job.id) || job.stopRequested || job.finalizing || job.manualPaused || job.sourceStatus !== 'online') return;
+          if (job.video.readyState >= 2 && job.video.videoWidth && job.video.videoHeight) waitForStablePublic(job);
+          else job.playbackRetryTimer = setTimeout(() => ensureRecorderPlayback(job), 1500);
+        });
+      };
+      if (delay > 0) job.playbackRetryTimer = setTimeout(attempt, delay);
+      else attempt();
+    }
+
     function waitForStablePublic(job) {
       if (!job || job.stopRequested || job.finalizing) return;
       clearStableTimer(job);
+      clearPlaybackRetry(job);
       job.sourceStatus = 'online';
       if (job.manualPaused) {
         job.status = 'manual-paused';
@@ -4120,11 +4156,21 @@
         return;
       }
       job.status = 'connecting';
+      job.error = '';
       pauseClock(job);
       job.stableTimer = setTimeout(async () => {
-        if (!jobs.has(job.id) || job.stopRequested || job.finalizing || job.manualPaused || job.video.readyState < 2) return;
+        if (!jobs.has(job.id) || job.stopRequested || job.finalizing || job.manualPaused) return;
+        if (job.video.readyState < 2 || !job.video.videoWidth || !job.video.videoHeight) {
+          ensureRecorderPlayback(job);
+          publishState();
+          return;
+        }
         try {
-          if (!job.recorder) await beginRecorder(job);
+          if (!job.recorder && !(await beginRecorder(job))) {
+            ensureRecorderPlayback(job);
+            publishState();
+            return;
+          }
           else if (job.recorder.state === 'paused') job.recorder.resume();
           job.status = 'recording';
           job.offlineDeadline = 0;
@@ -4141,6 +4187,7 @@
     function pauseForStatus(job, status) {
       if (!job || job.stopRequested || job.finalizing) return;
       clearStableTimer(job);
+      clearPlaybackRetry(job);
       pauseClock(job);
       try { if (job.recorder?.state === 'recording') job.recorder.pause(); } catch (_) {}
       job.sourceStatus = status;
@@ -4168,11 +4215,17 @@
       };
       jobs.set(id, job);
       hubStore.state.rooms.push({ id, groups: [DEFAULT_GROUP_ID], lastStatus: 'unknown', muted: true });
-      const video = $('video', { muted: false, autoplay: true, playsInline: true, crossOrigin: 'anonymous', dataset: { multicamRoomId: id } });
+      const video = $('video', { muted: true, autoplay: true, playsInline: true, crossOrigin: 'anonymous', dataset: { multicamRoomId: id } });
       job.video = video;
       document.getElementById('rec-hidden-media').appendChild(video);
-      video.addEventListener('playing', () => { if (hubStore.state.rooms.find(room => room.id === id)?.lastStatus === 'online') waitForStablePublic(job); });
-      await prepareSink(job);
+      const mediaReady = () => {
+        if (hubStore.state.rooms.find(room => room.id === id)?.lastStatus === 'online') ensureRecorderPlayback(job);
+      };
+      ['loadedmetadata', 'loadeddata', 'canplay', 'playing'].forEach(type => video.addEventListener(type, mediaReady));
+      video.addEventListener('error', () => ensureRecorderPlayback(job, 1500));
+      publishState();
+      try { await withTimeout(prepareSink(job), 5000, 'Timed out while preparing recording storage'); }
+      catch (_) { job.writer = null; job.fileHandle = null; }
       service.setQualityCap(id, 1080);
       service.start(id);
       publishState();
@@ -4269,11 +4322,13 @@
 
     function cleanupJob(job) {
       clearStableTimer(job);
+      clearPlaybackRetry(job);
       clearTimeout(job.offlineTimer);
       clearInterval(job.drawTimer);
       service.stop(job.id);
       service.setQualityCap(job.id, 0);
       try { job.captureStream?.getTracks().forEach(track => track.stop()); } catch (_) {}
+      try { job.mediaElementStream?.getTracks().forEach(track => track.stop()); } catch (_) {}
       try { job.audioSource?.disconnect(); } catch (_) {}
       try { job.audioContext?.close(); } catch (_) {}
       try { stopMediaElement(job.video, true); } catch (_) {}
@@ -4426,7 +4481,7 @@
       if (!job.video.isConnected) document.getElementById('rec-hidden-media')?.appendChild(job.video);
       service.attachVideo(id, job.video);
       service.startHls(id, hlsSource);
-      if (job.video.readyState >= 2) waitForStablePublic(job);
+      ensureRecorderPlayback(job, 50);
     });
     EventBus.on('room:status', ({ id, status }) => {
       const job = jobs.get(id);
@@ -4435,7 +4490,7 @@
       if (status === 'private') pauseForStatus(job, 'private');
       else if (status === 'offline') pauseForStatus(job, 'offline');
       else if (status === 'error') pauseForStatus(job, 'reconnecting');
-      else if (status === 'online' && job.video.readyState >= 2) waitForStablePublic(job);
+      else if (status === 'online') ensureRecorderPlayback(job);
     });
     EventBus.on('room:transient-error', ({ id }) => {
       const job = jobs.get(id);

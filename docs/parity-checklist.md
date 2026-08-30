@@ -10,7 +10,7 @@ Record **Pass**, **Fail** or **Blocked**, plus a screenshot/console/network note
 
 ## Installation and startup
 
-- [ ] Version/name shown as 16.5.23 / Ziggy Chaturbate Suite
+- [ ] Version/name shown as 16.5.25 / Ziggy Chaturbate Suite
 - [ ] Executes at document end on `chaturbate.com` and subdomains
 - [ ] Executes in frames exactly where the userscript does
 - [ ] Does not inject twice
@@ -32,6 +32,12 @@ Record **Pass**, **Fail** or **Blocked**, plus a screenshot/console/network note
 ## Rooms dock/menu
 
 - [ ] Rooms button appears only in the same desktop/mobile page locations
+- [ ] Extension native menu is exactly `Ziggy Chaturbate Suite` → `Rooms` / `Open Workshop` on Chaturbate only
+- [ ] Context detection priority is card → direct model link → current room URL → no model
+- [ ] Card/link context overrides the surrounding room; reserved routes are never treated as models
+- [ ] Context data expires after eight seconds and is cleared after action, navigation and tab close
+- [ ] Context Rooms opens the existing dock on main, room, Workshop and Recorder pages without duplicating Suite UI logic
+- [ ] No-model context opens general Rooms mode with Workshop, Recorder Hub and saved-list access only
 - [ ] Normal and theater layouts preserve the same placement and size
 - [ ] Menu follows/anchors to the page and stays open while hovered
 - [ ] Auto-collapse delay and interaction match
@@ -49,7 +55,7 @@ Record **Pass**, **Fail** or **Blocked**, plus a screenshot/console/network note
 - [ ] Default, Favorites, Online now, All saved and custom groups contain the same rooms/counts
 - [ ] Online Following is isolated from saved/custom groups and never silently saves rooms
 - [ ] Online Following initial alphabetical order matches; newly online rooms append without reshuffling visible cards
-- [ ] Online Following pagination shows nine cards per page and stable card positions
+- [ ] Online Following pagination shows nine cards per desktop page, four cards in a mobile 2x2 page, and stable card positions
 - [ ] Pagination controls, counts and page boundaries match
 - [ ] Online Following previews use the same lazy 480p behavior
 - [ ] Online Following cache, refresh cadence, request staggering and retry behavior match
@@ -142,6 +148,8 @@ Record **Pass**, **Fail** or **Blocked**, plus a screenshot/console/network note
 
 - [ ] All keyboard shortcuts and modifier combinations match
 - [ ] Mouse click, double-click, hover, wheel and context-menu behavior match
+- [ ] Right-click on a card, link, room background and native video resolves the intended model in Chrome and Zen
+- [ ] Same-origin frame behavior works; cross-origin player/frame limitations are recorded without broader permissions
 - [ ] Touchstart/touchmove/touchend and pointer-type behavior match
 - [ ] Trusted user-activation-dependent fullscreen/PiP/download flows match
 - [ ] Mutation/resize/intersection observer timing and teardown match

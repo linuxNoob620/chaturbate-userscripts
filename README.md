@@ -42,6 +42,8 @@ Load `dist/chrome` with Chrome's **Load unpacked** development action. Load `dis
 
 Do not enable the Tampermonkey and extension implementations simultaneously. For parity tests, enable exactly one implementation and reload the page.
 
+The browser extensions also add a Chaturbate-only native context submenu with **Rooms** and **Open Workshop**. Rooms uses the model card/link under the pointer when available, falls back to the current room, and delegates to the Suite's existing Rooms UI. This native browser menu is extension-only; it does not alter the maintained Tampermonkey interface.
+
 The userscript metadata version, `package.json` version, and both generated manifest versions must match. The build and test commands enforce this, verify that the copied userscript body is byte-identical, pin HLS 1.6.16 locally, and test the compatibility adapters.
 
 See [the compatibility map](docs/extension-compatibility-map.md) and [the parity checklist](docs/parity-checklist.md).

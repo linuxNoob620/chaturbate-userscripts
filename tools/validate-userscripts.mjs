@@ -73,7 +73,7 @@ for (const item of scripts) {
     if (!source.includes('ziggy-mobile-reloaded-backdrop')) failures.push(`${item.file}: native mobile Reloaded menu is missing`);
     if (!source.includes('mobileCleanView: captureMobileCleanViewSettings()')) failures.push(`${item.file}: Mobile Clean View backup component is missing`);
     if (!source.includes('onclick: openCurrentRoomRecu')) failures.push(`${item.file}: RoomGrid Recu.me button is missing`);
-    if (!source.includes('https://recu.me/performer/${encodeURIComponent(currentRoom)}')) failures.push(`${item.file}: RoomGrid Recu.me URL is not tied to the current model`);
+    if (!source.includes('https://recu.me/performer/${encodeURIComponent(room)}')) failures.push(`${item.file}: Rooms Recu.me URL is not tied to the active model`);
     if (!source.includes('Integrated component: Ziggy Mobile Clean View')) failures.push(`${item.file}: integrated Mobile Clean View runtime is missing`);
     if (!source.includes("const supported = isNativeMobileSite() && !isBlockedPage();")) failures.push(`${item.file}: integrated Mobile Clean View is not gated to native mobile`);
     if (!source.includes("fullscreen: 'ziggy-mobile-clean-view:fullscreen'")) failures.push(`${item.file}: Suite-to-Clean-View fullscreen bridge is missing`);
@@ -102,6 +102,16 @@ for (const item of scripts) {
     if (!source.includes('async function unfollowOnlineFollowingRoom')) failures.push(`${item.file}: Online Following account unfollow action is missing`);
     if (!source.includes("t('opUnfollowAccount')")) failures.push(`${item.file}: Online Following card menu does not expose account unfollow`);
     if (!source.includes('onlineFollowingSuppressedUntil')) failures.push(`${item.file}: Online Following unfollow stale-sync suppression is missing`);
+    if (!source.includes('const ONLINE_FOLLOWING_PAGE_SIZE = 9')) failures.push(`${item.file}: Online Following desktop page size is not nine`);
+    if (!source.includes('const ONLINE_FOLLOWING_MOBILE_PAGE_SIZE = 4')) failures.push(`${item.file}: Online Following mobile page size is not four`);
+    if (!source.includes("return (phoneEnvironment || store.state.settings.viewMode === 'phone')")
+      || !source.includes('const { page, pageSize } = onlineFollowingPageInfo(list)')
+      || !source.includes('return list.slice(start, start + pageSize)')) {
+      failures.push(`${item.file}: Online Following pagination does not apply the responsive page size`);
+    }
+    if (!source.includes("body.rg-phone-mode.rg-online-following .grid.view-phone { grid-template-columns:repeat(2,minmax(0,1fr))!important; }")) {
+      failures.push(`${item.file}: Online Following mobile grid is not fixed to 2x2`);
+    }
     const fullscreenDblClickStart = source.indexOf("card.addEventListener('dblclick'");
     const fullscreenDblClickEnd = source.indexOf("card.addEventListener('contextmenu'", fullscreenDblClickStart);
     const fullscreenDblClickSource = fullscreenDblClickStart >= 0 && fullscreenDblClickEnd > fullscreenDblClickStart

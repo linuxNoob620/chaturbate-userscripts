@@ -19,6 +19,8 @@ async function testContentAdapter() {
   const storedWrites = [];
   const messages = [];
   const anchors = [];
+  const documentEvents = [];
+  let contentMessageListener;
   const chrome = {
     storage: {
       local: {
@@ -27,6 +29,7 @@ async function testContentAdapter() {
       },
     },
     runtime: {
+      onMessage: { addListener(value) { contentMessageListener = value; } },
       async sendMessage(message) {
         messages.push(message);
         if (message.type === 'ziggy-gm-xhr') {
@@ -47,6 +50,8 @@ async function testContentAdapter() {
   const document = {
     body: { appendChild(node) { anchors.push(node); } },
     documentElement: { appendChild(node) { anchors.push(node); } },
+    addEventListener() {},
+    dispatchEvent(event) { documentEvents.push(event); return true; },
     createElement(tag) {
       assert.equal(tag, 'a');
       return {
@@ -83,6 +88,10 @@ async function testContentAdapter() {
     URL: {
       createObjectURL() { nextObjectUrl += 1; return `blob:test-${nextObjectUrl}`; },
       revokeObjectURL() {},
+    },
+    location: { href: 'https://chaturbate.com/', origin: 'https://chaturbate.com' },
+    CustomEvent: class CustomEvent {
+      constructor(type, init = {}) { this.type = type; this.detail = init.detail; }
     },
   });
   vm.runInContext(source, context, { filename: 'content-adapter-test.js' });
@@ -136,20 +145,51 @@ async function testContentAdapter() {
   assert.equal(anchors.length, 1);
   assert.equal(anchors[0].download, 'model.jpg');
   assert.equal(anchors[0].clicked, true);
+
+  assert.equal(typeof contentMessageListener, 'function');
+  let contextResponse;
+  contentMessageListener({
+    type: 'ziggy-context-open-rooms',
+    context: { username: 'SweetMoonDoll', source: 'model-card', invocationId: 'invoke-1' },
+  }, {}, value => { contextResponse = value; });
+  assert.equal(contextResponse.ok, true);
+  assert.equal(documentEvents.at(-1).type, 'ziggy-suite:open-rooms');
+  assert.equal(documentEvents.at(-1).detail.modelId, 'sweetmoondoll');
+  assert.equal(documentEvents.at(-1).detail.source, 'model-card');
+  contentMessageListener({ type: 'ziggy-context-open-workshop' }, {}, value => { contextResponse = value; });
+  assert.equal(contextResponse.ok, true);
+  assert.equal(documentEvents.at(-1).type, 'ziggy-suite:open-workshop');
 }
 
 async function testBackgroundAdapter() {
   let listener;
+  let installedListener;
+  let startupListener;
+  let contextClickListener;
+  let tabRemovedListener;
+  let tabUpdatedListener;
   const createdTabs = [];
   const removedTabs = [];
+  const sentTabMessages = [];
+  const contextMenuItems = [];
   const fetchCalls = [];
   const chrome = {
     runtime: {
       onMessage: { addListener(value) { listener = value; } },
+      onInstalled: { addListener(value) { installedListener = value; } },
+      onStartup: { addListener(value) { startupListener = value; } },
+    },
+    contextMenus: {
+      removeAll(callback) { callback?.(); },
+      create(value) { contextMenuItems.push(value); return value.id; },
+      onClicked: { addListener(value) { contextClickListener = value; } },
     },
     tabs: {
       async create(value) { createdTabs.push(value); return { id: 88 }; },
       async remove(value) { removedTabs.push(value); },
+      async sendMessage(tabId, message, options) { sentTabMessages.push({ tabId, message, options }); return { ok: true }; },
+      onRemoved: { addListener(value) { tabRemovedListener = value; } },
+      onUpdated: { addListener(value) { tabUpdatedListener = value; } },
     },
   };
   const fetch = async (url, init) => {
@@ -162,10 +202,17 @@ async function testBackgroundAdapter() {
       async text() { return 'payload'; },
     };
   };
-  const context = vm.createContext({ chrome, fetch, Headers, AbortController, console, setTimeout, clearTimeout });
+  const context = vm.createContext({ chrome, fetch, Headers, AbortController, URL, console, setTimeout, clearTimeout });
   const source = await readFile(path.join(root, 'extension', 'shared', 'background.js'), 'utf8');
   vm.runInContext(source, context, { filename: 'background-adapter-test.js' });
   assert.equal(typeof listener, 'function');
+  assert.equal(typeof installedListener, 'function');
+  assert.equal(typeof startupListener, 'function');
+  assert.equal(typeof contextClickListener, 'function');
+  assert.equal(typeof tabRemovedListener, 'function');
+  assert.equal(typeof tabUpdatedListener, 'function');
+  installedListener();
+  assert.deepEqual(contextMenuItems.map(item => item.title), ['Ziggy Chaturbate Suite', 'Rooms', 'Open Workshop']);
 
   const dispatch = (message, sender = { tab: { id: 12, index: 3 } }) => new Promise((resolve, reject) => {
     let settled = false;
@@ -205,6 +252,39 @@ async function testBackgroundAdapter() {
   await dispatch({ type: 'ziggy-close-tab', tabId: 88 });
   await eventually(() => removedTabs.length, 'Tab close was not requested');
   assert.deepEqual(removedTabs, [88]);
+
+  await dispatch({
+    type: 'ziggy-context-capture',
+    candidate: { username: 'Card_Model', source: 'model-card' },
+    frameUrl: 'https://chaturbate.com/?multicam_mode=1',
+    invocationId: 'invoke-card',
+  }, { tab: { id: 21, url: 'https://chaturbate.com/room_model/' }, frameId: 0, url: 'https://chaturbate.com/?multicam_mode=1' });
+  contextClickListener({ menuItemId: 'ziggy-suite-rooms', linkUrl: 'https://chaturbate.com/link_model/' }, { id: 21, url: 'https://chaturbate.com/room_model/' });
+  await eventually(() => sentTabMessages.length >= 1, 'Rooms context action was not sent');
+  assert.equal(sentTabMessages.at(-1).message.context.username, 'card_model');
+  assert.equal(sentTabMessages.at(-1).message.context.source, 'model-card');
+  assert.equal(sentTabMessages.at(-1).options.frameId, 0);
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  contextClickListener({ menuItemId: 'ziggy-suite-rooms', linkUrl: 'https://chaturbate.com/link_model/' }, { id: 21, url: 'https://chaturbate.com/room_model/' });
+  await eventually(() => sentTabMessages.length >= 2, 'Direct-link context action was not sent');
+  assert.equal(sentTabMessages.at(-1).message.context.username, 'link_model');
+  assert.equal(sentTabMessages.at(-1).message.context.source, 'direct-link');
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  contextClickListener({ menuItemId: 'ziggy-suite-rooms' }, { id: 22, url: 'https://chaturbate.com/current_room/' });
+  await eventually(() => sentTabMessages.length >= 3, 'Current-room fallback was not sent');
+  assert.equal(sentTabMessages.at(-1).message.context.username, 'current_room');
+  assert.equal(sentTabMessages.at(-1).message.context.source, 'current-room');
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  contextClickListener({ menuItemId: 'ziggy-suite-rooms', linkUrl: 'https://chaturbate.com/discover/' }, { id: 23, url: 'https://chaturbate.com/' });
+  await eventually(() => sentTabMessages.length >= 4, 'General Rooms context action was not sent');
+  assert.equal(sentTabMessages.at(-1).message.context.username, '');
+  assert.equal(sentTabMessages.at(-1).message.context.source, 'none');
+
+  contextClickListener({ menuItemId: 'ziggy-suite-workshop' }, { id: 24, url: 'https://chaturbate.com/' });
+  await eventually(() => sentTabMessages.some(item => item.message.type === 'ziggy-context-open-workshop'), 'Workshop context action was not sent');
 }
 
 await testContentAdapter();

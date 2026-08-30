@@ -1,6 +1,6 @@
 # Extension compatibility map
 
-This document records the compatibility audit for `Chaturbate MultiCam Pro + Cam ARNA.user.js` version 16.5.23. The userscript remains the reference implementation. Extension builds copy its complete post-metadata body verbatim between explicit parity markers.
+This document records the compatibility audit for `Chaturbate MultiCam Pro + Cam ARNA.user.js` version 16.5.25. The userscript remains the reference implementation. Extension builds copy its complete post-metadata body verbatim between explicit parity markers.
 
 ## Userscript metadata
 
@@ -72,13 +72,23 @@ These require no adapter and remain byte-for-byte unchanged:
 - Chrome-only definition: `extension/chrome/manifest.template.json`, selecting a Manifest V3 service worker.
 - Firefox/Zen-only definition: `extension/firefox/manifest.template.json`, selecting a Manifest V3 background script and declaring the Gecko extension identity/data-collection metadata.
 
-No UI, CSS, wording, selectors, timing constants, defaults or application feature logic is forked by browser.
+No Suite UI, CSS, wording, selectors, timing constants, defaults or application feature logic is forked by browser. The extension-only native browser context menu is implemented in the shared extension adapters and delegates to the existing Rooms/Workshop event paths.
+
+### Native browser context menu
+
+- Chrome and Firefox/Zen expose one static native submenu on Chaturbate: `Ziggy Chaturbate Suite` with `Rooms` and `Open Workshop`.
+- The content adapter captures only strict contextual model metadata. Detection priority is the closest recognized model/Workshop card, then a directly targeted canonical model link, then the current top-level room URL, then no model.
+- Captured context is held only in the background process's in-memory map. It is never written to Suite settings, Rooms storage, `storage.local`, or page storage.
+- A capture is rejected after eight seconds, after navigation, or when its tab closes, and is always deleted after a menu action.
+- `Rooms` sends a narrow command to the top Chaturbate frame. The authoritative Suite body opens its existing Rooms surface; Workshop and Recorder pages initialize only a hidden context host, with no normal visible UI changes.
+- `Open Workshop` dispatches the existing Suite Workshop action. A direct background tab open is used only if the top-frame content script is unavailable.
 
 ## Permissions
 
 Chrome and Firefox/Zen request the same capabilities:
 
 - `storage`: required only for values that the userscript stores with GM storage.
+- `contextMenus`: required only for the two extension-native Chaturbate context-menu commands.
 - Content-script matches on Chaturbate: required to run on exactly the userscript's two `@match` patterns.
 - HTTPS host access for the exact `@connect` domains: required only for the GM cross-origin request bridge.
 
@@ -98,8 +108,10 @@ The extensions do not request `tabs`, `downloads`, `clipboardWrite`, `notificati
 - byte equality of shared background code and pinned HLS
 - JavaScript syntax and package presence
 
-`tools/test-extension-adapters.mjs` exercises GM metadata, synchronous storage reads, value persistence, cross-origin request messaging, background request options, background tabs, tab closing and Blob snapshot downloads with mocked browser APIs.
+`tools/test-extension-adapters.mjs` exercises GM metadata, synchronous storage reads, value persistence, cross-origin request messaging, background request options, background tabs, tab closing, Blob snapshot downloads, static context-menu creation, model-context priority, reserved-route rejection, top-frame dispatch and transient-context clearing with mocked browser APIs.
 
 ## Known platform boundary
 
 An unpacked Chrome extension can be installed locally. Firefox/Zen release builds require Mozilla signing for permanent installation; the generated XPI is directly usable as a temporary debugging add-on and is ready for signing without source changes. Signing is a browser distribution requirement, not an application behavior difference.
+
+Native extension context menus are not available to Tampermonkey. A cross-origin child frame whose own document URL is outside the existing Chaturbate match/host scope may not display the extension menu; no unrelated cross-origin permission is requested. Chaturbate's top-level room URL remains the fallback whenever the menu action originates in an eligible Chaturbate document.

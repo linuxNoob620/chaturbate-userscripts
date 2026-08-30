@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.23
+// @version           16.5.25
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.23');
+  instanceMarker.setAttribute('data-suite-version', '16.5.25');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -311,6 +311,7 @@
   const ONLINE_FAVORITES_GROUP_ID = 'online-favorites';
   const ONLINE_FOLLOWING_GROUP_ID = 'online-following';
   const ONLINE_FOLLOWING_PAGE_SIZE = 9;
+  const ONLINE_FOLLOWING_MOBILE_PAGE_SIZE = 4;
   const FAVORITE_GROUP_ID = 'fav';
 
   // v15.5: 稳定状态。多工作台/多窗口同时轮询时，不再用 loading / transient error 覆盖
@@ -1295,7 +1296,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.23',
+    version: '16.5.25',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -4499,15 +4500,23 @@
 
   const isRecorderHub = isRecorderHubRoute();
   const isWorkstation = new URLSearchParams(location.search).get('multicam_mode') === '1';
+  const hasExtensionContextMenus = GM_info?.scriptHandler === 'Ziggy Extension Adapter';
   if (isWorkstation) scheduleGithubAutoImport();
-  if (isRecorderHub) initRecorderHub();
-  else if (isWorkstation) initWorkstation();
+  if (isRecorderHub) {
+    initRecorderHub();
+    if (hasExtensionContextMenus) initInjector({ contextOnly: true });
+  }
+  else if (isWorkstation) {
+    initWorkstation();
+    if (hasExtensionContextMenus) initInjector({ contextOnly: true });
+  }
   else initInjector();
 
   /* =============================================================
    * 7. 普通页面注入：浮动按钮 + 快捷键
    * ============================================================= */
-  function initInjector() {
+  function initInjector(options = {}) {
+    const contextOnly = options.contextOnly === true;
     const ROOM_PATH = /^\/([a-zA-Z0-9_-]+)\/?$/;
     const nativeMobilePage = isNativeMobileSite();
     document.documentElement.classList.toggle('ziggy-suite-mobile', nativeMobilePage);
@@ -4515,7 +4524,11 @@
 
     // ---- 当前房间（响应式：URL / canonical / DOM 变化时自动重算）----
     let currentRoom = null;
+    let contextualRoom = null;
+    let contextDockSummoned = false;
+    let contextDockPageUrl = '';
     const currentRoomSubs = new Set();
+    const activeDockRoom = () => contextualRoom || currentRoom;
 
     function extractRoomFromPath(pathname) {
       const m = (pathname || '').match(ROOM_PATH);
@@ -4547,6 +4560,9 @@
     }
 
     function recalcCurrentRoom() {
+      if (contextDockSummoned && contextDockPageUrl && contextDockPageUrl !== location.href) {
+        setDockCollapsed(true);
+      }
       const next = detectCurrentRoom();
       if (next !== currentRoom) {
         currentRoom = next;
@@ -4556,34 +4572,36 @@
     const recalcCurrentRoomSoon = debounce(recalcCurrentRoom, 180);
     recalcCurrentRoom();
 
-    // hook history pushState/replaceState（chaturbate 是 SPA，URL 变化时不刷新）
-    ['pushState', 'replaceState'].forEach(method => {
-      const orig = history[method];
-      history[method] = function () {
-        const ret = orig.apply(this, arguments);
-        setTimeout(recalcCurrentRoom, 0);
-        setTimeout(recalcCurrentRoom, 250);
-        setTimeout(recalcCurrentRoom, 900);
-        return ret;
-      };
-    });
-    window.addEventListener('popstate', () => setTimeout(recalcCurrentRoom, 50));
-    window.addEventListener('hashchange', () => setTimeout(recalcCurrentRoom, 50));
-    // 监听同标签内的异步切换，解决「换人后加入状态不变」。
-    try {
-      const routeMo = new MutationObserver(recalcCurrentRoomSoon);
-      if (document.head) routeMo.observe(document.head, { childList: true, subtree: true, attributes: true, attributeFilter: ['href', 'content'] });
-      if (document.body) routeMo.observe(document.body, { childList: true, subtree: true });
-    } catch (_) {}
-    // poll 兜底（万一还有别的 navigation 路径漏了）；隐藏标签页降低频率。
-    let routePollTimer = 0;
-    function scheduleRoutePoll() {
-      clearTimeout(routePollTimer);
-      const ms = document.hidden ? INJECTOR_ROUTE_POLL_HIDDEN_MS : INJECTOR_ROUTE_POLL_VISIBLE_MS;
-      routePollTimer = setTimeout(() => { recalcCurrentRoom(); scheduleRoutePoll(); }, ms);
+    if (!contextOnly) {
+      // hook history pushState/replaceState（chaturbate 是 SPA，URL 变化时不刷新）
+      ['pushState', 'replaceState'].forEach(method => {
+        const orig = history[method];
+        history[method] = function () {
+          const ret = orig.apply(this, arguments);
+          setTimeout(recalcCurrentRoom, 0);
+          setTimeout(recalcCurrentRoom, 250);
+          setTimeout(recalcCurrentRoom, 900);
+          return ret;
+        };
+      });
+      window.addEventListener('popstate', () => setTimeout(recalcCurrentRoom, 50));
+      window.addEventListener('hashchange', () => setTimeout(recalcCurrentRoom, 50));
+      // 监听同标签内的异步切换，解决「换人后加入状态不变」。
+      try {
+        const routeMo = new MutationObserver(recalcCurrentRoomSoon);
+        if (document.head) routeMo.observe(document.head, { childList: true, subtree: true, attributes: true, attributeFilter: ['href', 'content'] });
+        if (document.body) routeMo.observe(document.body, { childList: true, subtree: true });
+      } catch (_) {}
+      // poll 兜底（万一还有别的 navigation 路径漏了）；隐藏标签页降低频率。
+      let routePollTimer = 0;
+      function scheduleRoutePoll() {
+        clearTimeout(routePollTimer);
+        const ms = document.hidden ? INJECTOR_ROUTE_POLL_HIDDEN_MS : INJECTOR_ROUTE_POLL_VISIBLE_MS;
+        routePollTimer = setTimeout(() => { recalcCurrentRoom(); scheduleRoutePoll(); }, ms);
+      }
+      scheduleRoutePoll();
+      document.addEventListener('visibilitychange', scheduleRoutePoll);
     }
-    scheduleRoutePoll();
-    document.addEventListener('visibilitychange', scheduleRoutePoll);
 
     // 跨标签页同步
     const storageSubs = new Set();
@@ -4598,23 +4616,25 @@
       fireStorageSubs();
     }
 
-    // SPA 路由兜底：CB 有些入口不会稳定走 pushState/popstate。
-    // 用点击、hash、pageshow、DOM 变化做低成本监听，保证同标签切换主播后“已加入/加入”状态实时变。
-    const routeCheckSoon = debounce(() => recalcCurrentRoom(), 80);
-    document.addEventListener('click', (e) => {
-      const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
-      if (!a) return;
-      setTimeout(routeCheckSoon, 0);
-      setTimeout(routeCheckSoon, 160);
-      setTimeout(routeCheckSoon, 650);
-    }, true);
-    window.addEventListener('hashchange', routeCheckSoon);
-    window.addEventListener('pageshow', routeCheckSoon);
-    document.addEventListener('visibilitychange', routeCheckSoon);
-    try {
-      const routeMo = new MutationObserver(routeCheckSoon);
-      routeMo.observe(document.body, { childList: true, subtree: true });
-    } catch (_) {}
+    if (!contextOnly) {
+      // SPA 路由兜底：CB 有些入口不会稳定走 pushState/popstate。
+      // 用点击、hash、pageshow、DOM 变化做低成本监听，保证同标签切换主播后“已加入/加入”状态实时变。
+      const routeCheckSoon = debounce(() => recalcCurrentRoom(), 80);
+      document.addEventListener('click', (e) => {
+        const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+        if (!a) return;
+        setTimeout(routeCheckSoon, 0);
+        setTimeout(routeCheckSoon, 160);
+        setTimeout(routeCheckSoon, 650);
+      }, true);
+      window.addEventListener('hashchange', routeCheckSoon);
+      window.addEventListener('pageshow', routeCheckSoon);
+      document.addEventListener('visibilitychange', routeCheckSoon);
+      try {
+        const routeMo = new MutationObserver(routeCheckSoon);
+        routeMo.observe(document.body, { childList: true, subtree: true });
+      } catch (_) {}
+    }
 
     const buildWorkstationUrl = () => canonicalWorkshopUrl();
     const openWorkstationNew = () => {
@@ -4758,32 +4778,36 @@
     }
 
     function queueCurrentRoomRecording() {
-      if (!currentRoom) { toast(t('dockNoRoom')); return; }
-      if (!Storage.has(currentRoom)) Storage.add(currentRoom);
-      if (!UnifiedRecorder.has(currentRoom)) UnifiedRecorder.start(currentRoom);
+      const room = activeDockRoom();
+      if (!room) { toast(t('dockNoRoom')); return; }
+      if (!Storage.has(room)) Storage.add(room);
+      if (!UnifiedRecorder.has(room)) UnifiedRecorder.start(room);
       toast(t('dockRecordQueued'));
       updateDockRoom();
     }
 
     function pauseResumeCurrentRoomRecording() {
-      if (!currentRoom) { toast(t('dockNoRoom')); return; }
-      const recording = UnifiedRecorder.get(currentRoom);
+      const room = activeDockRoom();
+      if (!room) { toast(t('dockNoRoom')); return; }
+      const recording = UnifiedRecorder.get(room);
       if (!recording) return;
-      if (recording.manualPaused || recording.status === 'manual-paused') UnifiedRecorder.resume(currentRoom);
-      else UnifiedRecorder.pause(currentRoom);
+      if (recording.manualPaused || recording.status === 'manual-paused') UnifiedRecorder.resume(room);
+      else UnifiedRecorder.pause(room);
       updateDockRoom();
     }
 
     function stopCurrentRoomRecording() {
-      if (!currentRoom || !UnifiedRecorder.get(currentRoom)) return;
-      UnifiedRecorder.stop(currentRoom);
+      const room = activeDockRoom();
+      if (!room || !UnifiedRecorder.get(room)) return;
+      UnifiedRecorder.stop(room);
       toast(t('recorderFinalizing'));
       updateDockRoom();
     }
 
     function openCurrentRoomRecu() {
-      if (!currentRoom) { toast(t('dockNoRoom')); return; }
-      openNoopener(`https://recu.me/performer/${encodeURIComponent(currentRoom)}`);
+      const room = activeDockRoom();
+      if (!room) { toast(t('dockNoRoom')); return; }
+      openNoopener(`https://recu.me/performer/${encodeURIComponent(room)}`);
     }
 
     // ---- RoomGrid 工具坞 ----
@@ -4813,7 +4837,8 @@
       .roomgrid-dock-actions { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
       .roomgrid-dock-save-row { display:grid; grid-template-columns:1fr 1fr; gap:7px; grid-column:1/-1; }
       .roomgrid-dock-record-row { display:grid; grid-template-columns:1fr 1fr; gap:7px; grid-column:1/-1; }
-      .roomgrid-dock-record-row[hidden],.roomgrid-dock-record-start[hidden] { display:none !important; }
+      .roomgrid-dock-record-row[hidden],.roomgrid-dock-record-start[hidden],
+      .roomgrid-dock-save-row[hidden],.roomgrid-dock-action[hidden] { display:none !important; }
       .roomgrid-dock-action { min-height:36px; border:1px solid #2d3e50; border-radius:4px; background:#17202a; color:#d7d7d7; cursor:pointer; font-size:12px; font-weight:500; text-align:left; padding:7px 9px; }
       .roomgrid-dock-action:hover { background:#253648; border-color:#3b5066; color:#fff; }
       .roomgrid-dock-action.primary { background:#0c6a93; border-color:#0c6a93; color:#fff; }
@@ -4927,6 +4952,9 @@
         z-index:2147483200; display:block !important; width:302px !important;
         max-width:calc(100vw - 16px); transform:none !important; opacity:1 !important;
         font-family:UbuntuRegular,Helvetica,Arial,sans-serif; user-select:none;
+      }
+      .roomgrid-dock.roomgrid-native-desktop.roomgrid-context-desktop {
+        position:fixed !important; inset:78px 16px auto auto !important;
       }
       .roomgrid-dock.roomgrid-native-desktop.is-collapsed { display:none !important; }
       .roomgrid-native-desktop .roomgrid-dock-card {
@@ -5054,12 +5082,17 @@
     const addBtn = $('button', { class: 'roomgrid-dock-action success', onclick: () => toggleCurrentRoomSaved() }, t('dockAdd'));
     const favoriteBtn = $('button', { class: 'roomgrid-dock-action', onclick: () => toggleCurrentRoomFavorite() }, t('dockFavoriteAdd'));
     const recuBtn = $('button', { class: 'roomgrid-dock-action roomgrid-recu-action', onclick: openCurrentRoomRecu }, t('dockRecu'));
+    const recorderHubBtn = $('button', { class: 'roomgrid-dock-action', hidden: true, onclick: () => UnifiedRecorder.openHub(true) }, t('recorderOpenHub'));
     const recordStartBtn = $('button', { class: 'roomgrid-dock-action warn roomgrid-dock-record-start', onclick: queueCurrentRoomRecording }, t('dockRecord'));
     const recordPauseBtn = $('button', { class: 'roomgrid-dock-action warn', onclick: pauseResumeCurrentRoomRecording }, t('dockPauseRecording'));
     const recordStopBtn = $('button', { class: 'roomgrid-dock-action', onclick: stopCurrentRoomRecording }, t('dockStopRecording'));
     const recordControlRow = $('div', { class: 'roomgrid-dock-record-row', hidden: true }, [recordPauseBtn, recordStopBtn]);
     const sendTipMenuBtn = $('button', { class: 'roomgrid-dock-action roomgrid-send-tip-action', type: 'button', onclick: openNativeSendTip }, 'Send Tip');
     const privateMenuBtn = $('button', { class: 'roomgrid-dock-action roomgrid-private-action', type: 'button', onclick: openNativePrivateTab }, 'Private show options');
+    const screenshotBtn = $('button', { class: 'roomgrid-dock-action', onclick: captureCurrentPageVideo }, t('dockScreenshot'));
+    const pipBtn = $('button', { class: 'roomgrid-dock-action', onclick: toggleCurrentPagePiP }, t('dockPip'));
+    const muteBtn = $('button', { class: 'roomgrid-dock-action', onclick: toggleCurrentPageMute }, t('dockMute'));
+    const saveRow = $('div', { class: 'roomgrid-dock-save-row' }, [addBtn, favoriteBtn]);
     const head = $('button', { class: 'roomgrid-dock-head', title: 'Alt+M / Alt+A / Shift+A', onclick: () => { if (!dragged) toggleDock(); } }, [
       $('span', { class: 'roomgrid-dock-mark' }, '▦'),
       $('span', {}, [
@@ -5085,13 +5118,14 @@
       roomLine,
       $('div', { class: 'roomgrid-dock-actions' }, [
         $('button', { class: 'roomgrid-dock-action primary', onclick: openWorkstationNew }, t('dockOpen')),
+        recorderHubBtn,
         recuBtn,
-        $('div', { class: 'roomgrid-dock-save-row' }, [addBtn, favoriteBtn]),
+        saveRow,
         recordStartBtn,
         recordControlRow,
-        $('button', { class: 'roomgrid-dock-action', onclick: captureCurrentPageVideo }, t('dockScreenshot')),
-        $('button', { class: 'roomgrid-dock-action', onclick: toggleCurrentPagePiP }, t('dockPip')),
-        $('button', { class: 'roomgrid-dock-action', onclick: toggleCurrentPageMute }, t('dockMute')),
+        screenshotBtn,
+        pipBtn,
+        muteBtn,
         sendTipMenuBtn,
         privateMenuBtn,
       ]),
@@ -5125,35 +5159,38 @@
       multicamTab.setAttribute('aria-selected', showArna ? 'false' : 'true');
       arnaTab.setAttribute('aria-selected', showArna ? 'true' : 'false');
       root.classList.toggle('arna-active', showArna);
-      if (showArna) camArna.activate(currentRoom);
+      if (showArna) camArna.activate(activeDockRoom());
       if (!collapsed) scheduleDockAutoCollapse();
     }
     multicamTab.addEventListener('click', () => setDockTab('multicam'));
     arnaTab.addEventListener('click', () => setDockTab('arna'));
 
     function toggleCurrentRoomSaved() {
-      if (!currentRoom) return;
-      if (Storage.has(currentRoom)) {
-        if (Storage.remove(currentRoom)) toast(t('removedNamed', currentRoom));
+      const room = activeDockRoom();
+      if (!room) return;
+      if (Storage.has(room)) {
+        if (Storage.remove(room)) toast(t('removedNamed', room));
       } else {
-        const r = Storage.add(currentRoom);
-        toast(r === 'added' ? t('addedNamed', currentRoom) : r === 'exists' ? t('exists') : t('addFailed'));
+        const r = Storage.add(room);
+        toast(r === 'added' ? t('addedNamed', room) : r === 'exists' ? t('exists') : t('addFailed'));
       }
       refreshInjectorState();
       updateDockRoom();
     }
 
     function currentRoomIsFavorite() {
-      if (!currentRoom) return false;
-      const room = Storage.load().rooms.find(item => item.id === currentRoom);
+      const roomId = activeDockRoom();
+      if (!roomId) return false;
+      const room = Storage.load().rooms.find(item => item.id === roomId);
       return !!room && roomInGroup(room, FAVORITE_GROUP_ID);
     }
 
     function toggleCurrentRoomFavorite() {
-      if (!currentRoom) return;
-      if (!Storage.has(currentRoom)) Storage.add(currentRoom);
+      const roomId = activeDockRoom();
+      if (!roomId) return;
+      if (!Storage.has(roomId)) Storage.add(roomId);
       const state = Storage.load();
-      const room = state.rooms.find(item => item.id === currentRoom);
+      const room = state.rooms.find(item => item.id === roomId);
       if (!room) return;
       const groups = new Set(getRoomGroups(room));
       const removing = groups.has(FAVORITE_GROUP_ID);
@@ -5171,27 +5208,38 @@
     }
 
     function updateDockRoom() {
-      roomLine.textContent = currentRoom ? t('dockCurrentRoom', currentRoom) : t('dockNoRoom');
-      addBtn.textContent = currentRoom && Storage.has(currentRoom) ? t('dockRemove') : t('dockAdd');
-      addBtn.classList.toggle('success', !(currentRoom && Storage.has(currentRoom)));
-      addBtn.classList.toggle('warn', !!(currentRoom && Storage.has(currentRoom)));
-      addBtn.disabled = !currentRoom;
-      addBtn.style.opacity = currentRoom ? '1' : '.55';
+      const room = activeDockRoom();
+      const pageMediaAvailable = !!room && room === currentRoom;
+      roomLine.textContent = room ? t('dockCurrentRoom', room) : t('dockNoRoom');
+      addBtn.textContent = room && Storage.has(room) ? t('dockRemove') : t('dockAdd');
+      addBtn.classList.toggle('success', !(room && Storage.has(room)));
+      addBtn.classList.toggle('warn', !!(room && Storage.has(room)));
+      addBtn.disabled = !room;
+      addBtn.style.opacity = room ? '1' : '.55';
       const favorite = currentRoomIsFavorite();
       favoriteBtn.textContent = favorite ? t('dockFavoriteRemove') : t('dockFavoriteAdd');
       favoriteBtn.classList.toggle('warn', favorite);
-      favoriteBtn.disabled = !currentRoom;
-      favoriteBtn.style.opacity = currentRoom ? '1' : '.55';
-      recuBtn.disabled = !currentRoom;
-      recuBtn.style.opacity = currentRoom ? '1' : '.55';
-      const recording = currentRoom ? UnifiedRecorder.get(currentRoom) : null;
-      const recordingActive = !!recording && UnifiedRecorder.has(currentRoom);
+      favoriteBtn.disabled = !room;
+      favoriteBtn.style.opacity = room ? '1' : '.55';
+      recuBtn.disabled = !room;
+      recuBtn.style.opacity = room ? '1' : '.55';
+      saveRow.hidden = !room;
+      recuBtn.hidden = !room;
+      recorderHubBtn.hidden = !!room;
+      screenshotBtn.hidden = !pageMediaAvailable;
+      pipBtn.hidden = !pageMediaAvailable;
+      muteBtn.hidden = !pageMediaAvailable;
+      sendTipMenuBtn.hidden = !pageMediaAvailable;
+      privateMenuBtn.hidden = !pageMediaAvailable;
+      const recording = room ? UnifiedRecorder.get(room) : null;
+      const recordingActive = !!recording && UnifiedRecorder.has(room);
       const finalizing = !!recording && ['finalizing', 'saved'].includes(recording.status);
       const manuallyPaused = !!recording && (recording.manualPaused || recording.status === 'manual-paused');
       recordStartBtn.hidden = recordingActive;
-      recordStartBtn.disabled = !currentRoom;
-      recordStartBtn.style.opacity = currentRoom ? '1' : '.55';
-      recordControlRow.hidden = !recordingActive;
+      recordStartBtn.disabled = !room;
+      recordStartBtn.style.opacity = room ? '1' : '.55';
+      recordStartBtn.hidden = !room || recordingActive;
+      recordControlRow.hidden = !room || !recordingActive;
       recordPauseBtn.textContent = manuallyPaused ? t('dockResumeRecording') : t('dockPauseRecording');
       recordPauseBtn.disabled = finalizing;
       recordStopBtn.disabled = finalizing;
@@ -5208,7 +5256,7 @@
       document.dispatchEvent(new CustomEvent('ziggy-suite:state'));
     }
     currentRoomSubs.add(updateDockRoom);
-    currentRoomSubs.add((room) => { if (activeDockTab === 'arna') camArna.activate(room); });
+    currentRoomSubs.add(() => { if (activeDockTab === 'arna') camArna.activate(activeDockRoom()); });
     storageSubs.add(updateDockRoom);
     UnifiedRecorder.subscribe(updateDockRoom);
 
@@ -5249,6 +5297,12 @@
       localStorage.setItem('ryujo_fab_collapsed', collapsed ? '1' : '0');
       if (collapsed) {
         clearDockAutoCollapseTimer();
+        if (contextDockSummoned) {
+          contextDockSummoned = false;
+          contextualRoom = null;
+          contextDockPageUrl = '';
+          updateDockRoom();
+        }
       } else {
         setDockTab(tabOnOpen === 'arna' ? 'arna' : 'multicam');
       }
@@ -5391,8 +5445,19 @@
       nativeDesktopRoomGridSource = null;
       nativeDesktopRoomGridReplacesSource = false;
       nativeSendTipSource = null;
-      root.classList.remove('roomgrid-native-desktop');
+      root.classList.remove('roomgrid-native-desktop', 'roomgrid-context-desktop');
       if (!nativeMobilePage) root.remove();
+    }
+
+    function mountContextDesktopRoomGrid() {
+      if (nativeMobilePage || !contextDockSummoned) return false;
+      if (root.isConnected && root.classList.contains('roomgrid-context-desktop')) return true;
+      removeDesktopRoomGridMount();
+      root.classList.add('roomgrid-native-desktop', 'roomgrid-context-desktop');
+      root.setAttribute('role', 'menu');
+      root.setAttribute('aria-label', 'Rooms');
+      if (!root.isConnected) document.body.appendChild(root);
+      return true;
     }
 
     function mountDesktopRoomGrid() {
@@ -6078,6 +6143,14 @@
 
     function syncNativeRoomGridPlacement() {
       if (!currentRoom) {
+        if (contextDockSummoned && !nativeMobilePage) {
+          clearTimeout(desktopVideoFitTimer);
+          clearDesktopInitialRoomPositionTimer();
+          restoreMobilePrivateTab();
+          mountContextDesktopRoomGrid();
+          syncDock();
+          return;
+        }
         collapsed = true;
         clearTimeout(desktopVideoFitTimer);
         clearDesktopInitialRoomPositionTimer();
@@ -6102,7 +6175,18 @@
       }
     }
 
+    function openRoomsDock(detail = {}) {
+      const requestedRoom = normalizeUsername(detail.modelId || '');
+      contextualRoom = isLikelyUsername(requestedRoom) ? requestedRoom : null;
+      contextDockSummoned = detail.summonedBy === 'browser-context-menu';
+      contextDockPageUrl = contextDockSummoned ? location.href : '';
+      updateDockRoom();
+      setDockCollapsed(false, detail.tab === 'arna' ? 'arna' : 'multicam');
+      updateDockRoom();
+    }
+
     document.addEventListener('ziggy-suite:open-workshop', openWorkstationNew);
+    document.addEventListener('ziggy-suite:open-rooms', event => openRoomsDock(event.detail));
     document.addEventListener('ziggy-suite:toggle-roomgrid', event => setDockCollapsed(false, event.detail?.tab === 'arna' ? 'arna' : 'multicam'));
     document.addEventListener('ziggy-suite:toggle-current-room', () => {
       if (currentRoom) toggleCurrentRoomSaved();
@@ -6110,6 +6194,7 @@
     });
     document.addEventListener('ziggy-mobile-shell:ready', publishSuiteState);
     window.addEventListener('pagehide', () => {
+      if (contextDockSummoned) setDockCollapsed(true);
       delete document.documentElement.dataset.ziggySuiteAvailable;
       delete document.documentElement.dataset.ziggySuiteRoom;
       delete document.documentElement.dataset.ziggySuiteSaved;
@@ -6118,7 +6203,7 @@
 
     const dockCard = $('div', { class: 'roomgrid-dock-card' }, [head, body]);
     root.appendChild(dockCard);
-    if (!nativeMobilePage) {
+    if (!nativeMobilePage && !contextOnly) {
       ensureWorkshopHeaderButton();
       const ensureWorkshopHeaderButtonSoon = debounce(ensureWorkshopHeaderButton, 120);
       try {
@@ -6143,10 +6228,12 @@
         document.addEventListener(eventName, desktopInitialRoomInputCancel, { capture: true, passive: true });
       }
     }
-    try {
-      const nativeRoomGridMo = new MutationObserver(syncNativeRoomGridPlacementSoon);
-      nativeRoomGridMo.observe(document.body, { childList: true, subtree: true });
-    } catch (_) {}
+    if (!contextOnly) {
+      try {
+        const nativeRoomGridMo = new MutationObserver(syncNativeRoomGridPlacementSoon);
+        nativeRoomGridMo.observe(document.body, { childList: true, subtree: true });
+      } catch (_) {}
+    }
     addEventListener('resize', () => {
       if (!nativeMobilePage && !collapsed) positionDesktopRoomGridMenu();
       else syncNativeRoomGridPlacementSoon();
@@ -6186,6 +6273,8 @@
       dockPointerInside = false;
       if (!collapsed) scheduleDockAutoCollapse();
     });
+
+    if (contextOnly) return;
 
     if (!nativeMobilePage) {
       head.addEventListener('mousedown', (e) => {
@@ -8065,6 +8154,7 @@
         body.rg-phone-mode .rg-following-pager.active { position:fixed; z-index:2147483200; right:max(8px,env(safe-area-inset-right)); bottom:max(8px,env(safe-area-inset-bottom)); display:flex!important; min-height:38px; padding:4px; border:1px solid #2d3e50; border-radius:4px; background:#202c39; box-shadow:0 4px 14px rgba(0,0,0,.36); }
         body.rg-phone-mode .rg-following-pager .rg-following-page-btn { display:inline-flex!important; width:36px!important; min-width:36px!important; height:34px!important; min-height:34px!important; }
         body.rg-phone-mode .grid.view-phone { grid-template-columns:minmax(0,1fr)!important; }
+        body.rg-phone-mode.rg-online-following .grid.view-phone { grid-template-columns:repeat(2,minmax(0,1fr))!important; }
         body.rg-phone-mode.rg-card-menu-open .grid.view-phone { overflow:hidden!important; overscroll-behavior:none!important; touch-action:none!important; }
         .card-ops-menu-backdrop { position:fixed; inset:0; z-index:2147483650; display:flex; align-items:flex-end; box-sizing:border-box; padding-top:calc(96px + env(safe-area-inset-top)); background:rgba(0,0,0,.56); overscroll-behavior:none; touch-action:none; }
         .card-ops-menu-pop { max-height:calc(100dvh - 16px); overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; }
@@ -8766,8 +8856,13 @@
       visibleCountEl,
     );
 
+    function onlineFollowingPageSize() {
+      return (phoneEnvironment || store.state.settings.viewMode === 'phone')
+        ? ONLINE_FOLLOWING_MOBILE_PAGE_SIZE
+        : ONLINE_FOLLOWING_PAGE_SIZE;
+    }
     function layoutSize() {
-      if (store.state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID) return ONLINE_FOLLOWING_PAGE_SIZE;
+      if (store.state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID) return onlineFollowingPageSize();
       const key = store.state.settings.viewMode === 'phone' ? 'phoneLayoutSize' : 'layoutSize';
       const n = Number(store.state.settings[key] || (key === 'phoneLayoutSize' ? 2 : 4));
       return [2, 4, 6, 9].includes(n) ? n : 4;
@@ -8782,10 +8877,11 @@
     }
     function fullVisibleRooms() { return visibleRooms(); }
     function onlineFollowingPageInfo(list = fullVisibleRooms()) {
-      const totalPages = Math.max(1, Math.ceil(list.length / ONLINE_FOLLOWING_PAGE_SIZE));
+      const pageSize = onlineFollowingPageSize();
+      const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
       const requested = clampInt(store.state.settings.onlineFollowingPageIndex, 0, 100000, 0);
       const page = Math.min(requested, totalPages - 1);
-      return { page, totalPages, total: list.length };
+      return { page, pageSize, totalPages, total: list.length };
     }
     function currentOnlineFollowingPage() {
       return onlineFollowingPageInfo().page;
@@ -8793,9 +8889,9 @@
     function renderVisibleRooms() {
       const list = fullVisibleRooms();
       if (store.state.settings.activeGroup !== ONLINE_FOLLOWING_GROUP_ID) return list;
-      const { page } = onlineFollowingPageInfo(list);
-      const start = page * ONLINE_FOLLOWING_PAGE_SIZE;
-      return list.slice(start, start + ONLINE_FOLLOWING_PAGE_SIZE);
+      const { page, pageSize } = onlineFollowingPageInfo(list);
+      const start = page * pageSize;
+      return list.slice(start, start + pageSize);
     }
     function setOnlineFollowingPage(rawPage) {
       if (store.state.settings.activeGroup !== ONLINE_FOLLOWING_GROUP_ID) return;
@@ -8814,12 +8910,12 @@
       followingPager.classList.toggle('active', following);
       document.body.classList.toggle('rg-online-following', following);
       if (following) {
-        const { page, totalPages } = onlineFollowingPageInfo();
+        const { page, pageSize, totalPages } = onlineFollowingPageInfo();
         followingPrevBtn.disabled = page <= 0;
         followingNextBtn.disabled = page >= totalPages - 1;
         followingPageLabel.textContent = `${page + 1} / ${totalPages}`;
         visibleCountEl.style.marginLeft = '0';
-        visibleCountEl.textContent = LANG === 'zh' ? `每页 9 位 · 共 ${total} 位` : `9 per page · ${total} total`;
+        visibleCountEl.textContent = LANG === 'zh' ? `每页 ${pageSize} 位 · 共 ${total} 位` : `${pageSize} per page · ${total} total`;
       } else {
         layoutSel.value = String(size);
         layoutSel.title = LANG === 'zh' ? `单屏显示 ${size} 个，共 ${total} 个；向下滚动查看更多` : `${size} visible at once, ${total} total; scroll down for more`;

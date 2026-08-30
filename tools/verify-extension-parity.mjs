@@ -56,7 +56,7 @@ for (const platform of platforms) {
   if (contentScript.run_at !== 'document_end') failures.push(`${platform}: injection timing is not document_end`);
   if (contentScript.all_frames !== true) failures.push(`${platform}: all_frames must preserve userscript frame behavior`);
   if (JSON.stringify([...(manifest.host_permissions || [])].sort()) !== JSON.stringify(expectedHosts)) failures.push(`${platform}: host permissions differ from @connect`);
-  if (JSON.stringify(manifest.permissions) !== JSON.stringify(['storage'])) failures.push(`${platform}: unexpected extension API permissions`);
+  if (JSON.stringify(manifest.permissions) !== JSON.stringify(['storage', 'contextMenus'])) failures.push(`${platform}: unexpected extension API permissions`);
   if (platform === 'chrome' && manifest.background?.service_worker !== 'background.js') failures.push('chrome: service worker is missing');
   if (platform === 'firefox' && JSON.stringify(manifest.background?.scripts) !== JSON.stringify(['background.js'])) failures.push('firefox: background script is missing');
   if (platform === 'firefox' && !manifest.browser_specific_settings?.gecko?.id) failures.push('firefox: extension ID is missing');

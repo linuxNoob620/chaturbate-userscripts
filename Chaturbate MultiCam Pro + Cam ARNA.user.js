@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.18
+// @version           16.5.19
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.11');
+  instanceMarker.setAttribute('data-suite-version', '16.5.19');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1293,7 +1293,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.18',
+    version: '16.5.19',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -7136,6 +7136,18 @@
     nativePageHost.style.setProperty('display', 'none', 'important');
     while (document.body.firstChild) nativePageHost.appendChild(document.body.firstChild);
     document.body.appendChild(nativePageHost);
+    // The native home-page room grid is no longer visible after Workshop takes
+    // over, but Chaturbate otherwise keeps more than 4,000 nodes and ~100 room
+    // thumbnails alive behind it. Preserve the native mount shell for delayed
+    // startup code, then release only the hidden room-card payload.
+    const quiesceNativeRoomGrid = () => {
+      nativePageHost.querySelectorAll('.RoomCardGrid').forEach(roomGrid => {
+        stopAllPageMedia(roomGrid);
+        roomGrid.replaceChildren();
+      });
+    };
+    setTimeout(quiesceNativeRoomGrid, 500);
+    setTimeout(quiesceNativeRoomGrid, 3000);
     const store = createStore();
     const phoneEnvironment = isPhoneLikeDevice();
     document.body.classList.toggle('rg-phone-device', phoneEnvironment);
@@ -7871,7 +7883,7 @@
           --shadow-md:none;
           --shadow-lg:0 8px 24px rgba(0,0,0,.32);
         }
-        html,body { background:#17202a !important; color:#f1f1f1 !important; font-family:UbuntuRegular,Arial,sans-serif !important; }
+        html,body { min-width:0 !important; max-width:100vw !important; background:#17202a !important; color:#f1f1f1 !important; font-family:UbuntuRegular,Arial,sans-serif !important; }
         .app-shell { background:#17202a !important; gap:8px !important; padding:8px !important; }
         main { background:#17202a !important; border:1px solid #2d3e50 !important; border-radius:4px !important; box-shadow:none !important; }
         header { background:#202c39 !important; border-bottom:1px solid #2d3e50 !important; }
@@ -7998,7 +8010,7 @@
         body.rg-phone-mode .rg-mobile-only { display:flex!important; }
         body.rg-phone-mode input.rg-mobile-only { display:block!important; flex:1 1 82px; width:auto!important; min-width:72px!important; max-width:108px!important; }
         body.rg-phone-mode .rg-native-nav .roomgrid-compact-select { flex:0 0 86px!important; width:86px!important; min-width:86px!important; max-width:86px!important; }
-        body.rg-phone-mode .rg-native-nav .ctrl-btn:not(.sidebar-toggle-btn):not(.rg-mobile-only) { display:none!important; }
+        body.rg-phone-mode .rg-native-nav .ctrl-btn:not(.sidebar-toggle-btn):not(.rg-mobile-only):not(.rg-following-page-btn) { display:none!important; }
         body.rg-phone-mode .rg-visible-count { display:none!important; }
         body.rg-phone-mode .rg-following-pager.active { position:fixed; z-index:2147483200; right:max(8px,env(safe-area-inset-right)); bottom:max(8px,env(safe-area-inset-bottom)); display:flex!important; min-height:38px; padding:4px; border:1px solid #2d3e50; border-radius:4px; background:#202c39; box-shadow:0 4px 14px rgba(0,0,0,.36); }
         body.rg-phone-mode .rg-following-pager .rg-following-page-btn { display:inline-flex!important; width:36px!important; min-width:36px!important; height:34px!important; min-height:34px!important; }
@@ -9070,12 +9082,17 @@
 
     // ---- 卡片管理 ----
     const cardMap = new Map();   // id -> {root, video, statusEl, badgeEl}
+    const parkedCardOrder = [];
+    const MAX_PARKED_CARDS = 27;
     const mediaViewportIds = new Set();
     const mediaAttachPendingIds = new Set();
     const mediaRequestQueue = [];
     const mediaRequestQueuedIds = new Set();
     let mediaRequestPumpTimer = 0;
-    const MEDIA_REQUEST_STAGGER_MS = 750;
+    let mediaRequestScopeSignature = '';
+    // Keep request bursts controlled while allowing a nine-card page to begin
+    // all preview requests in roughly 2.4 seconds instead of six seconds.
+    const MEDIA_REQUEST_STAGGER_MS = 300;
 
     const backgroundServiceQueue = [];
     const backgroundServiceQueuedIds = new Set();
@@ -9137,6 +9154,24 @@
         break;
       }
       if (mediaRequestQueue.length) mediaRequestPumpTimer = setTimeout(pumpRoomMediaQueue, MEDIA_REQUEST_STAGGER_MS);
+    }
+
+    function pruneRoomMediaQueue(allowedIds) {
+      const signature = [...allowedIds].join('\u001f');
+      if (signature === mediaRequestScopeSignature) return;
+      mediaRequestScopeSignature = signature;
+      const keep = roomId => allowedIds.has(roomId) || isRoomMediaProtected(roomId);
+      for (let index = mediaRequestQueue.length - 1; index >= 0; index -= 1) {
+        const roomId = mediaRequestQueue[index];
+        if (keep(roomId)) continue;
+        mediaRequestQueue.splice(index, 1);
+        mediaRequestQueuedIds.delete(roomId);
+      }
+      if (mediaRequestPumpTimer) {
+        clearTimeout(mediaRequestPumpTimer);
+        mediaRequestPumpTimer = 0;
+      }
+      if (mediaRequestQueue.length) mediaRequestPumpTimer = setTimeout(pumpRoomMediaQueue, 0);
     }
 
     function requestRoomMediaIfNeeded(roomId) {
@@ -9219,19 +9254,82 @@
       mediaViewportIds.delete(roomId);
       mediaAttachPendingIds.delete(roomId);
       mediaRequestQueuedIds.delete(roomId);
+      const queueIndex = mediaRequestQueue.indexOf(roomId);
+      if (queueIndex >= 0) mediaRequestQueue.splice(queueIndex, 1);
+    }
+
+    function removeParkedCardId(roomId) {
+      const index = parkedCardOrder.indexOf(roomId);
+      if (index >= 0) parkedCardOrder.splice(index, 1);
+    }
+
+    function disposeCardEntry(roomId, { stopSession = false } = {}) {
+      const entry = cardMap.get(roomId);
+      if (!entry) return;
+      forgetCardMedia(roomId);
+      pauseRecordingForSourceLoss(roomId, { silent: true });
+      const room = findRoomAny(roomId);
+      if (room?.sourceUrl) {
+        try { entry.tempHls?.destroy?.(); } catch (_) {}
+      } else if (stopSession) service.stop(roomId);
+      else service.detachVideo(roomId);
+      try { entry.video?.pause?.(); } catch (_) {}
+      try { entry.video?.remove?.(); } catch (_) {}
+      entry.video = null;
+      entry.tempHls = null;
+      try { entry.resizeObserver?.disconnect(); } catch (_) {}
+      entry.resizeObserver = null;
+      try { entry.root.remove(); } catch (_) {}
+      removeParkedCardId(roomId);
+      cardMap.delete(roomId);
+    }
+
+    function trimParkedCards() {
+      while (parkedCardOrder.length > MAX_PARKED_CARDS) {
+        const roomId = parkedCardOrder.shift();
+        const entry = cardMap.get(roomId);
+        if (!entry || entry.root.isConnected) continue;
+        disposeCardEntry(roomId);
+      }
+    }
+
+    function parkCardEntry(roomId) {
+      const entry = cardMap.get(roomId);
+      if (!entry || !entry.root.isConnected) return;
+      forgetCardMedia(roomId);
+      pauseRecordingForSourceLoss(roomId, { silent: true });
+      const room = findRoomAny(roomId);
+      if (room?.sourceUrl) {
+        try { entry.tempHls?.destroy?.(); } catch (_) {}
+        entry.tempHls = null;
+      } else service.detachVideo(roomId);
+      try { entry.video?.pause?.(); } catch (_) {}
+      try { entry.video?.remove?.(); } catch (_) {}
+      entry.video = null;
+      entry.root.remove();
+      removeParkedCardId(roomId);
+      parkedCardOrder.push(roomId);
+      trimParkedCards();
+    }
+
+    function activateCardEntry(roomId) {
+      removeParkedCardId(roomId);
+      observeCardMedia(roomId);
     }
 
     // v15.6-minimal: 临时 URL 窗口。只存在于当前页面内存，刷新后消失；不写入 localStorage。
     const tempRooms = [];
     const onlineFollowingRoomIndex = new Map();
+    let onlineFollowingRoomList = [];
+    let savedRoomIndex = new Map(store.state.rooms.map(room => [room.id, room]));
     function regularTemporaryRooms() { return tempRooms.filter(room => !room.onlineFollowing); }
-    function onlineFollowingRooms() { return [...onlineFollowingRoomIndex.values()]; }
+    function onlineFollowingRooms() { return onlineFollowingRoomList; }
     function findOnlineFollowingRoom(id) { return onlineFollowingRoomIndex.get(String(id || '')) || null; }
     function regularRoomsForView() { return [...store.state.rooms, ...regularTemporaryRooms()]; }
     function allRoomsForView() { return [...store.state.rooms, ...tempRooms]; }
     function findRoomAny(id) {
       id = String(id || '');
-      return store.state.rooms.find(r => r.id === id) || findOnlineFollowingRoom(id) || tempRooms.find(r => r.id === id) || null;
+      return savedRoomIndex.get(id) || findOnlineFollowingRoom(id) || tempRooms.find(r => r.id === id) || null;
     }
     let onlineFollowingSyncBusy = false;
     let onlineFollowingLastSync = 0;
@@ -9241,9 +9339,10 @@
     const ONLINE_FOLLOWING_CACHE_KEY = 'ziggy_online_following_cache_v1';
     const ONLINE_FOLLOWING_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
     let onlineFollowingRateLimitUntil = 0;
-    let onlineFollowingRetryDelayMs = 30000;
+    let onlineFollowingRetryDelayMs = 2 * 60 * 1000;
     let onlineFollowingRetryTimer = 0;
     let onlineFollowingStatus = { kind: 'idle', message: '' };
+    let onlineFollowingCacheSavedAt = 0;
 
     function setOnlineFollowingStatus(kind, message = '') {
       onlineFollowingStatus = { kind, message };
@@ -9290,7 +9389,7 @@
 
     function scheduleOnlineFollowingRetry(waitMs) {
       clearTimeout(onlineFollowingRetryTimer);
-      const wait = Math.max(1000, Number(waitMs) || 30000);
+      const wait = Math.max(1000, Number(waitMs) || 2 * 60 * 1000);
       onlineFollowingRetryTimer = setTimeout(() => {
         onlineFollowingRetryTimer = 0;
         syncOnlineFollowing(true);
@@ -9301,10 +9400,10 @@
       const throttled = Number(error?.httpStatus || 0) === 429;
       const requestedWait = Math.max(0, Number(error?.retryAfterMs || 0));
       const wait = throttled
-        ? Math.max(requestedWait, onlineFollowingRetryDelayMs)
-        : Math.max(30000, Math.min(2 * 60 * 1000, onlineFollowingRetryDelayMs));
+        ? Math.max(requestedWait, 5 * 60 * 1000, onlineFollowingRetryDelayMs)
+        : Math.max(2 * 60 * 1000, Math.min(10 * 60 * 1000, onlineFollowingRetryDelayMs));
       onlineFollowingRateLimitUntil = Math.max(onlineFollowingRateLimitUntil, Date.now() + wait);
-      onlineFollowingRetryDelayMs = Math.min(5 * 60 * 1000, Math.max(30000, Math.round(wait * 1.8)));
+      onlineFollowingRetryDelayMs = Math.min(30 * 60 * 1000, Math.max(2 * 60 * 1000, Math.round(wait * 1.8)));
       const seconds = Math.max(1, Math.ceil(wait / 1000));
       setOnlineFollowingStatus('retrying', cachedAvailable
         ? `Showing the last successful list · retrying in ${seconds}s`
@@ -9436,7 +9535,7 @@
               lastSignature = signature;
               stablePasses = 0;
             }
-            if (stablePasses >= 4) finish(rooms);
+            if (stablePasses >= 2) finish(rooms);
           } catch (_) {}
         };
         frame.addEventListener('load', inspect);
@@ -9445,8 +9544,8 @@
         // resulting request. Only the site's own `page` parameter belongs here.
         frame.src = new URL(pageUrl, location.origin).href;
         (document.body || document.documentElement).appendChild(frame);
-        pollTimer = setInterval(inspect, 350);
-        timeoutTimer = setTimeout(() => latestRooms.length ? finish(latestRooms) : fail(), 15000);
+        pollTimer = setInterval(inspect, 400);
+        timeoutTimer = setTimeout(() => latestRooms.length ? finish(latestRooms) : fail(), 10000);
       });
     }
 
@@ -9574,6 +9673,7 @@
         tempRooms.push(...nextFollowing);
         onlineFollowingRoomIndex.clear();
         nextFollowing.forEach(room => onlineFollowingRoomIndex.set(room.id, room));
+        onlineFollowingRoomList = nextFollowing;
       }
       const nextIds = new Set(preserveMissing ? nextFollowing.map(item => item.id) : ids);
       oldIds.forEach(id => {
@@ -9604,6 +9704,7 @@
     function hydrateOnlineFollowingCache() {
       const cached = readOnlineFollowingCache();
       if (!cached) return false;
+      onlineFollowingCacheSavedAt = cached.savedAt;
       const rooms = cached.rooms.filter(item => !onlineFollowingIsSuppressed(item.id));
       applyOnlineFollowingRooms(rooms);
       setOnlineFollowingStatus('cached', 'Showing the last successful list · checking for updates');
@@ -9612,7 +9713,7 @@
 
     async function syncOnlineFollowing(force = false) {
       if (onlineFollowingSyncBusy) return;
-      if (!force && Date.now() - onlineFollowingLastSync < 45000) return;
+      if (!force && Date.now() - onlineFollowingLastSync < 4.5 * 60 * 1000) return;
       if (Date.now() < onlineFollowingRateLimitUntil) {
         const wait = onlineFollowingRateLimitUntil - Date.now();
         const seconds = Math.max(1, Math.ceil(wait / 1000));
@@ -9632,7 +9733,8 @@
         applyOnlineFollowingRooms(followed, { preserveMissing: !result.complete });
         if (result.complete) {
           writeOnlineFollowingCache(followed);
-          onlineFollowingRetryDelayMs = 30000;
+          onlineFollowingCacheSavedAt = Date.now();
+          onlineFollowingRetryDelayMs = 2 * 60 * 1000;
           onlineFollowingRateLimitUntil = 0;
           clearTimeout(onlineFollowingRetryTimer);
           onlineFollowingRetryTimer = 0;
@@ -11414,9 +11516,9 @@
       const s = store.state;
       const ag = s.settings.activeGroup || DEFAULT_GROUP_ID;
       const sourceRooms = ag === ONLINE_FOLLOWING_GROUP_ID ? onlineFollowingRooms() : regularRoomsForView();
-      let list = (ag === LIBRARY_GROUP_ID || ag === ONLINE_FOLLOWING_GROUP_ID)
-        ? [...sourceRooms]
-        : sourceRooms.filter(r => roomInGroup(r, ag));
+      let list = ag === ONLINE_FOLLOWING_GROUP_ID
+        ? sourceRooms
+        : (ag === LIBRARY_GROUP_ID ? [...sourceRooms] : sourceRooms.filter(r => roomInGroup(r, ag)));
       const q = normalizeUsername(s.settings.searchQuery || '');
       if (q) list = list.filter(r => normalizeUsername(r.id).includes(q));
       const f = s.settings.filter;
@@ -11425,7 +11527,10 @@
       if (f.onlyOnline) list = list.filter(r => r.lastStatus === 'online');
       if (s.settings.showRecordingOnly) list = list.filter(r => recordings.has(r.id));
       if (ag === ONLINE_FOLLOWING_GROUP_ID) {
-        list.sort((a, b) => numeric(a.order, 0) - numeric(b.order, 0));
+        // applyOnlineFollowingRooms already maintains the stable initial order
+        // and appends newly-online rooms. Re-sorting the full followed list on
+        // every pager/sidebar query caused avoidable O(n log n) work and card
+        // movement, so return that maintained order directly.
         return list;
       }
       const sb = s.settings.sortBy;
@@ -11958,25 +12063,15 @@
       syncLayoutControls();
       const list = fullList;
       const wantIds = new Set(list.map(r => r.id));
+      pruneRoomMediaQueue(wantIds);
 
       // 移除不可见/已删除的卡片：先停流再移 DOM，避免删除后残留声音。
       // 如果只是被过滤/分组隐藏，不删除 session，只 detach 媒体，保留后续状态轮询。
       const allRoomIds = new Set(allRoomsForView().map(r => r.id));
       for (const [id, c] of cardMap) {
         if (!wantIds.has(id)) {
-          forgetCardMedia(id);
-          pauseRecordingForSourceLoss(id, { silent: true });
-          const rr = findRoomAny(id);
-          if (rr && rr.sourceUrl) { try { c.tempHls?.destroy?.(); } catch (_) {} }
-          else if (allRoomIds.has(id)) service.detachVideo(id);
-          else service.stop(id);
-          try { c.video?.pause(); } catch (_) {}
-          try { c.video?.remove(); } catch (_) {}
-          c.video = null;
-          try { c.resizeObserver?.disconnect(); } catch (_) {}
-          c.resizeObserver = null;
-          try { c.root.remove(); } catch (_) {}
-          cardMap.delete(id);
+          if (!allRoomIds.has(id)) disposeCardEntry(id, { stopSession: true });
+          else if (c.root.isConnected) parkCardEntry(id);
         }
       }
 
@@ -12022,6 +12117,7 @@
           buildCard(room);
           c = cardMap.get(room.id);
         }
+        activateCardEntry(room.id);
         resetCardSizing(c.root);
         applyCardGridSizing(c.root, room);
         orderedCards.appendChild(c.root);
@@ -12169,6 +12265,7 @@
           buildCard(room);
           c = cardMap.get(room.id);
         }
+        activateCardEntry(room.id);
         resetCardSizing(c.root);
         const cards = [...parent.children].filter(el => el.classList && el.classList.contains('cam-card'));
         const ref = cards[idx];
@@ -12230,6 +12327,9 @@
 
     // ---- Store 订阅 ----
     store.subscribe((state, path) => {
+      if (path === 'rooms' || path === 'all') {
+        savedRoomIndex = new Map(state.rooms.map(room => [room.id, room]));
+      }
       const isSettingsPath = path === 'settings' || (typeof path === 'string' && path.startsWith('settings:'));
       const settingKeys = isSettingsPath && typeof path === 'string' && path.includes(':')
         ? path.slice(path.indexOf(':') + 1).split(',').filter(Boolean)
@@ -12420,11 +12520,14 @@
     // 这样切到其它分组时，被隐藏房间的上线事件也能被检测到并触发桌面通知。
     loadSharedWorkspaceFromHash();
     loadSavedTemporarySources();
-    hydrateOnlineFollowingCache();
+    const hydratedOnlineFollowingCache = hydrateOnlineFollowingCache();
     renderSidebar();
     renderGrid();
     applyPureModeState();
-    syncOnlineFollowing(true).finally(() => {
+    const freshOnlineFollowingCache = hydratedOnlineFollowingCache
+      && Date.now() - onlineFollowingCacheSavedAt < 5 * 60 * 1000;
+    const initialFollowingSync = freshOnlineFollowingCache ? Promise.resolve() : syncOnlineFollowing(true);
+    initialFollowingSync.finally(() => {
       // Avoid a cold-start request storm: let the followed-room list finish
       // first, then bring saved-room background monitoring online gradually.
       for (const r of store.state.rooms) queueBackgroundServiceStart(r.id);
@@ -12440,8 +12543,8 @@
       for (const r of store.state.rooms) {
         if (!service.has(r.id)) queueBackgroundServiceStart(r.id);
       }
-      syncOnlineFollowing();
     }, 60000);
+    setInterval(() => syncOnlineFollowing(), 5 * 60 * 1000);
 
     // 调试入口默认不暴露到页面；需要时先在控制台设置 localStorage.ryujo_multicam_debug = '1' 后刷新。
     try {

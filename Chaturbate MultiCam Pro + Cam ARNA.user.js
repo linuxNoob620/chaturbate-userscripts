@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.20
+// @version           16.5.21
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.20');
+  instanceMarker.setAttribute('data-suite-version', '16.5.21');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1293,7 +1293,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.20',
+    version: '16.5.21',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -7156,11 +7156,14 @@
     nativePageHost.style.setProperty('display', 'none', 'important');
     while (document.body.firstChild) nativePageHost.appendChild(document.body.firstChild);
     document.body.appendChild(nativePageHost);
-    // The native home-page room grid is no longer visible after Workshop takes
-    // over, but Chaturbate otherwise keeps more than 4,000 nodes and ~100 room
-    // thumbnails alive behind it. Preserve the native mount shell for delayed
-    // startup code, then release only the hidden room-card payload.
+    // The native home page is no longer visible after Workshop takes over, but
+    // Chaturbate hydrates it asynchronously. Let startup finish, repeatedly
+    // release the expensive hidden room-card payload, then detach the entire
+    // native tree once its delayed bootstrap window has passed. The Workshop is
+    // self-contained after that point and keeping the hidden tree would roughly
+    // double its steady DOM size.
     const quiesceNativeRoomGrid = () => {
+      if (!nativePageHost.isConnected) return;
       nativePageHost.querySelectorAll('.RoomCardGrid').forEach(roomGrid => {
         stopAllPageMedia(roomGrid);
         roomGrid.replaceChildren();
@@ -7168,6 +7171,12 @@
     };
     setTimeout(quiesceNativeRoomGrid, 500);
     setTimeout(quiesceNativeRoomGrid, 3000);
+    setTimeout(() => {
+      if (!nativePageHost.isConnected) return;
+      stopAllPageMedia(nativePageHost);
+      nativePageHost.replaceChildren();
+      nativePageHost.remove();
+    }, 12000);
     const store = createStore();
     const phoneEnvironment = isPhoneLikeDevice();
     document.body.classList.toggle('rg-phone-device', phoneEnvironment);

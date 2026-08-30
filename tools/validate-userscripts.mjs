@@ -112,6 +112,12 @@ for (const item of scripts) {
     if (!source.includes("body.rg-phone-mode.rg-online-following .grid.view-phone { grid-template-columns:repeat(2,minmax(0,1fr))!important; }")) {
       failures.push(`${item.file}: Online Following mobile grid is not fixed to 2x2`);
     }
+    if (!source.includes('function followingPageTokens(page, totalPages)') || !source.includes("...(active ? { 'aria-current': 'page' } : {})")) {
+      failures.push(`${item.file}: centered numbered Online Following pager is missing`);
+    }
+    if (source.includes('pendingScopes.add(nativeMobilePage ? scope : document)') || source.includes("if (!nativeMobilePage) {\n          scheduleScan(document);")) {
+      failures.push(`${item.file}: desktop room-card mutations still trigger full-document rescans`);
+    }
     const fullscreenDblClickStart = source.indexOf("card.addEventListener('dblclick'");
     const fullscreenDblClickEnd = source.indexOf("card.addEventListener('contextmenu'", fullscreenDblClickStart);
     const fullscreenDblClickSource = fullscreenDblClickStart >= 0 && fullscreenDblClickEnd > fullscreenDblClickStart

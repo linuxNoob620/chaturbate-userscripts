@@ -10,7 +10,7 @@ Record **Pass**, **Fail** or **Blocked**, plus a screenshot/console/network note
 
 ## Installation and startup
 
-- [ ] Version/name shown as 16.5.25 / Ziggy Chaturbate Suite
+- [ ] Version/name shown as 16.5.26 / Ziggy Chaturbate Suite
 - [ ] Executes at document end on `chaturbate.com` and subdomains
 - [ ] Executes in frames exactly where the userscript does
 - [ ] Does not inject twice
@@ -56,7 +56,7 @@ Record **Pass**, **Fail** or **Blocked**, plus a screenshot/console/network note
 - [ ] Online Following is isolated from saved/custom groups and never silently saves rooms
 - [ ] Online Following initial alphabetical order matches; newly online rooms append without reshuffling visible cards
 - [ ] Online Following pagination shows nine cards per desktop page, four cards in a mobile 2x2 page, and stable card positions
-- [ ] Pagination controls, counts and page boundaries match
+- [ ] Centered numbered pagination, ellipses, counts and page boundaries match
 - [ ] Online Following previews use the same lazy 480p behavior
 - [ ] Online Following cache, refresh cadence, request staggering and retry behavior match
 - [ ] Online Favorites and saved-room monitoring match

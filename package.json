@@ -1,6 +1,6 @@
 {
   "name": "ziggy-chaturbate-suite",
-  "version": "16.5.25",
+  "version": "16.5.26",
   "private": true,
   "description": "Builds the maintained Tampermonkey userscript and strict-parity Chrome and Firefox/Zen extensions.",
   "scripts": {

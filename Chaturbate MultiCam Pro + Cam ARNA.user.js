@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.25
+// @version           16.5.26
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.25');
+  instanceMarker.setAttribute('data-suite-version', '16.5.26');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1296,7 +1296,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.25',
+    version: '16.5.26',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -6706,7 +6706,9 @@
         updateBtnState(btn, username);
       }
 
-      // Scan only newly inserted card subtrees on mobile; desktop keeps the existing full scan.
+      // Scan only newly inserted card subtrees after the initial pass. Live
+      // thumbnail/card mutations are frequent on desktop; rescanning the full
+      // document for each one causes visible wheel/scroll jank.
       function scopedMatches(scope, selector) {
         if (scope === document) return [...document.querySelectorAll(selector)];
         if (!(scope instanceof Element)) return [];
@@ -6749,7 +6751,7 @@
       const pendingScopes = new Set();
       function scheduleScan(scope = document) {
         if (document.hidden) return;
-        pendingScopes.add(nativeMobilePage ? scope : document);
+        pendingScopes.add(scope);
         if (pendingScopes.size > 80) {
           pendingScopes.clear();
           pendingScopes.add(document);
@@ -6771,10 +6773,6 @@
       document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleScan(); });
       scan();
       const mo = new MutationObserver(records => {
-        if (!nativeMobilePage) {
-          scheduleScan(document);
-          return;
-        }
         for (const record of records) {
           for (const node of record.addedNodes) {
             if (node instanceof Element) scheduleScan(node);
@@ -8096,12 +8094,18 @@
         .rg-native-nav .ctrl-btn:hover,.rg-native-nav .ctrl-btn:focus-visible { background:#253648!important; color:#fff!important; }
         .rg-native-nav .ctrl-btn.primary,.rg-native-nav .seg button.active { background:#0c6a93!important; color:#fff!important; }
         .rg-visible-count { margin-left:auto; padding:0 8px; color:#b3b3b3; font-size:11px; white-space:nowrap; }
-        .rg-following-pager { display:none; align-items:center; gap:2px; margin-left:auto; padding:0 3px; }
-        .rg-following-pager.active { display:flex; }
-        .rg-following-pager .rg-following-page-btn { min-width:30px!important; width:30px; padding:4px!important; justify-content:center; }
-        .rg-following-page-label { min-width:58px; color:#d7d7d7; font-size:11px; text-align:center; white-space:nowrap; }
+        .rg-following-pager { display:none; align-items:center; gap:6px; margin:0; padding:6px; }
+        .rg-following-pager.active { position:fixed; z-index:2147483200; bottom:12px; left:calc(50% + 136px); display:flex; transform:translateX(-50%); border:1px solid #2d3e50; border-radius:4px; background:rgba(23,32,42,.96); box-shadow:0 4px 18px rgba(0,0,0,.34); }
+        body.rg-sidebar-collapsed .rg-following-pager.active { left:50%; }
+        .rg-following-page-items { display:flex; align-items:center; gap:6px; }
+        .rg-following-pager .rg-following-page-btn { box-sizing:border-box; min-width:36px!important; width:36px; height:36px!important; min-height:36px!important; padding:4px!important; justify-content:center; border:1px solid #2d3e50!important; border-radius:4px!important; background:#202c39!important; color:#68b5f0!important; font:500 12px/1 UbuntuMedium,UbuntuRegular,Arial,sans-serif!important; }
+        .rg-following-pager .rg-following-page-btn:hover,.rg-following-pager .rg-following-page-btn:focus-visible { border-color:#3b5066!important; background:#253648!important; color:#fff!important; }
+        .rg-following-pager .rg-following-page-btn.active { border-color:#0c6a93!important; background:#0c6a93!important; color:#fff!important; }
+        .rg-following-pager .rg-following-page-btn:disabled { opacity:.45; cursor:default; }
+        .rg-following-page-ellipsis { width:20px; color:#68b5f0; font-size:12px; text-align:center; }
         .sidebar { border:0!important; border-right:1px solid #2d3e50!important; border-radius:0!important; }
         .grid { padding:8px!important; }
+        body.rg-online-following .grid { padding-bottom:62px!important; }
         .rg-control-backdrop { position:fixed; inset:0; z-index:2147483600; background:rgba(0,0,0,.56); }
         .rg-control-drawer { position:absolute; top:0; right:0; width:min(360px,92vw); height:100dvh; box-sizing:border-box; display:flex; flex-direction:column; overflow:hidden; background:#202c39; color:#f1f1f1; border-left:1px solid #2d3e50; box-shadow:-12px 0 32px rgba(0,0,0,.34); }
         .rg-control-drawer-head { display:flex; align-items:center; justify-content:space-between; min-height:58px; padding:0 12px; border-bottom:1px solid #2d3e50; }
@@ -8151,8 +8155,10 @@
         body.rg-phone-mode .rg-native-nav .roomgrid-compact-select { flex:0 0 86px!important; width:86px!important; min-width:86px!important; max-width:86px!important; }
         body.rg-phone-mode .rg-native-nav .ctrl-btn:not(.sidebar-toggle-btn):not(.rg-mobile-only):not(.rg-following-page-btn) { display:none!important; }
         body.rg-phone-mode .rg-visible-count { display:none!important; }
-        body.rg-phone-mode .rg-following-pager.active { position:fixed; z-index:2147483200; right:max(8px,env(safe-area-inset-right)); bottom:max(8px,env(safe-area-inset-bottom)); display:flex!important; min-height:38px; padding:4px; border:1px solid #2d3e50; border-radius:4px; background:#202c39; box-shadow:0 4px 14px rgba(0,0,0,.36); }
-        body.rg-phone-mode .rg-following-pager .rg-following-page-btn { display:inline-flex!important; width:36px!important; min-width:36px!important; height:34px!important; min-height:34px!important; }
+        body.rg-phone-mode .rg-following-pager.active { right:auto; bottom:max(6px,env(safe-area-inset-bottom)); left:50%; display:flex!important; max-width:calc(100vw - 8px); min-height:36px; gap:3px; padding:4px; }
+        body.rg-phone-mode .rg-following-page-items { gap:3px; }
+        body.rg-phone-mode .rg-following-pager .rg-following-page-btn { display:inline-flex!important; width:30px!important; min-width:30px!important; height:30px!important; min-height:30px!important; padding:2px!important; }
+        body.rg-phone-mode .rg-following-page-ellipsis { width:14px; }
         body.rg-phone-mode .grid.view-phone { grid-template-columns:minmax(0,1fr)!important; }
         body.rg-phone-mode.rg-online-following .grid.view-phone { grid-template-columns:repeat(2,minmax(0,1fr))!important; }
         body.rg-phone-mode.rg-card-menu-open .grid.view-phone { overflow:hidden!important; overscroll-behavior:none!important; touch-action:none!important; }
@@ -8822,12 +8828,12 @@
       class: 'ctrl-btn rg-following-page-btn', type: 'button', title: LANG === 'zh' ? '上一页' : 'Previous page',
       onclick: () => setOnlineFollowingPage(currentOnlineFollowingPage() - 1),
     }, '‹');
-    const followingPageLabel = $('span', { class: 'rg-following-page-label', 'aria-live': 'polite' });
+    const followingPageItems = $('div', { class: 'rg-following-page-items', 'aria-live': 'polite' });
     const followingNextBtn = $('button', {
       class: 'ctrl-btn rg-following-page-btn', type: 'button', title: LANG === 'zh' ? '下一页' : 'Next page',
       onclick: () => setOnlineFollowingPage(currentOnlineFollowingPage() + 1),
     }, '›');
-    const followingPager = $('div', { class: 'rg-following-pager' }, [followingPrevBtn, followingPageLabel, followingNextBtn]);
+    const followingPager = $('nav', { class: 'rg-following-pager', 'aria-label': LANG === 'zh' ? '正在直播的关注分页' : 'Online Following pages' }, [followingPrevBtn, followingPageItems, followingNextBtn]);
     const mobileAddBtn = $('button', {
       class: 'ctrl-btn primary rg-mobile-only',
       type: 'button',
@@ -8901,6 +8907,30 @@
       grid.scrollTop = 0;
       store.patchSettings({ onlineFollowingPageIndex: page });
     }
+    function followingPageTokens(page, totalPages) {
+      if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index);
+      if (page <= 2) return [0, 1, 2, 3, 4, 'ellipsis', totalPages - 1];
+      if (page >= totalPages - 3) return [0, 'ellipsis', totalPages - 5, totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1];
+      return [0, 'ellipsis', page - 1, page, page + 1, 'ellipsis', totalPages - 1];
+    }
+    function renderFollowingPageItems(page, totalPages) {
+      let ellipsisIndex = 0;
+      followingPageItems.replaceChildren(...followingPageTokens(page, totalPages).map(token => {
+        if (token === 'ellipsis') {
+          ellipsisIndex += 1;
+          return $('span', { class: 'rg-following-page-ellipsis', 'aria-hidden': 'true', dataset: { ellipsis: String(ellipsisIndex) } }, '…');
+        }
+        const active = token === page;
+        return $('button', {
+          class: `ctrl-btn rg-following-page-btn rg-following-page-number${active ? ' active' : ''}`,
+          type: 'button',
+          title: LANG === 'zh' ? `第 ${token + 1} 页` : `Page ${token + 1}`,
+          'aria-label': LANG === 'zh' ? `第 ${token + 1} 页` : `Page ${token + 1}`,
+          ...(active ? { 'aria-current': 'page' } : {}),
+          onclick: () => setOnlineFollowingPage(token),
+        }, String(token + 1));
+      }));
+    }
     function syncLayoutControls() {
       const size = layoutSize();
       const total = fullVisibleRooms().length;
@@ -8913,7 +8943,7 @@
         const { page, pageSize, totalPages } = onlineFollowingPageInfo();
         followingPrevBtn.disabled = page <= 0;
         followingNextBtn.disabled = page >= totalPages - 1;
-        followingPageLabel.textContent = `${page + 1} / ${totalPages}`;
+        renderFollowingPageItems(page, totalPages);
         visibleCountEl.style.marginLeft = '0';
         visibleCountEl.textContent = LANG === 'zh' ? `每页 ${pageSize} 位 · 共 ${total} 位` : `${pageSize} per page · ${total} total`;
       } else {

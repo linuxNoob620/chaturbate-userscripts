@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.19
+// @version           16.5.20
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.19');
+  instanceMarker.setAttribute('data-suite-version', '16.5.20');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1293,7 +1293,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.19',
+    version: '16.5.20',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -2975,7 +2975,7 @@
    * 4. 房间服务 / RoomService —— API + HLS + 重连 + 智能轮询
    * ============================================================= */
   function createRoomService(store) {
-    const sessions = new Map();   // id -> { hls, video, status, retryCount, pollTimer, userPaused }
+    const sessions = new Map();   // id -> { hls, video, status, retryCount, pollTimer, userPaused, background }
     const qualityCaps = new Map(); // id -> maximum stream height for a specific virtual view/consumer
     const domain = safeChaturbateHost(window.location.hostname) ? window.location.hostname : 'chaturbate.com';
     let rateLimitUntil = 0;
@@ -3103,7 +3103,10 @@
         hardStopVideo(s.video);
         s.video = null;
         s.hlsSource = null;
-        if (s.status === 'online' && store.state.rooms.some(r => r.id === id)) schedulePoll(id, onlinePollMs());
+        if (store.state.rooms.some(r => r.id === id)) {
+          s.background = true;
+          if (s.status === 'online') schedulePoll(id, onlinePollMs());
+        }
       }
       hardStopRoomVideos(id);
     }
@@ -3113,6 +3116,7 @@
       const s = sessions.get(id);
       if (!s) { hardStopVideo(video); return; }
       clearPoll(s);
+      s.background = false;
       s.video = video;
     }
 
@@ -3121,6 +3125,13 @@
       const s = sessions.get(id);
       if (!s) return;
       clearPoll(s);
+      // Saved rooms without a visible card remain monitored, but at a quiet
+      // cadence so they cannot monopolize the shared room-context endpoint.
+      // Bringing a card on screen promotes it and refreshes it immediately.
+      if (s.background) {
+        const backgroundFloor = s.status === 'online' ? 3 * 60 * 1000 : 5 * 60 * 1000;
+        ms = Math.max(ms, backgroundFloor);
+      }
       // 错峰：±20%
       const jitter = ms * (0.8 + Math.random() * 0.4);
       s.pollTimer = setTimeout(() => { if (sessions.has(id)) connect(id); }, jitter);
@@ -3378,18 +3389,27 @@
       connect(id);
     }
     function refreshAll() { for (const id of [...sessions.keys()]) refresh(id); }
-    function start(id) {
+    function start(id, options = {}) {
       id = normalizeUsername(id);
       // 幂等：已有 session 就跳过（避免切分组时重复启动轮询）
-      if (sessions.has(id)) return;
-      sessions.set(id, { retryCount: 0 });
+      if (sessions.has(id)) {
+        if (!options.background) sessions.get(id).background = false;
+        return;
+      }
+      sessions.set(id, { retryCount: 0, background: !!options.background });
       connect(id);
+    }
+    function startBackground(id) { start(id, { background: true }); }
+    function promote(id) {
+      id = normalizeUsername(id);
+      const s = sessions.get(id);
+      if (s) s.background = false;
     }
     function stop(id) { id = normalizeUsername(id); destroyPlayer(id); sessions.delete(id); }
     function stopAll() { for (const id of [...sessions.keys()]) stop(id); stopAllPageMedia(); }
     function has(id) { id = normalizeUsername(id); return sessions.has(id); }
 
-    return { start, stop, stopAll, refresh, refreshAll, attachVideo, detachVideo, startHls, has, pause, resume, togglePause, isPaused, pauseAll, resumeAll, refreshQuality, setQualityCap, clearQualityCaps };
+    return { start, startBackground, promote, stop, stopAll, refresh, refreshAll, attachVideo, detachVideo, startHls, has, pause, resume, togglePause, isPaused, pauseAll, resumeAll, refreshQuality, setQualityCap, clearQualityCaps };
   }
 
   /* =============================================================
@@ -9097,7 +9117,7 @@
     const backgroundServiceQueue = [];
     const backgroundServiceQueuedIds = new Set();
     let backgroundServicePumpTimer = 0;
-    const BACKGROUND_SERVICE_STAGGER_MS = 900;
+    const BACKGROUND_SERVICE_STAGGER_MS = 6000;
 
     function isRoomMediaProtected(roomId) {
       const room = findRoomAny(roomId);
@@ -9135,8 +9155,10 @@
         setTimeout(() => mediaAttachPendingIds.delete(roomId), 6000);
         return;
       }
+      service.promote(roomId);
       if (room.lastStatus !== 'online') {
-        mediaAttachPendingIds.delete(roomId);
+        service.refresh(roomId);
+        setTimeout(() => mediaAttachPendingIds.delete(roomId), 6000);
         return;
       }
       service.refresh(roomId);
@@ -9195,7 +9217,7 @@
         const roomId = backgroundServiceQueue.shift();
         backgroundServiceQueuedIds.delete(roomId);
         if (!findRoomAny(roomId) || service.has(roomId)) continue;
-        service.start(roomId);
+        service.startBackground(roomId);
         break;
       }
       if (backgroundServiceQueue.length) backgroundServicePumpTimer = setTimeout(pumpBackgroundServiceQueue, BACKGROUND_SERVICE_STAGGER_MS);
@@ -12470,9 +12492,9 @@
 
       // service 启停（replaceState 之后，避免 service 提前 fire 状态时找不到对应数据）
       for (const id of removedRoomIds) service.stop(id);
-      for (const id of newRoomIds) service.start(id);
+      for (const id of newRoomIds) queueBackgroundServiceStart(id);
       for (const id of nextIds) {
-        if (!service.has(id)) service.start(id);
+        if (!service.has(id)) queueBackgroundServiceStart(id);
       }
     }
 
@@ -12529,8 +12551,11 @@
     const initialFollowingSync = freshOnlineFollowingCache ? Promise.resolve() : syncOnlineFollowing(true);
     initialFollowingSync.finally(() => {
       // Avoid a cold-start request storm: let the followed-room list finish
-      // first, then bring saved-room background monitoring online gradually.
-      for (const r of store.state.rooms) queueBackgroundServiceStart(r.id);
+      // first, let its visible previews settle, then bring saved-room
+      // background monitoring online at a deliberately quiet cadence.
+      setTimeout(() => {
+        for (const r of store.state.rooms) queueBackgroundServiceStart(r.id);
+      }, 12000);
     });
     UnifiedRecorder.subscribe(() => {
       cardMap.forEach((_, id) => updateCardButtons(id));

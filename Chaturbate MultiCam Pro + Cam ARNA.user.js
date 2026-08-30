@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.17
+// @version           16.5.18
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -310,6 +310,7 @@
   const ONLINE_GROUP_ID = 'online';
   const ONLINE_FAVORITES_GROUP_ID = 'online-favorites';
   const ONLINE_FOLLOWING_GROUP_ID = 'online-following';
+  const ONLINE_FOLLOWING_PAGE_SIZE = 9;
   const FAVORITE_GROUP_ID = 'fav';
 
   // v15.5: 稳定状态。多工作台/多窗口同时轮询时，不再用 loading / transient error 覆盖
@@ -1292,7 +1293,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.17',
+    version: '16.5.18',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -1420,6 +1421,7 @@
       layoutSize: 4,             // one screen capacity: 2 | 4 | 6 | 9
       phoneLayoutSize: 2,        // phone capacity: portrait 1x2, landscape 2x1
       pageIndex: 0,
+      onlineFollowingPageIndex: 0,
       toolbarCollapsed: false,
       viewMode: 'grid',           // 'grid' | 'focus' | 'phone'
       phoneModeAuto: true,
@@ -1658,6 +1660,7 @@
     out.settings.layoutSize = [2, 4, 6, 9].includes(Number(out.settings.layoutSize)) ? Number(out.settings.layoutSize) : def.settings.layoutSize;
     out.settings.phoneLayoutSize = [2, 4, 6, 9].includes(Number(out.settings.phoneLayoutSize)) ? Number(out.settings.phoneLayoutSize) : def.settings.phoneLayoutSize;
     out.settings.pageIndex = clampInt(out.settings.pageIndex, 0, 100000, 0);
+    out.settings.onlineFollowingPageIndex = clampInt(out.settings.onlineFollowingPageIndex, 0, 100000, 0);
     out.settings.viewMode = ['grid', 'focus', 'phone'].includes(out.settings.viewMode) ? out.settings.viewMode : 'grid';
     out.settings.phoneModeAuto = out.settings.phoneModeAuto !== false;
     out.settings.focusedRoomId = isLikelyUsername(out.settings.focusedRoomId) ? normalizeUsername(out.settings.focusedRoomId) : null;
@@ -7942,6 +7945,10 @@
         .rg-native-nav .ctrl-btn:hover,.rg-native-nav .ctrl-btn:focus-visible { background:#253648!important; color:#fff!important; }
         .rg-native-nav .ctrl-btn.primary,.rg-native-nav .seg button.active { background:#0c6a93!important; color:#fff!important; }
         .rg-visible-count { margin-left:auto; padding:0 8px; color:#b3b3b3; font-size:11px; white-space:nowrap; }
+        .rg-following-pager { display:none; align-items:center; gap:2px; margin-left:auto; padding:0 3px; }
+        .rg-following-pager.active { display:flex; }
+        .rg-following-pager .rg-following-page-btn { min-width:30px!important; width:30px; padding:4px!important; justify-content:center; }
+        .rg-following-page-label { min-width:58px; color:#d7d7d7; font-size:11px; text-align:center; white-space:nowrap; }
         .sidebar { border:0!important; border-right:1px solid #2d3e50!important; border-radius:0!important; }
         .grid { padding:8px!important; }
         .rg-control-backdrop { position:fixed; inset:0; z-index:2147483600; background:rgba(0,0,0,.56); }
@@ -7993,6 +8000,8 @@
         body.rg-phone-mode .rg-native-nav .roomgrid-compact-select { flex:0 0 86px!important; width:86px!important; min-width:86px!important; max-width:86px!important; }
         body.rg-phone-mode .rg-native-nav .ctrl-btn:not(.sidebar-toggle-btn):not(.rg-mobile-only) { display:none!important; }
         body.rg-phone-mode .rg-visible-count { display:none!important; }
+        body.rg-phone-mode .rg-following-pager.active { position:fixed; z-index:2147483200; right:max(8px,env(safe-area-inset-right)); bottom:max(8px,env(safe-area-inset-bottom)); display:flex!important; min-height:38px; padding:4px; border:1px solid #2d3e50; border-radius:4px; background:#202c39; box-shadow:0 4px 14px rgba(0,0,0,.36); }
+        body.rg-phone-mode .rg-following-pager .rg-following-page-btn { display:inline-flex!important; width:36px!important; min-width:36px!important; height:34px!important; min-height:34px!important; }
         body.rg-phone-mode .grid.view-phone { grid-template-columns:minmax(0,1fr)!important; }
         body.rg-phone-mode.rg-card-menu-open .grid.view-phone { overflow:hidden!important; overscroll-behavior:none!important; touch-action:none!important; }
         .card-ops-menu-backdrop { position:fixed; inset:0; z-index:2147483650; display:flex; align-items:flex-end; box-sizing:border-box; padding-top:calc(96px + env(safe-area-inset-top)); background:rgba(0,0,0,.56); overscroll-behavior:none; touch-action:none; }
@@ -8393,7 +8402,7 @@
       const phoneOverride = phoneEnvironment ? { phoneModeAuto: false } : {};
       if (mode !== 'focus') { store.patchSettings({ viewMode: 'grid', ...phoneOverride }); return; }
       if (!store.state.settings.focusedRoomId) {
-        const vr = visibleRooms();
+        const vr = renderVisibleRooms();
         const first = vr.find(r => r.lastStatus === 'online') || vr[0];
         if (first) store.patchSettings({ viewMode: 'focus', focusedRoomId: first.id, focusThumbsCollapsed: false, ...phoneOverride });
         else store.patchSettings({ viewMode: 'focus', focusThumbsCollapsed: false, ...phoneOverride });
@@ -8657,6 +8666,16 @@
 
     const groupTitle = (text) => $('span', { class: 'toolbar-group-title' }, text);
     const visibleCountEl = $('span', { class: 'rg-visible-count', 'aria-live': 'polite' });
+    const followingPrevBtn = $('button', {
+      class: 'ctrl-btn rg-following-page-btn', type: 'button', title: LANG === 'zh' ? '上一页' : 'Previous page',
+      onclick: () => setOnlineFollowingPage(currentOnlineFollowingPage() - 1),
+    }, '‹');
+    const followingPageLabel = $('span', { class: 'rg-following-page-label', 'aria-live': 'polite' });
+    const followingNextBtn = $('button', {
+      class: 'ctrl-btn rg-following-page-btn', type: 'button', title: LANG === 'zh' ? '下一页' : 'Next page',
+      onclick: () => setOnlineFollowingPage(currentOnlineFollowingPage() + 1),
+    }, '›');
+    const followingPager = $('div', { class: 'rg-following-pager' }, [followingPrevBtn, followingPageLabel, followingNextBtn]);
     const mobileAddBtn = $('button', {
       class: 'ctrl-btn primary rg-mobile-only',
       type: 'button',
@@ -8681,10 +8700,12 @@
       mobileSearchInput,
       toolbarGroup([groupTitle(LANG === 'zh' ? '视图' : 'View'), viewModeSel, splitViewBtn, layoutSel], {}, true),
       refreshAllBtn,
+      followingPager,
       visibleCountEl,
     );
 
     function layoutSize() {
+      if (store.state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID) return ONLINE_FOLLOWING_PAGE_SIZE;
       const key = store.state.settings.viewMode === 'phone' ? 'phoneLayoutSize' : 'layoutSize';
       const n = Number(store.state.settings[key] || (key === 'phoneLayoutSize' ? 2 : 4));
       return [2, 4, 6, 9].includes(n) ? n : 4;
@@ -8698,12 +8719,51 @@
       return { cols: 2, rows: 2 };
     }
     function fullVisibleRooms() { return visibleRooms(); }
+    function onlineFollowingPageInfo(list = fullVisibleRooms()) {
+      const totalPages = Math.max(1, Math.ceil(list.length / ONLINE_FOLLOWING_PAGE_SIZE));
+      const requested = clampInt(store.state.settings.onlineFollowingPageIndex, 0, 100000, 0);
+      const page = Math.min(requested, totalPages - 1);
+      return { page, totalPages, total: list.length };
+    }
+    function currentOnlineFollowingPage() {
+      return onlineFollowingPageInfo().page;
+    }
+    function renderVisibleRooms() {
+      const list = fullVisibleRooms();
+      if (store.state.settings.activeGroup !== ONLINE_FOLLOWING_GROUP_ID) return list;
+      const { page } = onlineFollowingPageInfo(list);
+      const start = page * ONLINE_FOLLOWING_PAGE_SIZE;
+      return list.slice(start, start + ONLINE_FOLLOWING_PAGE_SIZE);
+    }
+    function setOnlineFollowingPage(rawPage) {
+      if (store.state.settings.activeGroup !== ONLINE_FOLLOWING_GROUP_ID) return;
+      const { totalPages } = onlineFollowingPageInfo();
+      const page = Math.max(0, Math.min(totalPages - 1, Number(rawPage) || 0));
+      if (page === currentOnlineFollowingPage()) return;
+      grid.scrollTop = 0;
+      store.patchSettings({ onlineFollowingPageIndex: page });
+    }
     function syncLayoutControls() {
       const size = layoutSize();
-      layoutSel.value = String(size);
       const total = fullVisibleRooms().length;
-      layoutSel.title = LANG === 'zh' ? `单屏显示 ${size} 个，共 ${total} 个；向下滚动查看更多` : `${size} visible at once, ${total} total; scroll down for more`;
-      visibleCountEl.textContent = LANG === 'zh' ? `${size} 可见 / ${total} 总数` : `${size} visible · ${total} total`;
+      const following = store.state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID;
+      layoutSel.hidden = following;
+      layoutSel.disabled = following;
+      followingPager.classList.toggle('active', following);
+      document.body.classList.toggle('rg-online-following', following);
+      if (following) {
+        const { page, totalPages } = onlineFollowingPageInfo();
+        followingPrevBtn.disabled = page <= 0;
+        followingNextBtn.disabled = page >= totalPages - 1;
+        followingPageLabel.textContent = `${page + 1} / ${totalPages}`;
+        visibleCountEl.style.marginLeft = '0';
+        visibleCountEl.textContent = LANG === 'zh' ? `每页 9 位 · 共 ${total} 位` : `9 per page · ${total} total`;
+      } else {
+        layoutSel.value = String(size);
+        layoutSel.title = LANG === 'zh' ? `单屏显示 ${size} 个，共 ${total} 个；向下滚动查看更多` : `${size} visible at once, ${total} total; scroll down for more`;
+        visibleCountEl.style.marginLeft = '';
+        visibleCountEl.textContent = LANG === 'zh' ? `${size} 可见 / ${total} 总数` : `${size} visible · ${total} total`;
+      }
     }
 
     function applyGridSize() {
@@ -9163,13 +9223,15 @@
 
     // v15.6-minimal: 临时 URL 窗口。只存在于当前页面内存，刷新后消失；不写入 localStorage。
     const tempRooms = [];
+    const onlineFollowingRoomIndex = new Map();
     function regularTemporaryRooms() { return tempRooms.filter(room => !room.onlineFollowing); }
-    function onlineFollowingRooms() { return tempRooms.filter(room => room.onlineFollowing); }
+    function onlineFollowingRooms() { return [...onlineFollowingRoomIndex.values()]; }
+    function findOnlineFollowingRoom(id) { return onlineFollowingRoomIndex.get(String(id || '')) || null; }
     function regularRoomsForView() { return [...store.state.rooms, ...regularTemporaryRooms()]; }
     function allRoomsForView() { return [...store.state.rooms, ...tempRooms]; }
     function findRoomAny(id) {
       id = String(id || '');
-      return store.state.rooms.find(r => r.id === id) || tempRooms.find(r => r.id === id) || null;
+      return store.state.rooms.find(r => r.id === id) || findOnlineFollowingRoom(id) || tempRooms.find(r => r.id === id) || null;
     }
     let onlineFollowingSyncBusy = false;
     let onlineFollowingLastSync = 0;
@@ -9450,12 +9512,16 @@
     }
 
     function applyOnlineFollowingRooms(followed, { preserveMissing = false } = {}) {
+      const followingIsVisible = store.state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID;
+      const previousVisibleIds = followingIsVisible ? renderVisibleRooms().map(room => room.id) : [];
       const ids = followed.map(item => item.id);
-      const currentFollowing = tempRooms.filter(room => room.onlineFollowing);
+      const currentFollowing = onlineFollowingRooms();
       const currentById = new Map(currentFollowing.map(room => [room.id, room]));
       const incomingById = new Map(followed.map(item => [item.id, item]));
       const oldIds = new Set(currentById.keys());
       const nextFollowing = [];
+      const changedRooms = [];
+      let structureChanged = !onlineFollowingInitialOrderReady;
       const createRoom = (item, order) => ({
         id: item.id, displayName: item.id, temporary: true, onlineFollowing: true,
         lastStatus: item.lastStatus, privateLabel: item.lastStatus === 'private' ? 'Private' : '', addedAt: Date.now(),
@@ -9480,21 +9546,35 @@
             const item = incomingById.get(room.id);
             if (!item) {
               if (preserveMissing) nextFollowing.push(room);
+              else structureChanged = true;
               return;
             }
+            const previousStatus = room.lastStatus;
+            const previousLabel = room.privateLabel || '';
             room.lastStatus = item.lastStatus;
             room.privateLabel = item.lastStatus === 'private' ? 'Private' : '';
             if (item.lastStatus === 'online') room.lastSeenOnline = Date.now();
+            if (previousStatus !== room.lastStatus || previousLabel !== room.privateLabel) changedRooms.push(room);
             nextFollowing.push(room);
           });
         followed.forEach(item => {
-          if (!currentById.has(item.id)) nextFollowing.push(createRoom(item, onlineFollowingNextOrder++));
+          if (!currentById.has(item.id)) {
+            nextFollowing.push(createRoom(item, onlineFollowingNextOrder++));
+            structureChanged = true;
+          }
         });
       }
-      for (let index = tempRooms.length - 1; index >= 0; index--) {
-        if (tempRooms[index]?.onlineFollowing) tempRooms.splice(index, 1);
+      const currentOrder = currentFollowing.map(room => room.id);
+      const nextOrder = nextFollowing.map(room => room.id);
+      if (currentOrder.length !== nextOrder.length || currentOrder.some((id, index) => id !== nextOrder[index])) structureChanged = true;
+      if (structureChanged) {
+        for (let index = tempRooms.length - 1; index >= 0; index--) {
+          if (tempRooms[index]?.onlineFollowing) tempRooms.splice(index, 1);
+        }
+        tempRooms.push(...nextFollowing);
+        onlineFollowingRoomIndex.clear();
+        nextFollowing.forEach(room => onlineFollowingRoomIndex.set(room.id, room));
       }
-      tempRooms.push(...nextFollowing);
       const nextIds = new Set(preserveMissing ? nextFollowing.map(item => item.id) : ids);
       oldIds.forEach(id => {
         if (nextIds.has(id)) return;
@@ -9502,9 +9582,23 @@
         if (!store.state.rooms.some(room => room.id === id)) service.stop(id);
       });
       onlineFollowingLastSync = Date.now();
-      syncOnlineFollowingQualityCaps();
-      scheduleSidebarRender();
-      if (store.state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID) scheduleGridRender();
+      if (structureChanged) {
+        syncOnlineFollowingQualityCaps();
+        scheduleSidebarRender();
+        if (followingIsVisible) {
+          const nextVisibleIds = renderVisibleRooms().map(room => room.id);
+          const visiblePageChanged = previousVisibleIds.length !== nextVisibleIds.length
+            || previousVisibleIds.some((id, index) => id !== nextVisibleIds[index]);
+          if (visiblePageChanged) scheduleGridRender();
+          else if (!document.hidden) syncLayoutControls();
+        }
+      } else {
+        changedRooms.forEach(renderCardState);
+        if (changedRooms.length && store.state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID
+          && (store.state.settings.filter?.hideOffline || store.state.settings.filter?.hidePrivate || store.state.settings.filter?.onlyOnline)) {
+          scheduleGridRender();
+        }
+      }
     }
 
     function hydrateOnlineFollowingCache() {
@@ -9634,7 +9728,7 @@
     }
 
     function saveOnlineFollowingRoom(roomId) {
-      const room = tempRooms.find(item => item.id === roomId && item.onlineFollowing);
+      const room = findOnlineFollowingRoom(roomId);
       if (!room) return false;
       const added = store.addRoom(roomId);
       const saved = store.state.rooms.find(item => item.id === roomId);
@@ -9703,6 +9797,7 @@
         for (let index = tempRooms.length - 1; index >= 0; index--) {
           if (tempRooms[index]?.onlineFollowing && tempRooms[index].id === target) tempRooms.splice(index, 1);
         }
+        onlineFollowingRoomIndex.delete(target);
         service.setQualityCap(target, 0);
         if (!store.state.rooms.some(room => room.id === target)) service.stop(target);
         onlineFollowingLastSync = Date.now();
@@ -10382,7 +10477,7 @@
         })
         .map(card => card.dataset.roomId)
         .filter(Boolean);
-      return visibleIds.length ? [...new Set(visibleIds)] : fullVisibleRooms().slice(0, layoutSize()).map(r => r.id);
+      return visibleIds.length ? [...new Set(visibleIds)] : renderVisibleRooms().slice(0, layoutSize()).map(r => r.id);
     }
 
     function currentGroupRoomIds() {
@@ -10844,7 +10939,7 @@
       menu.appendChild(item('', service.isPaused(roomId) ? t('opResume') : t('opPause'), () => service.togglePause(roomId)));
       menu.appendChild(item('', t('opRefresh'), () => service.refresh(roomId)));
       const currentRoom = store.state.rooms.find(x => x.id === roomId);
-      const followingRoom = tempRooms.find(x => x.id === roomId && x.onlineFollowing);
+      const followingRoom = findOnlineFollowingRoom(roomId);
       if (!currentRoom && followingRoom) {
         menu.appendChild(item('', LANG === 'zh' ? '添加房间' : 'Add room', () => saveOnlineFollowingRoom(roomId)));
       }
@@ -11472,10 +11567,32 @@
       cardMap.forEach((_, id) => applyVideoTransform(id));
     }
 
+    let activeCardPan = null;
+    window.addEventListener('mousemove', (e) => {
+      const pan = activeCardPan;
+      if (!pan) return;
+      if (!pan.card.isConnected) {
+        pan.card.classList.remove('video-panning');
+        activeCardPan = null;
+        return;
+      }
+      const cur = getVideoTransform(pan.roomId);
+      patchVideoTransform(pan.roomId, {
+        x: cur.x + e.clientX - pan.lastX,
+        y: cur.y + e.clientY - pan.lastY,
+      });
+      pan.lastX = e.clientX;
+      pan.lastY = e.clientY;
+    });
+    window.addEventListener('mouseup', () => {
+      const pan = activeCardPan;
+      if (!pan) return;
+      activeCardPan = null;
+      pan.card.classList.remove('video-panning');
+      applyVideoTransform(pan.roomId);
+    });
+
     function installCardZoomHandlers(card, roomId) {
-      let dragging = false;
-      let lastX = 0;
-      let lastY = 0;
       const isUiTarget = (target) => !!target?.closest?.('.icon-btn,.menu-pop,.roomgrid-modal-backdrop,button,input,select,textarea,a');
       card.addEventListener('wheel', (e) => {
         if (store.state.settings.freeZoom === false || (!e.ctrlKey && !e.metaKey) || isUiTarget(e.target)) return;
@@ -11489,29 +11606,12 @@
         if (store.state.settings.freeZoom === false || e.button !== 0 || isUiTarget(e.target)) return;
         const cur = getVideoTransform(roomId);
         if (cur.zoom <= 1) return;
-        dragging = true;
-        lastX = e.clientX;
-        lastY = e.clientY;
+        if (activeCardPan?.card && activeCardPan.card !== card) activeCardPan.card.classList.remove('video-panning');
+        activeCardPan = { card, roomId, lastX: e.clientX, lastY: e.clientY };
         card.classList.add('video-panning');
         const c = cardMap.get(roomId);
         if (c?.video) c.video.style.cursor = 'grabbing';
         e.preventDefault();
-      });
-      window.addEventListener('mousemove', (e) => {
-        if (!dragging) return;
-        const cur = getVideoTransform(roomId);
-        patchVideoTransform(roomId, {
-          x: cur.x + e.clientX - lastX,
-          y: cur.y + e.clientY - lastY,
-        });
-        lastX = e.clientX;
-        lastY = e.clientY;
-      });
-      window.addEventListener('mouseup', () => {
-        if (!dragging) return;
-        dragging = false;
-        card.classList.remove('video-panning');
-        applyVideoTransform(roomId);
       });
     }
 
@@ -11854,7 +11954,7 @@
       }
 
       cleanupSplitLayout();
-      const fullList = fullVisibleRooms();
+      const fullList = renderVisibleRooms();
       syncLayoutControls();
       const list = fullList;
       const wantIds = new Set(list.map(r => r.id));
@@ -11915,20 +12015,19 @@
         el.remove();
       });
 
-      list.forEach((room, idx) => {
+      const orderedCards = document.createDocumentFragment();
+      list.forEach((room) => {
         let c = cardMap.get(room.id);
         if (!c) {
           buildCard(room);
           c = cardMap.get(room.id);
-          grid.appendChild(c.root);
-        } else {
-          resetCardSizing(c.root);
-          const cards = [...grid.children].filter(el => el.classList && el.classList.contains('cam-card'));
-          const ref = cards[idx];
-          if (c.root.parentElement !== grid || ref !== c.root) grid.insertBefore(c.root, ref || null);
         }
         resetCardSizing(c.root);
         applyCardGridSizing(c.root, room);
+        orderedCards.appendChild(c.root);
+      });
+      grid.appendChild(orderedCards);
+      list.forEach((room) => {
         requestRoomMediaIfNeeded(room.id);
         renderCardState(room);
       });
@@ -11940,7 +12039,7 @@
     }
 
     function focusStep(delta) {
-      const list = visibleRooms();
+      const list = renderVisibleRooms();
       if (!list.length) return;
       const cur = store.state.settings.focusedRoomId;
       let idx = list.findIndex(r => r.id === cur);
@@ -12107,18 +12206,27 @@
     let sidebarRenderRaf = 0;
     let gridRenderRaf = 0;
     let focusSizingRaf = 0;
+    let sidebarRenderDeferred = false;
+    let gridRenderDeferred = false;
     function scheduleSidebarRender() {
+      if (document.hidden) { sidebarRenderDeferred = true; return; }
       if (sidebarRenderRaf) return;
-      sidebarRenderRaf = requestAnimationFrame(() => { sidebarRenderRaf = 0; renderSidebar(); });
+      sidebarRenderRaf = requestAnimationFrame(() => { sidebarRenderRaf = 0; sidebarRenderDeferred = false; renderSidebar(); });
     }
     function scheduleGridRender() {
+      if (document.hidden) { gridRenderDeferred = true; return; }
       if (gridRenderRaf) return;
-      gridRenderRaf = requestAnimationFrame(() => { gridRenderRaf = 0; renderGrid(); });
+      gridRenderRaf = requestAnimationFrame(() => { gridRenderRaf = 0; gridRenderDeferred = false; renderGrid(); });
     }
     function scheduleFocusSizing() {
       if (focusSizingRaf) return;
       focusSizingRaf = requestAnimationFrame(() => { focusSizingRaf = 0; applyFocusMainSizing(); });
     }
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) return;
+      if (sidebarRenderDeferred) scheduleSidebarRender();
+      if (gridRenderDeferred) scheduleGridRender();
+    });
 
     // ---- Store 订阅 ----
     store.subscribe((state, path) => {
@@ -12132,7 +12240,7 @@
         const fullRefresh = path === 'groups' || path === 'rooms' || path === 'all' || path === 'settings' || !settingKeys.length;
         const needsSidebar = fullRefresh || hasSetting('activeGroup', 'sidebarCollapsed');
         const needsGrid = fullRefresh || hasSetting(
-          'activeGroup', 'filter', 'sortBy', 'searchQuery', 'layoutSize', 'phoneLayoutSize', 'phoneModeAuto', 'pageIndex',
+          'activeGroup', 'filter', 'sortBy', 'searchQuery', 'layoutSize', 'phoneLayoutSize', 'phoneModeAuto', 'pageIndex', 'onlineFollowingPageIndex',
           'viewMode', 'focusedRoomId', 'focusMainPct', 'focusMainHPct', 'focusAspect', 'focusThumbSize',
           'showRecordingOnly', 'favoriteFirst', 'splitRoomIds', 'splitViewActive', 'splitRatio', 'splitAudioRoomId', 'splitToolbarPosition'
         );
@@ -12165,7 +12273,7 @@
         if (r) renderCardState(r);
         scheduleSidebarRender();
         // 状态排序时，单卡状态变化也要重排
-        if (state.settings.splitViewActive || state.settings.activeGroup === ONLINE_GROUP_ID || state.settings.activeGroup === ONLINE_FAVORITES_GROUP_ID || state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID || state.settings.sortBy === 'status' || state.settings.filter?.hideOffline || state.settings.filter?.hidePrivate || state.settings.filter?.onlyOnline) scheduleGridRender();
+        if (state.settings.splitViewActive || state.settings.activeGroup === ONLINE_GROUP_ID || state.settings.activeGroup === ONLINE_FAVORITES_GROUP_ID || state.settings.sortBy === 'status' || state.settings.filter?.hideOffline || state.settings.filter?.hidePrivate || state.settings.filter?.onlyOnline) scheduleGridRender();
       }
     });
 
@@ -12187,18 +12295,18 @@
       requestAnimationFrame(applyFocusMainSizing);
     });
     EventBus.on('room:status', ({ id, status, extra }) => {
-      const room = tempRooms.find(item => item.id === id && item.onlineFollowing);
+      const room = findOnlineFollowingRoom(id);
       if (!room) return;
-      const previousStatus = room.lastStatus;
       room.lastStatus = status || room.lastStatus;
       if (status === 'online') {
         room.lastSeenOnline = Date.now();
-        if (previousStatus === 'offline') room.order = onlineFollowingNextOrder++;
       }
       if (status === 'private') room.privateLabel = String(extra?.label || room.privateLabel || 'Private');
       renderCardState(room);
-      scheduleSidebarRender();
-      if (store.state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID) scheduleGridRender();
+      if (store.state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID
+        && (store.state.settings.filter?.hideOffline || store.state.settings.filter?.hidePrivate || store.state.settings.filter?.onlyOnline)) {
+        scheduleGridRender();
+      }
     });
     EventBus.on('room:flash', (id) => {
       const c = cardMap.get(id);

@@ -102,6 +102,27 @@ for (const item of scripts) {
     if (!source.includes('async function unfollowOnlineFollowingRoom')) failures.push(`${item.file}: Online Following account unfollow action is missing`);
     if (!source.includes("t('opUnfollowAccount')")) failures.push(`${item.file}: Online Following card menu does not expose account unfollow`);
     if (!source.includes('onlineFollowingSuppressedUntil')) failures.push(`${item.file}: Online Following unfollow stale-sync suppression is missing`);
+    const fullscreenDblClickStart = source.indexOf("card.addEventListener('dblclick'");
+    const fullscreenDblClickEnd = source.indexOf("card.addEventListener('contextmenu'", fullscreenDblClickStart);
+    const fullscreenDblClickSource = fullscreenDblClickStart >= 0 && fullscreenDblClickEnd > fullscreenDblClickStart
+      ? source.slice(fullscreenDblClickStart, fullscreenDblClickEnd)
+      : '';
+    for (const required of ['e.preventDefault()', 'e.stopPropagation()', 'e.stopImmediatePropagation()', 'card.requestFullscreen()']) {
+      if (!fullscreenDblClickSource.includes(required)) failures.push(`${item.file}: Workshop double-click fullscreen guard is missing ${required}`);
+    }
+    if (!source.includes("if (document.fullscreenElement) return;\n      if (store.state.settings.viewMode === 'focus') applyFocusMainSizing();")) {
+      failures.push(`${item.file}: Workshop resize handler can reparent the fullscreen card`);
+    }
+    if (!source.includes("splitOnlineFollowing: 'Online Following'")) failures.push(`${item.file}: Split picker lacks Online Following`);
+    if (!source.includes("let rooms = mode === 'onlineFollowing' ? [...onlineFollowingRooms()] : [...store.state.rooms]")) {
+      failures.push(`${item.file}: Split picker does not source Online Following rooms`);
+    }
+    if (!source.includes("if (!s.rooms.some(room => room.id === id) && !runtimeSplitRoomAvailable(id)) return false")) {
+      failures.push(`${item.file}: Split state still rejects runtime Online Following rooms`);
+    }
+    if (!source.includes('const rooms = ids.map(findRoomAny).filter(Boolean)')) {
+      failures.push(`${item.file}: Split renderer cannot resolve Online Following rooms`);
+    }
     const cardOpsStart = source.indexOf('function openCardOpsMenu(');
     const cardOpsEnd = source.indexOf('function openMoveMenu(', cardOpsStart);
     const cardOpsSource = cardOpsStart >= 0 && cardOpsEnd > cardOpsStart ? source.slice(cardOpsStart, cardOpsEnd) : '';

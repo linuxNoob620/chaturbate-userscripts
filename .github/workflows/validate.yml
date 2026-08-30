@@ -16,5 +16,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+      - run: npm ci
       - run: node ./tools/validate-userscripts.mjs
       - run: node ./tools/test-github-sync.mjs
+      - run: npm run build
+      - run: node ./tools/test-extension-adapters.mjs

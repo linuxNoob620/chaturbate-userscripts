@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Ziggy Chaturbate Suite",
+  "version": "0.0.0",
+  "description": "Native desktop and mobile Rooms suite with MultiCam, Cam ARNA, Reloaded tools, mobile Clean View, recording, split view, and encrypted settings sync.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chaturbate.com/*",
+        "https://*.chaturbate.com/*"
+      ],
+      "js": [
+        "vendor/hls.min.js",
+        "content.js"
+      ],
+      "run_at": "document_end",
+      "all_frames": true
+    }
+  ]
+}

@@ -3,10 +3,16 @@
 !.gitignore
 !README.md
 !LICENSE
+!package.json
+!package-lock.json
 !Chaturbate MultiCam Pro + Cam ARNA.user.js
 !Chaturbate MultiCam Pro + Cam ARNA.meta.js
 !Chaturbate Desktop Mobile Comfort.user.js
 !Chaturbate Desktop Mobile Comfort.meta.js
+!extension/
+!extension/**
+!docs/
+!docs/**
 !tools/
 !tools/**
 !.github/

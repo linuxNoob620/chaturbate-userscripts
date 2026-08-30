@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.21
+// @version           16.5.23
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.21');
+  instanceMarker.setAttribute('data-suite-version', '16.5.23');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -682,20 +682,21 @@
       splitChoosePane: 'Choose pane to replace',
       splitReplacePane: (n, name) => `Replace pane ${n}: ${name}`,
       splitPickerTitle: (n) => `Choose model for pane ${n}`,
-      splitPickerSearch: 'Search saved models',
+      splitPickerSearch: 'Search models',
       splitQuickPreview: 'Quick preview',
       splitPreviewHint: 'Long-press a model or use its preview button.',
       splitPreviewUse: (n) => `Use in pane ${n}`,
       splitPreviewRefresh: 'Refresh preview',
       splitPreviewUnavailable: 'Preview unavailable',
       splitPreviewClose: 'Close preview',
+      splitOnlineFollowing: 'Online Following',
       splitOnlineFavorites: 'Online Favorites',
       splitOnline: 'Online',
       splitFavorites: 'Favorites',
       splitAllSaved: 'All Saved',
       splitOtherPane: 'Already in the other pane',
       splitCurrentPane: 'Already in this pane',
-      splitNoMatches: 'No matching saved models',
+      splitNoMatches: 'No matching models',
       splitReplace: 'Replace',
       splitPrevOnline: 'Previous online model',
       splitNextOnline: 'Next online model',
@@ -1047,13 +1048,14 @@
       splitChoosePane: '选择要替换的窗格',
       splitReplacePane: (n, name) => `替换窗格 ${n}：${name}`,
       splitPickerTitle: (n) => `为窗格 ${n} 选择主播`,
-      splitPickerSearch: '搜索已保存主播',
+      splitPickerSearch: '搜索主播',
       splitQuickPreview: '快速预览',
       splitPreviewHint: '长按主播或使用预览按钮。',
       splitPreviewUse: (n) => `用于窗格 ${n}`,
       splitPreviewRefresh: '刷新预览',
       splitPreviewUnavailable: '预览不可用',
       splitPreviewClose: '关闭预览',
+      splitOnlineFollowing: '在线关注',
       splitOnlineFavorites: '在线收藏',
       splitOnline: '在线',
       splitFavorites: '收藏',
@@ -1293,7 +1295,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.21',
+    version: '16.5.23',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -1578,12 +1580,17 @@
     state.rooms = [...merged.values()];
     return state;
   }
+  // Runtime-only Workshop rooms (currently Online Following) can participate
+  // in Split View without being copied into the user's saved-room library.
+  // The resolver remains false during initial state loading, so stale temporary
+  // selections are safely discarded after a full page reload.
+  let runtimeSplitRoomAvailable = () => false;
   function reconcileSplitState(state) {
     if (!state?.settings) return state;
     const validIds = new Set((state.rooms || []).map(room => normalizeUsername(room?.id)).filter(isLikelyUsername));
     const splitIds = uniq((Array.isArray(state.settings.splitRoomIds) ? state.settings.splitRoomIds : [])
       .map(normalizeUsername)
-      .filter(id => validIds.has(id)))
+      .filter(id => validIds.has(id) || runtimeSplitRoomAvailable(id)))
       .slice(0, 2);
     state.settings.splitRoomIds = splitIds;
     state.settings.splitRatio = clampInt(state.settings.splitRatio, 20, 80, 50);
@@ -2876,7 +2883,7 @@
         let changed = false;
         update(s => {
           reconcileSplitState(s);
-          if (!s.rooms.some(room => room.id === id)) return false;
+          if (!s.rooms.some(room => room.id === id) && !runtimeSplitRoomAvailable(id)) return false;
           const ids = [...s.settings.splitRoomIds];
           const otherSlot = slot === 0 ? 1 : 0;
           if (ids[otherSlot] === id || ids[slot] === id) return false;
@@ -2925,6 +2932,20 @@
           s.settings.splitAudioRoomId = null;
           s.settings.splitViewActive = false;
         }, 'settings:splitRoomIds,splitAudioRoomId,splitViewActive');
+      },
+      reconcileSplitSelection() {
+        let changed = false;
+        update(s => {
+          const beforeIds = JSON.stringify(s.settings.splitRoomIds || []);
+          const beforeActive = !!s.settings.splitViewActive;
+          const beforeAudio = s.settings.splitAudioRoomId || null;
+          reconcileSplitState(s);
+          changed = beforeIds !== JSON.stringify(s.settings.splitRoomIds || [])
+            || beforeActive !== !!s.settings.splitViewActive
+            || beforeAudio !== (s.settings.splitAudioRoomId || null);
+          return changed || false;
+        }, 'settings:splitRoomIds,splitViewActive,splitAudioRoomId');
+        return changed;
       },
 
       // ---- 设置 ----
@@ -8930,6 +8951,11 @@
     }
 
     window.addEventListener('resize', debounce(() => {
+      // Entering fullscreen resizes the viewport. Rebuilding the grid here
+      // reparents its cards, and browsers immediately leave fullscreen when
+      // the fullscreen element is moved in the DOM. The exit resize runs after
+      // fullscreenElement clears, so normal layout sizing still resumes then.
+      if (document.fullscreenElement) return;
       if (store.state.settings.viewMode === 'focus') applyFocusMainSizing();
       else renderGrid();
     }, 120));
@@ -9362,6 +9388,7 @@
       id = String(id || '');
       return savedRoomIndex.get(id) || findOnlineFollowingRoom(id) || tempRooms.find(r => r.id === id) || null;
     }
+    runtimeSplitRoomAvailable = id => !!findOnlineFollowingRoom(normalizeUsername(id));
     let onlineFollowingSyncBusy = false;
     let onlineFollowingLastSync = 0;
     let onlineFollowingInitialOrderReady = false;
@@ -9705,6 +9732,7 @@
         onlineFollowingRoomIndex.clear();
         nextFollowing.forEach(room => onlineFollowingRoomIndex.set(room.id, room));
         onlineFollowingRoomList = nextFollowing;
+        store.reconcileSplitSelection();
       }
       const nextIds = new Set(preserveMissing ? nextFollowing.map(item => item.id) : ids);
       oldIds.forEach(id => {
@@ -10083,10 +10111,14 @@
 
       card.addEventListener('dblclick', (e) => {
         if (e.target.closest('.icon-btn')) return;
+        // Cancel the browser/video element's native double-click action. Without
+        // this, the same gesture can request fullscreen here and immediately
+        // toggle it off again when the native default action runs.
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
         const transform = getVideoTransform(room.id);
         if (transform.zoom !== 1 || transform.x || transform.y) {
-          e.preventDefault();
-          e.stopPropagation();
           patchVideoTransform(room.id, { zoom: 1, x: 0, y: 0 });
           return;
         }
@@ -10180,8 +10212,9 @@
     function updateCardButtons(id) {
       const c = cardMap.get(id);
       if (!c) return;
-      const room = store.state.rooms.find(r => r.id === id);
-      const favorite = !!room && roomInGroup(room, FAVORITE_GROUP_ID);
+      const savedRoom = store.state.rooms.find(r => r.id === id);
+      const room = findRoomAny(id);
+      const favorite = !!savedRoom && roomInGroup(savedRoom, FAVORITE_GROUP_ID);
       if (c.favoriteBtn) {
         setElementHint(c.favoriteBtn, favorite ? t('opFavoriteRemove') : t('opFavoriteAdd'));
         c.favoriteBtn.classList.toggle('favorite-active', favorite);
@@ -10316,7 +10349,7 @@
 
     function handleAddRoomToSplit(roomId) {
       roomId = normalizeUsername(roomId);
-      if (!store.state.rooms.some(room => room.id === roomId)) return;
+      if (!findRoomAny(roomId)) return;
       const ids = [...store.state.settings.splitRoomIds];
       if (ids.includes(roomId)) {
         if (ids.length === 2) store.setSplitActive(true);
@@ -10363,12 +10396,12 @@
       slot = slot === 1 ? 1 : 0;
       const otherId = store.state.settings.splitRoomIds[slot === 0 ? 1 : 0] || null;
       openToolPanel(t('splitPickerTitle', slot + 1), (body, close) => {
-        let mode = 'onlineFavorites';
+        let mode = store.state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID ? 'onlineFollowing' : 'onlineFavorites';
         let previewRoom = null;
         let previewTimer = 0;
         let previewFallback = false;
         const search = $('input', { class: 'ctrl-input', type: 'search', placeholder: t('splitPickerSearch'), style: { width: '100%' } });
-        const tabs = $('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(4,minmax(0,1fr))', gap: '6px', margin: '10px 0' } });
+        const tabs = $('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(104px,1fr))', gap: '6px', margin: '10px 0' } });
         const list = $('div', { style: { display: 'grid', gap: '6px', maxHeight: 'min(58vh,520px)', overflowY: 'auto', paddingRight: '2px' } });
         const previewName = $('div', { class: 'split-preview-name' });
         const previewImage = $('img', { alt: '' });
@@ -10386,6 +10419,7 @@
           ]),
         ]);
         const modes = [
+          ['onlineFollowing', t('splitOnlineFollowing')],
           ['onlineFavorites', t('splitOnlineFavorites')],
           ['online', t('splitOnline')],
           ['favorites', t('splitFavorites')],
@@ -10470,12 +10504,14 @@
         const render = () => {
           const q = normalizeUsername(search.value || '');
           tabs.querySelectorAll('button').forEach(btn => btn.classList.toggle('primary', btn.dataset.mode === mode));
-          let rooms = [...store.state.rooms];
+          let rooms = mode === 'onlineFollowing' ? [...onlineFollowingRooms()] : [...store.state.rooms];
           if (mode === 'onlineFavorites') rooms = rooms.filter(room => roomInGroup(room, ONLINE_FAVORITES_GROUP_ID));
           else if (mode === 'online') rooms = rooms.filter(room => room.lastStatus === 'online');
           else if (mode === 'favorites') rooms = rooms.filter(room => roomInGroup(room, FAVORITE_GROUP_ID));
           if (q) rooms = rooms.filter(room => room.id.includes(q));
-          rooms.sort((a, b) => (b.lastStatus === 'online' ? 1 : 0) - (a.lastStatus === 'online' ? 1 : 0) || a.id.localeCompare(b.id));
+          if (mode !== 'onlineFollowing') {
+            rooms.sort((a, b) => (b.lastStatus === 'online' ? 1 : 0) - (a.lastStatus === 'online' ? 1 : 0) || a.id.localeCompare(b.id));
+          }
           list.replaceChildren();
           if (!rooms.length) {
             list.appendChild($('div', { class: 'roomgrid-modal-hint', style: { padding: '18px 4px' } }, t('splitNoMatches')));
@@ -11097,6 +11133,8 @@
       const inFav = currentRoom ? roomInGroup(currentRoom, FAVORITE_GROUP_ID) : false;
       if (currentRoom) {
         menu.appendChild(item(inFav ? '' : '', inFav ? t('opFavoriteRemove') : t('opFavoriteAdd'), () => store.toggleRoomInGroup(roomId, FAVORITE_GROUP_ID)));
+      }
+      if (currentRoom || followingRoom) {
         menu.appendChild(item('', t('opAddSplit'), () => handleAddRoomToSplit(roomId)));
       }
       menu.appendChild(item('', t('opScreenshot'), () => captureCardScreenshot(roomId)));
@@ -11814,17 +11852,31 @@
       roomId = normalizeUsername(roomId);
       if (!store.state.settings.splitRoomIds.includes(roomId)) return;
       store.setSplitAudio(roomId);
-      const room = store.state.rooms.find(item => item.id === roomId);
-      if (room?.muted) store.patchRoom(roomId, { muted: false });
+      const savedRoom = store.state.rooms.find(item => item.id === roomId);
+      const room = findRoomAny(roomId);
+      if (room?.muted) {
+        if (savedRoom) store.patchRoom(roomId, { muted: false });
+        else {
+          room.muted = false;
+          renderCardState(room);
+        }
+      }
       requestAnimationFrame(() => store.state.settings.splitRoomIds.forEach(applyMute));
     }
 
     function splitOnlineCycleIds(slot) {
       slot = slot === 1 ? 1 : 0;
       const otherId = store.state.settings.splitRoomIds[slot === 0 ? 1 : 0] || null;
-      return store.state.rooms
-        .filter(room => room.id !== otherId && roomInGroup(room, ONLINE_GROUP_ID))
-        .sort((a, b) => roomOrderInGroup(a, ONLINE_GROUP_ID) - roomOrderInGroup(b, ONLINE_GROUP_ID) || a.id.localeCompare(b.id))
+      const currentId = store.state.settings.splitRoomIds[slot] || null;
+      const useOnlineFollowing = store.state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID
+        || (!!findOnlineFollowingRoom(currentId) && !savedRoomIndex.has(currentId));
+      const rooms = useOnlineFollowing
+        ? [...onlineFollowingRooms()].filter(room => room.lastStatus === 'online')
+        : store.state.rooms
+          .filter(room => roomInGroup(room, ONLINE_GROUP_ID))
+          .sort((a, b) => roomOrderInGroup(a, ONLINE_GROUP_ID) - roomOrderInGroup(b, ONLINE_GROUP_ID) || a.id.localeCompare(b.id));
+      return rooms
+        .filter(room => room.id !== otherId)
         .map(room => room.id);
     }
 
@@ -11966,7 +12018,7 @@
     function renderSplitLayout() {
       reconcileSplitState(store.state);
       const ids = store.state.settings.splitRoomIds;
-      const rooms = ids.map(id => store.state.rooms.find(room => room.id === id)).filter(Boolean);
+      const rooms = ids.map(findRoomAny).filter(Boolean);
       if (rooms.length !== 2) {
         store.setSplitActive(false);
         return;

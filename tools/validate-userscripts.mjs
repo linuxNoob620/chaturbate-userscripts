@@ -158,6 +158,10 @@ for (const item of scripts) {
     if (!source.includes("finalizeJob(job, 'storage-error')")) failures.push(`${item.file}: storage failures do not automatically finalize partial recordings`);
     if (!source.includes("withTimeout(job.writeQueue, 20000")) failures.push(`${item.file}: recorder finalization write timeout is missing`);
     if (!source.includes('async function convertRecordingToMp4(blob, job)')) failures.push(`${item.file}: recorder MP4 finalization conversion is missing`);
+    if (!source.includes('async function ensureRecorderMediaToolkit()') || !source.includes("GM_getResourceText('mediabunny')")) {
+      failures.push(`${item.file}: recorder MP4 converter is not loaded lazily from the userscript resource`);
+    }
+    if (source.includes('// @require           https://unpkg.com/mediabunny')) failures.push(`${item.file}: eager Mediabunny @require can block userscript startup`);
     if (!source.includes("codec: 'avc'") || !source.includes("codec: 'aac'")) failures.push(`${item.file}: recorder MP4 conversion codecs are missing`);
     if (source.includes("confirm(t('recordingConsent'))")) failures.push(`${item.file}: recording still displays the removed consent warning`);
     if (!source.includes("findDesktopNavigationSlot('private')")) failures.push(`${item.file}: desktop Workshop navigation does not replace Private Shows`);

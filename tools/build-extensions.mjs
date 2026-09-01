@@ -151,10 +151,15 @@ const metadata = parseUserscript(source);
 if (!/^\d+(?:\.\d+){1,3}$/.test(metadata.version)) throw new Error(`Unsupported extension version: ${metadata.version}`);
 const expectedRequires = [
   'https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js',
-  'https://unpkg.com/mediabunny@1.55.5/dist/bundles/mediabunny.min.cjs',
 ];
 if (JSON.stringify(metadata.requires) !== JSON.stringify(expectedRequires)) {
   throw new Error('The userscript @require dependency changed; audit it before rebuilding extensions');
+}
+if (!source.includes('// @resource          mediabunny https://unpkg.com/mediabunny@1.55.5/dist/bundles/mediabunny.min.cjs')) {
+  throw new Error('The userscript Mediabunny resource changed; audit it before rebuilding extensions');
+}
+if (!source.includes('// @grant             GM_getResourceText')) {
+  throw new Error('The userscript lazy Mediabunny resource grant is missing');
 }
 
 const preambleTemplate = await readFile(path.join(extensionRoot, 'shared', 'content-preamble.js'), 'utf8');

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.30
+// @version           16.5.31
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -12,10 +12,11 @@
 // @match             https://chaturbate.com/*
 // @match             https://*.chaturbate.com/*
 // @require           https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js
-// @require           https://unpkg.com/mediabunny@1.55.5/dist/bundles/mediabunny.min.cjs
+// @resource          mediabunny https://unpkg.com/mediabunny@1.55.5/dist/bundles/mediabunny.min.cjs
 // @grant             GM_xmlhttpRequest
 // @grant             GM_getValue
 // @grant             GM_setValue
+// @grant             GM_getResourceText
 // @grant             GM_download
 // @grant             GM_openInTab
 // @grant             window.focus
@@ -95,7 +96,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.30');
+  instanceMarker.setAttribute('data-suite-version', '16.5.31');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1297,7 +1298,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.30',
+    version: '16.5.31',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -4345,6 +4346,8 @@
       return wait > 0 ? new Promise(resolve => setTimeout(resolve, wait)) : Promise.resolve();
     }
 
+    let recorderMediaToolkitPromise = null;
+
     function recorderMediaToolkit() {
       try {
         if (typeof Mediabunny !== 'undefined' && Mediabunny) return Mediabunny;
@@ -4352,8 +4355,28 @@
       } catch (_) { return null; }
     }
 
+    async function ensureRecorderMediaToolkit() {
+      const existing = recorderMediaToolkit();
+      if (existing) return existing;
+      if (recorderMediaToolkitPromise) return recorderMediaToolkitPromise;
+      recorderMediaToolkitPromise = Promise.resolve().then(() => {
+        if (typeof GM_getResourceText !== 'function') throw new Error('MP4 converter resource API unavailable');
+        const source = GM_getResourceText('mediabunny');
+        if (!source) throw new Error('MP4 converter resource is empty');
+        const load = new Function(`${source}\n;return typeof Mediabunny === 'object' ? Mediabunny : null;`);
+        const media = load();
+        if (!media) throw new Error('MP4 converter resource did not initialize');
+        try { globalThis.Mediabunny = media; } catch (_) {}
+        return media;
+      }).catch(error => {
+        recorderMediaToolkitPromise = null;
+        throw error;
+      });
+      return recorderMediaToolkitPromise;
+    }
+
     async function convertRecordingToMp4(blob, job) {
-      const media = recorderMediaToolkit();
+      const media = await ensureRecorderMediaToolkit();
       if (!media) throw new Error('MP4 converter unavailable');
       const {
         ALL_FORMATS, BlobSource, BufferTarget, Conversion, Input,

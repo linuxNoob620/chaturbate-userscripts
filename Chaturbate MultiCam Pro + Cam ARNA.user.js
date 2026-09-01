@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.33
+// @version           16.5.34
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -96,7 +96,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.33');
+  instanceMarker.setAttribute('data-suite-version', '16.5.34');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1298,7 +1298,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.33',
+    version: '16.5.34',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3827,7 +3827,13 @@
     document.title = RECORDER_TAB_TITLE;
     try { window.name = RECORDER_HUB_WINDOW_NAME; } catch (_) {}
     document.documentElement.classList.add('ziggy-recorder-hub');
-    document.body.replaceChildren();
+    const hideRecorderNativeChild = child => {
+      if (!child || child.classList?.contains('rec-hub')) return;
+      child.hidden = true;
+      child.setAttribute?.('aria-hidden', 'true');
+      child.style?.setProperty('display', 'none', 'important');
+    };
+    [...document.body.children].forEach(hideRecorderNativeChild);
 
     const hubInstanceId = crypto.randomUUID?.() || `hub-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     let ownsRecorder = claimRecorderOwner(hubInstanceId);
@@ -3854,7 +3860,7 @@
     const service = createRoomService(hubStore);
 
     document.head.appendChild($('style', { html: trustedHtml(`
-      html.ziggy-recorder-hub,html.ziggy-recorder-hub body{margin:0;min-height:100%;max-width:100%;overflow-x:hidden;background:#17202a;color:#f1f1f1;font-family:UbuntuRegular,Arial,sans-serif}
+      html.ziggy-recorder-hub,html.ziggy-recorder-hub body{box-sizing:border-box;margin:0;width:100%!important;min-width:0!important;min-height:100%;max-width:100%!important;overflow-x:hidden!important;background:#17202a;color:#f1f1f1;font-family:UbuntuRegular,Arial,sans-serif}
       .rec-hub{box-sizing:border-box;max-width:980px;margin:0 auto;padding:24px}.rec-head{display:flex;gap:14px;align-items:center;justify-content:space-between;border-bottom:1px solid #2d3e50;padding-bottom:18px}
       .rec-title{font:700 24px/1.2 UbuntuMedium,UbuntuRegular,Arial,sans-serif}.rec-sub{color:#b3b3b3;font-size:13px;margin-top:5px}.rec-actions{display:flex;gap:8px;flex-wrap:wrap}
       .rec-btn{box-sizing:border-box;min-height:38px;border:1px solid #2d3e50;border-radius:4px;background:#202c39;color:#f1f1f1;padding:0 14px;cursor:pointer}.rec-btn:hover{background:#253648}.rec-btn.danger{background:#8b1d1d;border-color:#a52a2a}.rec-btn.primary{background:#0c6a93;border-color:#0c6a93}
@@ -3896,7 +3902,7 @@
       document.documentElement.classList.add('ziggy-recorder-hub');
       if (!shell.isConnected) document.body.appendChild(shell);
       [...document.body.children].forEach(child => {
-        if (child !== shell) child.remove();
+        if (child !== shell) hideRecorderNativeChild(child);
       });
     };
     const recorderShellGuard = new MutationObserver(enforceRecorderShell);

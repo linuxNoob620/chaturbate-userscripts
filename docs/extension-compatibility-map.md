@@ -1,6 +1,6 @@
 # Extension compatibility map
 
-This document records the compatibility audit for `Chaturbate MultiCam Pro + Cam ARNA.user.js` version 16.5.33. The userscript remains the reference implementation. Extension builds copy its complete post-metadata body verbatim between explicit parity markers.
+This document records the compatibility audit for `Chaturbate MultiCam Pro + Cam ARNA.user.js` version 16.5.34. The userscript remains the reference implementation. Extension builds copy its complete post-metadata body verbatim between explicit parity markers.
 
 ## Userscript metadata
 

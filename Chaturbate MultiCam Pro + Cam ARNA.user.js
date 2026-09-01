@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.32
+// @version           16.5.33
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -96,7 +96,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.32');
+  instanceMarker.setAttribute('data-suite-version', '16.5.33');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1298,7 +1298,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.32',
+    version: '16.5.33',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3818,6 +3818,11 @@
   window.__ziggyUnifiedRecorder = UnifiedRecorder;
 
   function initRecorderHub() {
+    if (!document.body) {
+      document.addEventListener('DOMContentLoaded', initRecorderHub, { once: true });
+      return;
+    }
+    if (document.querySelector('.rec-hub')) return;
     stopAllPageMedia();
     document.title = RECORDER_TAB_TITLE;
     try { window.name = RECORDER_HUB_WINDOW_NAME; } catch (_) {}
@@ -3882,6 +3887,21 @@
       $('div', { class: 'rec-hidden-media', id: 'rec-hidden-media' }),
     ]);
     document.body.appendChild(shell);
+    const enforceRecorderShell = () => {
+      if (!isRecorderHubRoute()) {
+        recorderShellGuard.disconnect();
+        return;
+      }
+      document.title = RECORDER_TAB_TITLE;
+      document.documentElement.classList.add('ziggy-recorder-hub');
+      if (!shell.isConnected) document.body.appendChild(shell);
+      [...document.body.children].forEach(child => {
+        if (child !== shell) child.remove();
+      });
+    };
+    const recorderShellGuard = new MutationObserver(enforceRecorderShell);
+    recorderShellGuard.observe(document.body, { childList: true });
+    addEventListener('load', () => setTimeout(enforceRecorderShell, 0), { once: true });
 
     function formatDuration(ms) {
       const seconds = Math.max(0, Math.floor(Number(ms || 0) / 1000));

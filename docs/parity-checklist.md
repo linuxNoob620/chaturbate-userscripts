@@ -10,7 +10,7 @@ Record **Pass**, **Fail** or **Blocked**, plus a screenshot/console/network note
 
 ## Installation and startup
 
-- [ ] Version/name shown as 16.5.32 / Ziggy Chaturbate Suite
+- [ ] Version/name shown as 16.5.33 / Ziggy Chaturbate Suite
 - [ ] Executes at document end on `chaturbate.com` and subdomains
 - [ ] Executes in frames exactly where the userscript does
 - [ ] Does not inject twice

@@ -65,17 +65,17 @@ for (const item of scripts) {
     const menuStart = source.indexOf('    function moreoptions(){');
     const menuEnd = source.indexOf('\n    function ', menuStart + 10);
     const menuSource = menuStart >= 0 && menuEnd > menuStart ? source.slice(menuStart, menuEnd) : '';
-    if (!menuSource) failures.push(`${item.file}: Reloaded menu function was not found`);
+    if (!menuSource) failures.push(`${item.file}: Suite menu function was not found`);
     if (/\bupdateGithubSyncMenuLabel\s*\(/.test(menuSource)) {
-      failures.push(`${item.file}: Reloaded menu calls a private MultiCam helper and can leave the wait overlay active`);
+      failures.push(`${item.file}: Suite menu calls a private Workshop helper and can leave the wait overlay active`);
     }
-    if (!menuSource.includes('isGithubSyncConfigured')) failures.push(`${item.file}: safe GitHub status bridge is missing from Reloaded menu`);
-    if (!source.includes('ziggy-mobile-reloaded-backdrop')) failures.push(`${item.file}: native mobile Reloaded menu is missing`);
-    if (!source.includes('mobileCleanView: captureMobileCleanViewSettings()')) failures.push(`${item.file}: Mobile Clean View backup component is missing`);
-    if (!source.includes('onclick: openCurrentRoomRecu')) failures.push(`${item.file}: RoomGrid Recu.me button is missing`);
+    if (!menuSource.includes('isGithubSyncConfigured')) failures.push(`${item.file}: safe GitHub status bridge is missing from Suite menu`);
+    if (!source.includes('ziggy-mobile-reloaded-backdrop')) failures.push(`${item.file}: native mobile Suite menu is missing`);
+    if (!source.includes('mobileCleanView: captureMobileCleanViewSettings()')) failures.push(`${item.file}: mobile-view backup component is missing`);
+    if (!source.includes('onclick: openCurrentRoomRecu')) failures.push(`${item.file}: Rooms Recu.me button is missing`);
     if (!source.includes('https://recu.me/performer/${encodeURIComponent(room)}')) failures.push(`${item.file}: Rooms Recu.me URL is not tied to the active model`);
-    if (!source.includes('Integrated component: Ziggy Mobile Clean View')) failures.push(`${item.file}: integrated Mobile Clean View runtime is missing`);
-    if (!source.includes("const supported = isNativeMobileSite() && !isBlockedPage();")) failures.push(`${item.file}: integrated Mobile Clean View is not gated to native mobile`);
+    if (!source.includes('Integrated Suite mobile-view component')) failures.push(`${item.file}: integrated mobile-view runtime is missing`);
+    if (!source.includes("const supported = isNativeMobileSite() && !isBlockedPage();")) failures.push(`${item.file}: integrated mobile view is not gated to native mobile`);
     if (!source.includes("fullscreen: 'ziggy-mobile-clean-view:fullscreen'")) failures.push(`${item.file}: Suite-to-Clean-View fullscreen bridge is missing`);
     if (!source.includes("const INSTANCE_MARKER_ID = 'ziggy-chaturbate-suite-runtime'")) failures.push(`${item.file}: cross-sandbox duplicate runtime guard is missing`);
     if (!source.includes("id: 'roomgrid-native-trigger'")) failures.push(`${item.file}: native desktop RoomGrid trigger is missing`);
@@ -126,7 +126,7 @@ for (const item of scripts) {
     for (const required of ['e.preventDefault()', 'e.stopPropagation()', 'e.stopImmediatePropagation()', 'card.requestFullscreen()']) {
       if (!fullscreenDblClickSource.includes(required)) failures.push(`${item.file}: Workshop double-click fullscreen guard is missing ${required}`);
     }
-    if (!source.includes("if (document.fullscreenElement) return;\n      if (store.state.settings.viewMode === 'focus') applyFocusMainSizing();")) {
+    if (!source.includes("if (document.fullscreenElement) return;\n      renderGrid();")) {
       failures.push(`${item.file}: Workshop resize handler can reparent the fullscreen card`);
     }
     if (!source.includes("splitOnlineFollowing: 'Online Following'")) failures.push(`${item.file}: Split picker lacks Online Following`);
@@ -173,12 +173,12 @@ for (const item of scripts) {
     }
     if (source.includes("confirm(t('recordingConsent'))")) failures.push(`${item.file}: recording still displays the removed consent warning`);
     if (!source.includes("findDesktopNavigationSlot('private')")) failures.push(`${item.file}: desktop Workshop navigation does not replace Private Shows`);
-    if (!source.includes("const WORKSHOP_TAB_TITLE = 'Ziggy Room Suite'")) failures.push(`${item.file}: unique Workshop tab title is missing`);
+    if (!source.includes("const WORKSHOP_TAB_TITLE = 'Ziggy Chaturbate Suite · Workshop'")) failures.push(`${item.file}: unique Workshop tab title is missing`);
     if (!source.includes("function canonicalWorkshopUrl()")) failures.push(`${item.file}: canonical Workshop URL helper is missing`);
     if (!source.includes('ROOM_TAB_RESERVED_PATHS')) failures.push(`${item.file}: integrated model-room tab renamer is missing`);
     if (!source.includes('nativeColorCounts')) failures.push(`${item.file}: Workshop navigation does not inherit a normal native nav item`);
     if (!source.includes('document.body.classList.add(\'rg-control-drawer-open\')')) failures.push(`${item.file}: Workshop drawer scroll isolation is missing`);
-    if (!source.includes('if (!isMobileDevice() || isBlockedPage()) return;')) failures.push(`${item.file}: Mobile Clean View still starts on blocked Workshop routes`);
+    if (!source.includes('if (!isMobileDevice() || isBlockedPage()) return;')) failures.push(`${item.file}: mobile view still starts on blocked Workshop routes`);
     if ((source.match(/^\/\/ ==UserScript==$/gm) || []).length !== 1) failures.push(`${item.file}: embedded component added an extra userscript metadata block`);
     const mobileStop = source.indexOf('if (!document.getElementById("desktop-spa-header")){return;}');
     const reloadedStyle = source.indexOf('    setgenstyle();', mobileStop);

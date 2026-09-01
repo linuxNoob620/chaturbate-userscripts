@@ -1,6 +1,6 @@
 # Extension compatibility map
 
-This document records the compatibility audit for `Chaturbate MultiCam Pro + Cam ARNA.user.js` version 16.5.35. The userscript remains the reference implementation. Extension builds copy its complete post-metadata body verbatim between explicit parity markers.
+This document records the compatibility audit for `Chaturbate MultiCam Pro + Cam ARNA.user.js` version 16.6.0. The userscript remains the reference implementation. Extension builds copy its complete post-metadata body verbatim between explicit parity markers.
 
 ## Userscript metadata
 
@@ -23,10 +23,10 @@ The build fails if the HLS URL/version changes without an explicit audit, or if 
 | API | Actual use | Extension adapter |
 | --- | --- | --- |
 | `GM_info` | Script name/version in Suite UI | Frozen object generated from authoritative metadata |
-| `GM_getValue` | GitHub sync configuration, Cam ARNA settings and Mobile Clean View settings | Synchronous in-memory view preloaded from `storage.local` before the userscript body starts |
+| `GM_getValue` | GitHub sync configuration, Archive Search settings and mobile-view settings | Synchronous in-memory view preloaded from `storage.local` before the userscript body starts |
 | `GM_setValue` | Same settings domains | Updates the synchronous cache immediately and persists the unchanged value/type to `storage.local` |
-| `GM_xmlhttpRequest` | GitHub Contents API, profile/archive checks, translation, CamSoda, Stripchat, Streamate, BongaCams, CAM4 and MyFreeCams lookups | Narrow message bridge to an extension background fetch; preserves method, URL, headers, body, timeout, anonymous/credential mode, response status/text/headers/final URL and load/error/timeout/abort callbacks used by the script |
-| `GM_download` | Reloaded snapshot JPEG supplied as a `Blob` | Hidden same-document download anchor backed by an object URL, preserving the filename and load/error callbacks used by the script |
+| `GM_xmlhttpRequest` | GitHub Contents API, Archive Search checks, translation, CamSoda, Stripchat, Streamate, BongaCams, CAM4 and MyFreeCams lookups | Narrow message bridge to an extension background fetch; preserves method, URL, headers, body, timeout, anonymous/credential mode, response status/text/headers/final URL and load/error/timeout/abort callbacks used by the script |
+| `GM_download` | Suite snapshot JPEG supplied as a `Blob` | Hidden same-document download anchor backed by an object URL, preserving the filename and load/error callbacks used by the script |
 | `GM_openInTab` | Model pages and Recorder Hub, including background-tab behavior | Background `tabs.create`; preserves `active`, `insert` and `setParent` options used by the script and exposes a close handle |
 | `window.focus` | Existing userscript behavior | Native content-script `window.focus`; no adapter |
 
@@ -55,7 +55,7 @@ These require no adapter and remain byte-for-byte unchanged:
 - `MediaRecorder`, `Blob`, object URLs and automatic downloads
 - fullscreen and Picture-in-Picture APIs
 - video/audio state, canvas snapshots and Web Audio behavior
-- responsive desktop/mobile detection and Mobile Clean View
+- responsive desktop/mobile detection and the integrated mobile view
 - iframes and dynamically created elements
 
 ## Persistent data

@@ -10,7 +10,7 @@ Record **Pass**, **Fail** or **Blocked**, plus a screenshot/console/network note
 
 ## Installation and startup
 
-- [ ] Version/name shown as 16.5.35 / Ziggy Chaturbate Suite
+- [ ] Version/name shown as 16.6.0 / Ziggy Chaturbate Suite
 - [ ] Executes at document end on `chaturbate.com` and subdomains
 - [ ] Executes in frames exactly where the userscript does
 - [ ] Does not inject twice
@@ -24,7 +24,7 @@ Record **Pass**, **Fail** or **Blocked**, plus a screenshot/console/network note
 - [ ] Native Suite/skull menu placement, opening, closing, scrolling and hover persistence
 - [ ] Menu sections, rows, switches, buttons, status text and version are identical
 - [ ] Desktop room page defaults to theater mode under the same conditions
-- [ ] Workshop tab title remains `Ziggy Room Suite`; room tab naming matches
+- [ ] Workshop tab title remains `Ziggy Chaturbate Suite · Workshop`; room tab naming matches
 - [ ] Main page room-card additions and ban action match
 - [ ] Banning updates the same ignored-room data and triggers only the existing configured backup behavior
 - [ ] Navigation, refresh, history changes and Chaturbate dynamic page updates remount exactly once
@@ -62,7 +62,7 @@ Record **Pass**, **Fail** or **Blocked**, plus a screenshot/console/network note
 - [ ] Online Favorites and saved-room monitoring match
 - [ ] Add room, add favorite, delete room, group membership and custom-group operations persist identically
 - [ ] Search, visible-count selection, layout selection and refresh-all match
-- [ ] Grid, Phone, Focus and Split View behavior match
+- [ ] Grid, Phone and Split View behavior match; removed Focus state migrates to Grid
 - [ ] Double-clicking a Workshop card enters fullscreen once and remains fullscreen
 - [ ] Online Following rooms can enter Split View without being added to saved/custom groups
 - [ ] Card overflow menu flips above/below to remain visible and scrollable
@@ -89,14 +89,14 @@ Record **Pass**, **Fail** or **Blocked**, plus a screenshot/console/network note
 - [ ] Brief connection failure reconnects without premature finalization
 - [ ] Offline monitoring stops after the same ten-minute threshold
 - [ ] Stop changes the Hub entry to stopped/finalizing with matching progress
-- [ ] Automatic final save filename, model/date/time and WebM format match
+- [ ] Automatic final save filename and model/date/time match; final output is MP4 with a recoverable WebM fallback if conversion fails
 - [ ] Closing Workshop does not stop recording while another Chaturbate page remains open
 - [ ] Stop-all and per-session controls match
 - [ ] OPFS/temporary-part cleanup and stale-session recovery match
 
-## Cam ARNA and external room tools
+## Archive Search and external room tools
 
-- [ ] Cam ARNA opens from the same native Suite surface
+- [ ] Archive Search opens from the same native Suite surface
 - [ ] Search targets, model-name handling, result ordering and statuses match
 - [ ] Archive/profile checks return the same found/not-found result for identical targets
 - [ ] CamSoda, Stripchat, Streamate, BongaCams, CAM4 and MyFreeCams checks match
@@ -104,9 +104,9 @@ Record **Pass**, **Fail** or **Blocked**, plus a screenshot/console/network note
 - [ ] Anonymous requests omit credentials where the userscript does
 - [ ] Timeouts and service errors render the same messages
 
-## Reloaded tools
+## Playback and chat tools
 
-- [ ] Reloaded Tools appears on all the same eligible room states, including chat variations
+- [ ] Playback and Chat appears on all the same eligible room states, including chat variations
 - [ ] Info, Clean, Chat and Video sections and selected state match
 - [ ] Room info reload and ban/ignored-room actions match
 - [ ] Every preference toggle/default/persistence behavior matches
@@ -126,16 +126,16 @@ Record **Pass**, **Fail** or **Blocked**, plus a screenshot/console/network note
 - [ ] Workshop-only automatic import timing and freshness check match
 - [ ] Automatic export triggers only for the same ban/add-room/settings events
 - [ ] Local backup download and local import match
-- [ ] Recorder, chat, banned-room, Reloaded, Workshop and Mobile Clean View settings are included identically
+- [ ] Recorder, chat, banned-room, browsing, Workshop and mobile-view settings are included identically
 - [ ] No credentials/passphrases enter exported settings
 
-## Mobile site and Mobile Clean View
+## Mobile site and mobile view
 
 - [ ] Mobile-only gate matches the native mobile site and remains inactive on desktop resizing alone
-- [ ] Native mobile tab order is Bio, RoomGrid/Rooms and More Rooms, with Tokens in the three-dot menu
+- [ ] Native mobile tab order is Bio, Rooms and More Rooms, with Tokens in the three-dot menu
 - [ ] Rooms replaces the intended native mobile tab without disturbing Chat/Bio behavior
 - [ ] Mobile Rooms menu, internal scrolling and page scroll lock match
-- [ ] Mobile Workshop top bar is always reachable and Window Focus/removed mode remains absent
+- [ ] Mobile Workshop top bar is always reachable and removed Focus mode remains absent
 - [ ] Mobile toolbar, group drawer, card sizing, menus and pagination match
 - [ ] Chat hiding, clean video view, Fit/Fill and restoration match
 - [ ] Double-click/touch fullscreen entry and exit match
@@ -167,7 +167,7 @@ Record **Pass**, **Fail** or **Blocked**, plus a screenshot/console/network note
 | Workshop Online Following | Pending | Pending | Pending | |
 | Rooms dock/menu | Pending | Pending | Pending | |
 | Recorder Hub | Pending | Pending | Pending | |
-| Reloaded tools | Pending | Pending | Pending | |
+| Playback and chat tools | Pending | Pending | Pending | |
 | GitHub/local settings | Pending | Pending | Pending | Destructive cloud writes should use a controlled fixture or explicit user action |
 | Native mobile emulation | Pending | Pending | Pending | Real-phone touch remains a separate final check |
 | Console/network errors | Pending | Pending | Pending | |

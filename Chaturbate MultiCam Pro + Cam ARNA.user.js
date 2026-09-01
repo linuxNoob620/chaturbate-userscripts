@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.35
+// @version           16.6.0
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
 // @downloadURL       https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.user.js
-// @description       Native desktop and mobile Rooms suite with MultiCam, Cam ARNA, Reloaded tools, mobile Clean View, recording, split view, and encrypted settings sync.
+// @description       One native desktop and mobile Chaturbate Suite with Rooms, Workshop, recording, archive search, playback and chat tools, split view, and encrypted settings sync.
 // @author            Ziggy
 // @license           MIT
 // @match             https://chaturbate.com/*
@@ -78,6 +78,25 @@
  * SOFTWARE.
  */
 
+(function suiteFileRuntime() {
+  'use strict';
+
+  // Own the complete bundled runtime, not just its first component. A DOM
+  // marker is visible across Tampermonkey sandboxes and extension worlds, so a
+  // stale or duplicate installation cannot start the legacy or mobile sections
+  // after the primary Suite section has already declined to mount.
+  if (window.top !== window.self && window.name === 'ziggy-following-sync-frame') return;
+  const FILE_INSTANCE_MARKER_ID = 'ziggy-chaturbate-suite-file-runtime';
+  const LEGACY_INSTANCE_MARKER_ID = 'ziggy-chaturbate-suite-runtime';
+  if (document.getElementById(FILE_INSTANCE_MARKER_ID) || document.getElementById(LEGACY_INSTANCE_MARKER_ID)) {
+    try { console.warn('[Ziggy Suite] duplicate bundled runtime blocked'); } catch (_) {}
+    return;
+  }
+  const fileInstanceMarker = document.createElement('meta');
+  fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.0');
+  (document.head || document.documentElement).appendChild(fileInstanceMarker);
+
 (function () {
   'use strict';
 
@@ -91,23 +110,23 @@
   // property alone is not.
   const INSTANCE_MARKER_ID = 'ziggy-chaturbate-suite-runtime';
   if (document.getElementById(INSTANCE_MARKER_ID)) {
-    try { console.warn('[RoomGrid] duplicate userscript installation blocked'); } catch (_) {}
+    try { console.warn('[Ziggy Suite] duplicate userscript installation blocked'); } catch (_) {}
     return;
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.35');
+  instanceMarker.setAttribute('data-suite-version', '16.6.0');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
-    try { console.warn('[RoomGrid] duplicate userscript instance blocked'); } catch (_) {}
+    try { console.warn('[Ziggy Suite] duplicate userscript instance blocked'); } catch (_) {}
     return;
   }
   window[INSTANCE_KEY] = true;
 
   /* Integrated room-tab titles. Workshop always has one canonical URL/title. */
-  const WORKSHOP_TAB_TITLE = 'Ziggy Room Suite';
-  const RECORDER_TAB_TITLE = 'Ziggy Recorder Hub';
+  const WORKSHOP_TAB_TITLE = 'Ziggy Chaturbate Suite · Workshop';
+  const RECORDER_TAB_TITLE = 'Ziggy Chaturbate Suite · Recorder';
   const ROOM_TAB_RESERVED_PATHS = new Set([
     'accounts', 'affiliate', 'affiliates', 'apps', 'auth', 'blog', 'contest',
     'contests', 'couple-cams', 'discover', 'female-cams', 'followed-cams',
@@ -153,12 +172,15 @@
   canonicalizeWorkshopRoute();
   window.__ziggySuiteTabRenamerIntegrated = true;
   const suiteTitleObserver = new MutationObserver(enforceSuiteTabTitle);
-  suiteTitleObserver.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+  const suiteTitleNode = document.querySelector('title');
+  if (suiteTitleNode) suiteTitleObserver.observe(suiteTitleNode, { childList: true, characterData: true, subtree: true });
   for (const eventName of ['readystatechange', 'DOMContentLoaded', 'pageshow', 'popstate', 'hashchange']) {
     const target = ['pageshow', 'popstate', 'hashchange'].includes(eventName) ? window : document;
     target.addEventListener(eventName, () => { canonicalizeWorkshopRoute(); enforceSuiteTabTitle(); });
   }
-  setInterval(enforceSuiteTabTitle, 750);
+  // Title changes are observed directly; a slow fallback covers sites that
+  // replace the <title> element itself without watching the entire document.
+  setInterval(enforceSuiteTabTitle, 5000);
   enforceSuiteTabTitle();
 
   // Desktop room pages default to Chaturbate's own theater layout. This only
@@ -331,9 +353,7 @@
       focusAdd: '/',
       refreshAll: 'r',
       gridView: 'g',
-      focusView: 'f',
       pureMode: 'alt+p',
-      focusThumbs: 'alt+t',
       recordingCenter: 'alt+shift+c',
       recordPage: 'alt+shift+r',
     };
@@ -560,7 +580,7 @@
   const I18N = {
     en: {
       // ---- workstation chrome ----
-      title: 'Ziggy Room Suite',
+      title: 'Ziggy Chaturbate Suite',
       appTagline: 'All-in-one multiview workstation for rooms, recording, alerts, screenshots, reconnects, and data tools.',
       addPlaceholder: 'Username ↵',
       searchPlaceholder: 'Search rooms',
@@ -587,7 +607,6 @@
       notifyTitle: 'Desktop notification + card flash when a model goes online',
       collapseSidebar: '',
       viewGrid: 'Grid',
-      viewFocus: 'Focus',
       viewPhone: 'Phone',
       viewSplit: 'Split',
       viewModeLabel: 'Layout',
@@ -598,9 +617,6 @@
       pureModeOn: 'Clean mode on',
       pureModeOff: 'Exit clean mode',
       pureModeHint: 'Temporarily hide all controls and overlays. Shortcut: Alt+P / Alt+C. Press Esc to exit.',
-      focusThumbsShow: 'Show thumbnails',
-      focusThumbsHide: 'Hide thumbnails',
-      focusThumbsHint: 'Show or hide the thumbnail rail in Focus mode. Shortcut: Alt+T.',
       videoFitContain: 'Fit: full image',
       videoFitCover: 'Fit: fill window',
       videoFitHint: 'Switch between full image and cropped fill.',
@@ -618,9 +634,6 @@
       hintVolume: 'Global volume. Per-room mute is still respected.',
       hintGridSize: 'Base tile size in grid view',
       hintSort: 'Sort rooms in the current group',
-      hintMainRatio: 'Main-screen height in Focus mode. You can also drag the separator.',
-      hintMainAspect: 'Main-screen aspect ratio in Focus mode',
-      hintThumbSize: 'Thumbnail width in Focus mode',
       hintGroupTab: (n) => `Switch to ${n}. Drag rooms here to add them to this group.`,
       hintOnlineFavoritesTab: 'Show favorite rooms that are online now.',
       hintOnlineFollowingTab: 'Live rooms you follow. This view refreshes automatically, stays alphabetical, and streams at up to 480p.',
@@ -773,23 +786,21 @@
       shortcutPanel: 'Shortcuts',
       shortcutCaptureHint: 'Click a field and press the new shortcut. Backspace clears that field.',
       resetShortcuts: 'Reset shortcuts',
-      shortcutFocusAdd: 'Focus add box',
+      shortcutFocusAdd: 'Activate username input',
       shortcutRefreshAll: 'Refresh all',
       shortcutGridView: 'Grid view',
-      shortcutFocusView: 'Focus view',
       shortcutPureMode: 'Clean mode',
-      shortcutFocusThumbs: 'Toggle thumbnails',
       shortcutRecordingCenter: 'Recording center',
       shortcutRecordPage: 'Record visible models',
       settingsCenter: 'Settings',
       settingsCenterHint: 'Layout, playback, recording, shortcuts, and settings backup',
-      settingsOnlyHint: 'One backup contains the MultiCam model library, groups, layout, playback, recording, filters, notifications, and shortcuts, plus Reloaded and Mobile Clean View settings. Import replaces the current MultiCam model library with the one in the backup.',
+      settingsOnlyHint: 'One backup contains the complete Suite library, groups, layout, playback, recording, filters, notifications, shortcuts, and mobile-view settings. Import replaces the current Suite model library with the one in the backup.',
       settingsExport: 'Export all Suite settings to GitHub',
       settingsImport: 'Import all Suite settings from GitHub',
-      settingsImported: 'MultiCam, Reloaded, and Mobile Clean View settings imported',
-      settingsImportedLegacy: 'Older settings-only backup imported; the current MultiCam model list and groups were kept',
-      settingsImportConfirm: 'Import this backup? The current MultiCam model list and groups will be deleted and replaced by the list in this file. The current MultiCam configuration will be backed up first.',
-      settingsImportLegacyConfirm: 'This is an older settings-only backup and contains no MultiCam model list. Import its settings while keeping the current models and groups?',
+      settingsImported: 'Suite settings imported',
+      settingsImportedLegacy: 'Older settings-only backup imported; the current Suite model list and groups were kept',
+      settingsImportConfirm: 'Import this backup? The current Suite model list and groups will be deleted and replaced by the list in this file. The current Suite configuration will be backed up first.',
+      settingsImportLegacyConfirm: 'This is an older settings-only backup and contains no Suite model list. Import its settings while keeping the current models and groups?',
       // ---- statuses ----
       stOnline: 'Online',
       stOffline: 'Offline',
@@ -812,7 +823,7 @@
       dockAutoCollapse: 'Auto-collapse',
       dockAutoCollapseHint: 'seconds (0 = off)',
       dockAutoCollapseSaved: (n) => n > 0 ? `Dock auto-collapse set to ${n} seconds` : 'Dock auto-collapse disabled',
-      dockSubtitle: 'MultiCam tools',
+      dockSubtitle: 'Room tools',
       dockCurrentRoom: (n) => `Current: ${n}`,
       dockNoRoom: 'No room detected',
       dockOpen: 'Open workstation',
@@ -902,10 +913,9 @@
       menuShareWorkspace: 'Share workspace',
       menuShortcutPanel: 'Shortcut panel',
       menuPureMode: 'Clean mode',
-      menuToggleThumbs: 'Toggle thumbnails',
       menuToggleFit: 'Toggle video fit',
       menuShortcutHelp: 'Shortcuts / hints',
-      shortcutsHelp: 'Hover any button/control to see its hint. Common shortcuts can be edited in the shortcut panel.\n\nDefaults:\n/  Focus username input\nr  Refresh all\ng  Grid view\nf  Focus view\no  Open hovered/focused room\nAlt+P or Alt+C  Clean mode on/off\nAlt+Shift+C  Recording center\nAlt+Shift+R  Record visible models\nEsc  Exit clean mode / fullscreen\nSpace  Pause/resume the main screen in Focus view\n←/→ or [/ ]  Switch the main screen in Focus view\nDouble-click card  Fullscreen',
+      shortcutsHelp: 'Hover any button/control to see its hint. Common shortcuts can be edited in the shortcut panel.\n\nDefaults:\n/  Activate username input\nr  Refresh all\ng  Grid view\no  Open hovered room\nAlt+P or Alt+C  Clean mode on/off\nAlt+Shift+C  Recording center\nAlt+Shift+R  Record visible models\nEsc  Exit clean mode / fullscreen\nDouble-click card  Fullscreen',
       pausedVisible: 'Visible windows paused',
       resumedVisible: 'Visible windows resumed',
       menuImport: 'Import config',
@@ -929,7 +939,7 @@
       aboutClose: 'Close',
     },
     zh: {
-      title: 'Ziggy Room Suite',
+      title: 'Ziggy Chaturbate Suite',
       appTagline: '多房间、多画面、录制、提醒、截图、重连和数据维护的一体化工作台。',
       addPlaceholder: '输入用户名 ↵',
       searchPlaceholder: '搜索房间',
@@ -956,7 +966,6 @@
       notifyTitle: '主播上线时桌面通知 + 卡片闪烁',
       collapseSidebar: '',
       viewGrid: '平铺',
-      viewFocus: '主屏',
       viewPhone: '手机',
       viewSplit: '分屏',
       viewModeLabel: '视图',
@@ -967,9 +976,6 @@
       pureModeOn: '已进入纯净模式',
       pureModeOff: '退出纯净模式',
       pureModeHint: '暂时隐藏所有工具栏、按钮和覆盖层。快捷键：Alt+P / Alt+C；按 Esc 退出。',
-      focusThumbsShow: '显示缩略图',
-      focusThumbsHide: '隐藏缩略图',
-      focusThumbsHint: '显示或隐藏主屏模式的缩略图栏。快捷键：Alt+T。',
       videoFitContain: '画面：完整显示',
       videoFitCover: '画面：填满窗口',
       videoFitHint: '在完整显示和裁切填满之间切换。',
@@ -987,9 +993,6 @@
       hintVolume: '全局音量。单房间静音仍然优先。',
       hintGridSize: '平铺模式下的基础窗口尺寸',
       hintSort: '当前分组内的房间排序方式',
-      hintMainRatio: '主屏模式下主屏高度，也可以拖动分隔条调整。',
-      hintMainAspect: '主屏模式下主屏宽高比',
-      hintThumbSize: '主屏模式下缩略图宽度',
       hintGroupTab: (n) => `切换到「${n}」。也可以把房间拖到这里加入该分组。`,
       hintOnlineFavoritesTab: '显示当前在线的收藏房间。',
       hintLibraryTab: '显示所有已保存房间。在这个视图点移除会全局删除。',
@@ -1142,9 +1145,7 @@
       shortcutFocusAdd: '聚焦添加框',
       shortcutRefreshAll: '刷新全部',
       shortcutGridView: '平铺视图',
-      shortcutFocusView: '主屏视图',
       shortcutPureMode: '纯净模式',
-      shortcutFocusThumbs: '显示 / 隐藏缩略图',
       shortcutRecordingCenter: '录制管理中心',
       shortcutRecordPage: '录制当前可见主播',
       stOnline: '在线',
@@ -1166,7 +1167,7 @@
       dockAutoCollapse: '自动收起',
       dockAutoCollapseHint: '秒（0 = 关闭）',
       dockAutoCollapseSaved: (n) => n > 0 ? `工具坞将在 ${n} 秒后自动收起` : '已关闭工具坞自动收起',
-      dockSubtitle: 'MultiCam 工具',
+      dockSubtitle: '房间工具',
       dockCurrentRoom: (n) => `当前：${n}`,
       dockNoRoom: '未识别到房间',
       dockOpen: '打开工作台',
@@ -1243,10 +1244,9 @@
       menuShareWorkspace: '分享工作台',
       menuShortcutPanel: '快捷键面板',
       menuPureMode: '纯净模式',
-      menuToggleThumbs: '显示 / 隐藏缩略图',
       menuToggleFit: '切换画面适应',
       menuShortcutHelp: '快捷键 / 提示说明',
-      shortcutsHelp: '鼠标停在任何按钮或控件上，会显示即时说明。常用快捷键可以在快捷键面板里修改。\n\n默认：\n/  聚焦用户名输入框\nr  全部刷新\ng  平铺视图\nf  主屏视图\nAlt+P 或 Alt+C  开关纯净模式\nAlt+Shift+C  录制管理中心\nAlt+Shift+R  录制当前页\nEsc  退出纯净模式 / 全屏\n空格  主屏模式下暂停/继续主屏\n←/→ 或 [/ ]  主屏模式下切换主屏\n双击窗口  全屏',
+      shortcutsHelp: '鼠标停在任何按钮或控件上，会显示即时说明。常用快捷键可以在快捷键面板里修改。\n\n默认：\n/  聚焦用户名输入框\nr  全部刷新\ng  平铺视图\no  打开鼠标所在房间\nAlt+P 或 Alt+C  开关纯净模式\nAlt+Shift+C  录制管理中心\nAlt+Shift+R  录制当前页\nEsc  退出纯净模式 / 全屏\n双击窗口  全屏',
       pausedVisible: '已暂停可见窗口',
       resumedVisible: '已继续可见窗口',
       menuImport: '导入配置',
@@ -1298,7 +1298,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.35',
+    version: '16.6.0',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -1316,7 +1316,7 @@
   const MAX_CONFIG_BYTES = 2 * 1024 * 1024;
   const MAX_CONFIG_BACKUPS = 3;
   const RELOADED_VERSION = '1.8.0';
-  const MOBILE_CLEAN_VIEW_VERSION = '2.1.0';
+  const MOBILE_CLEAN_VIEW_VERSION = '2.2.0';
   const MOBILE_CLEAN_VIEW_SETTINGS_KEY = 'cb_desktop_mobile_comfort_v1';
   const GITHUB_SYNC_CONFIG_KEY = 'chaturbate_suite_github_sync_v1';
   const GITHUB_SYNC_STATE_KEY = 'chaturbate_suite_github_sync_state_v1';
@@ -1428,30 +1428,24 @@
       pageIndex: 0,
       onlineFollowingPageIndex: 0,
       toolbarCollapsed: false,
-      viewMode: 'grid',           // 'grid' | 'focus' | 'phone'
+      viewMode: 'grid',           // 'grid' | 'phone'
       phoneModeAuto: true,
       splitRoomIds: [],
       splitViewActive: false,
       splitRatio: 50,
       splitAudioRoomId: null,
       splitToolbarPosition: 'top',
-      focusedRoomId: null,
-      focusMainPct: 62,           // main screen width ratio in focus mode
-      focusMainHPct: 64,          // main screen height ratio in focus mode
-      focusAspect: 'auto',
-      focusThumbSize: 150,
       filter: { hideOffline: false, hidePrivate: false, onlyOnline: false },
       sortBy: 'manual',
       notifyOnline: true,
       notifyFavoritesOnly: true,
       startOnOnlineFavorites: false,
-      startupView: 'last',        // 'last' | 'auto' | 'grid' | 'focus' | 'phone'
+      startupView: 'last',        // 'last' | 'auto' | 'grid' | 'phone'
       startupGroup: 'last',       // 'last' or a valid group id
       __startupGroupDefaultMigratedV1657: true,
       activeGroup: 'all',
       searchQuery: '',
       pureMode: false,
-      focusThumbsCollapsed: false,
       videoFit: 'contain',
       freeZoom: true,
       maxStreamHeight: 1080,
@@ -1656,7 +1650,7 @@
 
     const st = src.settings && typeof src.settings === 'object' && !Array.isArray(src.settings) ? src.settings : {};
     out.settings = { ...def.settings, ...st };
-    const allowedSettingKeys = new Set([...Object.keys(def.settings), '__focusAutoMigratedV12']);
+    const allowedSettingKeys = new Set(Object.keys(def.settings));
     for (const key of Object.keys(out.settings)) {
       if (!allowedSettingKeys.has(key)) delete out.settings[key];
     }
@@ -1671,18 +1665,14 @@
     out.settings.phoneLayoutSize = [2, 4, 6, 9].includes(Number(out.settings.phoneLayoutSize)) ? Number(out.settings.phoneLayoutSize) : def.settings.phoneLayoutSize;
     out.settings.pageIndex = clampInt(out.settings.pageIndex, 0, 100000, 0);
     out.settings.onlineFollowingPageIndex = clampInt(out.settings.onlineFollowingPageIndex, 0, 100000, 0);
-    out.settings.viewMode = ['grid', 'focus', 'phone'].includes(out.settings.viewMode) ? out.settings.viewMode : 'grid';
+    // Focus was removed in 16.6.0. Old settings and backups migrate safely to
+    // Grid while all remaining layout settings keep their previous values.
+    out.settings.viewMode = out.settings.viewMode === 'phone' ? 'phone' : 'grid';
     out.settings.phoneModeAuto = out.settings.phoneModeAuto !== false;
-    out.settings.focusedRoomId = isLikelyUsername(out.settings.focusedRoomId) ? normalizeUsername(out.settings.focusedRoomId) : null;
-    out.settings.focusMainPct = clampInt(out.settings.focusMainPct, 45, 76, def.settings.focusMainPct);
-    out.settings.focusMainHPct = clampInt(out.settings.focusMainHPct, 44, 78, def.settings.focusMainHPct);
-    out.settings.focusAspect = ['auto', '16:9', '4:3', '1:1', '9:16'].includes(out.settings.focusAspect) ? out.settings.focusAspect : 'auto';
-    out.settings.focusThumbSize = clampInt(out.settings.focusThumbSize, 96, 260, def.settings.focusThumbSize);
     out.settings.sortBy = ['manual', 'status', 'name', 'favoriteName', 'addedAt'].includes(out.settings.sortBy) ? out.settings.sortBy : 'manual';
     out.settings.activeGroup = out.groups.some(g => g.id === out.settings.activeGroup) ? out.settings.activeGroup : DEFAULT_GROUP_ID;
     out.settings.searchQuery = normalizeUsername(out.settings.searchQuery || '');
     out.settings.pureMode = false;
-    out.settings.focusThumbsCollapsed = !!out.settings.focusThumbsCollapsed;
     out.settings.videoFit = out.settings.videoFit === 'cover' ? 'cover' : 'contain';
     out.settings.freeZoom = out.settings.freeZoom !== false;
     out.settings.maxStreamHeight = [0, 240, 360, 480, 720, 1080, 1440, 2160].includes(Number(out.settings.maxStreamHeight)) ? Number(out.settings.maxStreamHeight) : def.settings.maxStreamHeight;
@@ -1698,9 +1688,9 @@
     out.settings.sidebarCollapsed = !!out.settings.sidebarCollapsed;
     out.settings.notifyOnline = out.settings.notifyOnline !== false;
     out.settings.notifyFavoritesOnly = out.settings.notifyFavoritesOnly !== false;
-    out.settings.startupView = ['last', 'auto', 'grid', 'focus', 'phone'].includes(st.startupView)
-      ? st.startupView
-      : def.settings.startupView;
+    out.settings.startupView = st.startupView === 'focus'
+      ? 'grid'
+      : (['last', 'auto', 'grid', 'phone'].includes(st.startupView) ? st.startupView : def.settings.startupView);
     const legacyStartupGroup = st.startOnOnlineFavorites === true ? ONLINE_FAVORITES_GROUP_ID : 'last';
     let requestedStartupGroup = Object.prototype.hasOwnProperty.call(st, 'startupGroup') ? String(st.startupGroup || '') : legacyStartupGroup;
     // 16.5.6 and earlier silently made Online Favorites the default. Migrate
@@ -1864,12 +1854,11 @@
         const raw = localStorage.getItem(STORE_KEY);
         if (raw) {
           const s = sanitizeState(JSON.parse(raw));
-          if (!s.settings.__focusAutoMigratedV12) { s.settings.focusAspect = 'auto'; s.settings.__focusAutoMigratedV12 = true; }
           return s;
         }
         return defaultState();
       } catch (e) {
-        console.warn('[RoomGrid] Storage load failed, fallback to default', e);
+        console.warn('[Ziggy Suite] Storage load failed, fallback to default', e);
         return defaultState();
       }
     },
@@ -1881,7 +1870,7 @@
         // 让同标签页 SPA 切换主播 / QuickAdd 状态也能立即刷新。
         try { window.dispatchEvent(new CustomEvent('ryujo_multicam_storage', { detail: { state: clean } })); } catch (_) {}
       }
-      catch (e) { console.warn('[RoomGrid] Storage save failed', e); }
+      catch (e) { console.warn('[Ziggy Suite] Storage save failed', e); }
     },
     clearAll() {
       try {
@@ -1922,7 +1911,6 @@
     const multicamSettings = {
       ...cleanState.settings,
       pageIndex: 0,
-      focusedRoomId: null,
       searchQuery: '',
       pureMode: false,
       showRecordingOnly: false,
@@ -2493,7 +2481,7 @@
     } }, 'Disconnect');
     panel.append(
       $('div', { class: 'roomgrid-github-head' }, [$('h2', {}, 'GitHub cloud backup'), close]),
-      $('p', { class: 'roomgrid-github-copy' }, 'Exports upload one encrypted latest backup containing MultiCam, Reloaded, and Mobile Clean View settings. Imports download it and replace the current MultiCam model library after confirmation.'),
+      $('p', { class: 'roomgrid-github-copy' }, 'Exports upload one encrypted latest backup containing all Suite settings. Imports download it and replace the current Suite model library after confirmation.'),
       $('div', { class: 'roomgrid-github-target' }, `${GITHUB_SYNC_TARGET.owner}/${GITHUB_SYNC_TARGET.repo} · ${GITHUB_SYNC_TARGET.path}`),
       $('label', { class: 'roomgrid-github-field' }, [$('span', {}, 'Device name'), deviceInput]),
       $('label', { class: 'roomgrid-github-field' }, [$('span', {}, 'Fine-grained GitHub token'), tokenInput]),
@@ -2580,7 +2568,6 @@
       nextSettings.pureMode = false;
       nextSettings.activeGroup = DEFAULT_GROUP_ID;
       nextSettings.pageIndex = 0;
-      nextSettings.focusedRoomId = null;
       nextSettings.searchQuery = '';
       nextSettings.showRecordingOnly = false;
 
@@ -2610,7 +2597,7 @@
       ));
     }
     if (hasReloaded && !restoreReloadedSettings(rawReloaded)) throw new Error('Reloaded settings are invalid');
-    if (hasMobileCleanView && !restoreMobileCleanViewSettings(rawMobileCleanView)) throw new Error('Mobile Clean View settings are invalid');
+    if (hasMobileCleanView && !restoreMobileCleanViewSettings(rawMobileCleanView)) throw new Error('Mobile view settings are invalid');
     return {
       multicam: !!nextState,
       reloaded: hasReloaded,
@@ -2683,7 +2670,7 @@
         // 减少多工作台之间 storage 事件 ping-pong 引发的重排/闪屏。
         if (result === false) return;
       }
-      catch (err) { console.warn('[RoomGrid] store update failed', err); return; }
+      catch (err) { console.warn('[Ziggy Suite] store update failed', err); return; }
       persistDebounced();
       notify(path);
     };
@@ -2953,7 +2940,7 @@
 
       // ---- 设置 ----
       patchSettings(patch) {
-        const allowed = new Set([...Object.keys(defaultState().settings), '__focusAutoMigratedV12']);
+        const allowed = new Set(Object.keys(defaultState().settings));
         const clean = {};
         for (const [k, v] of Object.entries(patch || {})) if (allowed.has(k)) clean[k] = v;
         const keys = Object.keys(clean);
@@ -3827,9 +3814,16 @@
     document.title = RECORDER_TAB_TITLE;
     try { window.name = RECORDER_HUB_WINDOW_NAME; } catch (_) {}
     document.documentElement.classList.add('ziggy-recorder-hub');
+    const stopRecorderNativeNode = node => {
+      if (!node || node.closest?.('.rec-hub')) return;
+      if (node instanceof HTMLMediaElement) stopMediaElement(node, false);
+      else stopAllPageMedia(node);
+    };
     const hideRecorderNativeChild = child => {
       if (!child || child.classList?.contains('rec-hub')) return;
+      stopRecorderNativeNode(child);
       child.hidden = true;
+      child.inert = true;
       child.setAttribute?.('aria-hidden', 'true');
       child.style?.setProperty('display', 'none', 'important');
     };
@@ -3893,7 +3887,7 @@
       $('div', { class: 'rec-hidden-media', id: 'rec-hidden-media' }),
     ]);
     document.body.appendChild(shell);
-    const enforceRecorderShell = () => {
+    const enforceRecorderShell = records => {
       if (!isRecorderHubRoute()) {
         recorderShellGuard.disconnect();
         return;
@@ -3904,9 +3898,12 @@
       [...document.body.children].forEach(child => {
         if (child !== shell) hideRecorderNativeChild(child);
       });
+      for (const record of records || []) {
+        for (const node of record.addedNodes || []) stopRecorderNativeNode(node);
+      }
     };
     const recorderShellGuard = new MutationObserver(enforceRecorderShell);
-    recorderShellGuard.observe(document.body, { childList: true });
+    recorderShellGuard.observe(document.body, { childList: true, subtree: true });
     addEventListener('load', () => setTimeout(enforceRecorderShell, 0), { once: true });
 
     function formatDuration(ms) {
@@ -4539,7 +4536,7 @@
             job.mimeType = 'video/mp4';
           } catch (error) {
             conversionError = error;
-            console.warn('[RoomGrid] MP4 conversion failed; preserving the WebM recording', error);
+            console.warn('[Ziggy Suite] MP4 conversion failed; preserving the WebM recording', error);
           }
         }
         job.finalizingProgress = 96; publishState();
@@ -4825,9 +4822,23 @@
   function initInjector(options = {}) {
     const contextOnly = options.contextOnly === true;
     const ROOM_PATH = /^\/([a-zA-Z0-9_-]+)\/?$/;
-    const nativeMobilePage = isNativeMobileSite();
+    let nativeMobilePage = isNativeMobileSite();
     document.documentElement.classList.toggle('ziggy-suite-mobile', nativeMobilePage);
     document.documentElement.dataset.ziggySuiteAvailable = '1';
+
+    function refreshNativeLayoutMode() {
+      const next = isNativeMobileSite();
+      document.documentElement.classList.toggle('ziggy-suite-mobile', next);
+      if (next === nativeMobilePage) return false;
+      nativeMobilePage = next;
+      if (nativeMobilePage) {
+        document.getElementById('roomgrid-workshop-button')?.remove();
+        // This runs after the initial injector stack, so the mobile Suite menu
+        // can safely initialize if Chaturbate hydrated into its mobile shell.
+        setTimeout(() => initMobileSuiteMenu(), 0);
+      }
+      return true;
+    }
 
     // ---- 当前房间（响应式：URL / canonical / DOM 变化时自动重算）----
     let currentRoom = null;
@@ -4897,7 +4908,6 @@
       try {
         const routeMo = new MutationObserver(recalcCurrentRoomSoon);
         if (document.head) routeMo.observe(document.head, { childList: true, subtree: true, attributes: true, attributeFilter: ['href', 'content'] });
-        if (document.body) routeMo.observe(document.body, { childList: true, subtree: true });
       } catch (_) {}
       // poll 兜底（万一还有别的 navigation 路径漏了）；隐藏标签页降低频率。
       let routePollTimer = 0;
@@ -4937,10 +4947,6 @@
       window.addEventListener('hashchange', routeCheckSoon);
       window.addEventListener('pageshow', routeCheckSoon);
       document.addEventListener('visibilitychange', routeCheckSoon);
-      try {
-        const routeMo = new MutationObserver(routeCheckSoon);
-        routeMo.observe(document.body, { childList: true, subtree: true });
-      } catch (_) {}
     }
 
     const buildWorkstationUrl = () => canonicalWorkshopUrl();
@@ -5002,8 +5008,8 @@
         button.removeAttribute('aria-selected');
         button.removeAttribute('data-state');
         button.setAttribute('href', buildWorkstationUrl());
-        button.setAttribute('aria-label', 'Open MultiCam Workshop');
-        button.setAttribute('title', 'Open MultiCam Workshop');
+        button.setAttribute('aria-label', 'Open Suite Workshop');
+        button.setAttribute('title', 'Open Suite Workshop');
         const label = button.querySelector('.HeaderNavBar__link-text,[class*="link-text"],[class*="LinkText"]')
           || [...button.querySelectorAll('span')].find(node => !node.children.length && node.textContent.trim())
           || button;
@@ -5023,8 +5029,8 @@
       button.id = 'roomgrid-workshop-button';
       button.classList.add('roomgrid-workshop-nav-link');
       button.setAttribute('href', buildWorkstationUrl());
-      button.setAttribute('aria-label', 'Open MultiCam Workshop');
-      button.setAttribute('title', 'Open MultiCam Workshop');
+      button.setAttribute('aria-label', 'Open Suite Workshop');
+      button.setAttribute('title', 'Open Suite Workshop');
       const label = button.querySelector('.HeaderNavBar__link-text,[class*="link-text"],[class*="LinkText"]') || button;
       label.textContent = 'WORKSHOP';
       button.addEventListener('click', event => {
@@ -5117,7 +5123,7 @@
       openNoopener(`https://recu.me/performer/${encodeURIComponent(room)}`);
     }
 
-    // ---- RoomGrid 工具坞 ----
+    // ---- Suite room dock ----
     const dockStyle = $('style', { html: trustedHtml(`
       .roomgrid-dock { position:fixed; right:18px; bottom:18px; z-index:2147483200; width:300px; font-family:UbuntuRegular,Arial,sans-serif; color:#f1f1f1; user-select:none; transition:bottom .2s ease,opacity .2s ease,transform .2s ease; }
       html.cmc-active body.cmc-has-bottom-nav:not(.cmc-controls-hidden):not(.cmc-chat-open):not(.cmc-fullscreen) .roomgrid-dock:not(.roomgrid-user-positioned) { bottom:calc(var(--cmc-nav-h,58px) + env(safe-area-inset-bottom) + 10px); }
@@ -5408,9 +5414,9 @@
       ]),
       $('span', { class: 'roomgrid-dock-chevron' }, '▾'),
     ]);
-    const multicamTab = $('button', { class: 'roomgrid-dock-tab active', type: 'button' }, 'MultiCam');
+    const multicamTab = $('button', { class: 'roomgrid-dock-tab active', type: 'button' }, 'Rooms');
     const arnaTabBadge = $('span', { class: 'roomgrid-dock-tab-badge' }, '0');
-    const arnaTab = $('button', { class: 'roomgrid-dock-tab', type: 'button' }, [document.createTextNode('Cam ARNA '), arnaTabBadge]);
+    const arnaTab = $('button', { class: 'roomgrid-dock-tab', type: 'button' }, [document.createTextNode('Archive '), arnaTabBadge]);
     const dockTabs = $('div', { class: 'roomgrid-dock-tabs', role: 'tablist' }, [multicamTab, arnaTab]);
     const dockAutoCollapseInput = $('input', {
       class: 'roomgrid-dock-setting-input', type: 'number', min: '0', max: '600', step: '1',
@@ -5444,7 +5450,7 @@
     ]);
     const arnaPane = $('div', { class: 'roomgrid-dock-pane roomgrid-arna-pane', hidden: true });
     const body = $('div', { class: 'roomgrid-dock-body' }, [dockTabs, multicamPane, arnaPane]);
-    // Every page load and every normal dock expansion starts on MultiCam.
+    // Every page load and every normal dock expansion starts on Rooms.
     let activeDockTab = 'multicam';
     localStorage.setItem('roomgrid_active_dock_tab', 'multicam');
     const camArna = createCamArnaDock(arnaPane, {
@@ -5586,7 +5592,7 @@
     function scheduleDockAutoCollapse() {
       clearDockAutoCollapseTimer();
       if (collapsed) return;
-      // The mobile RoomGrid is a native tab, not a transient popup. Keep it open
+      // The mobile Rooms dock is a native tab, not a transient popup. Keep it open
       // until the user chooses another native room tab.
       if (nativeMobilePage && mobileRoomGridOpen) return;
       if (!nativeMobilePage && dockPointerInside) return;
@@ -6449,6 +6455,7 @@
     }
 
     function syncNativeRoomGridPlacement() {
+      refreshNativeLayoutMode();
       if (!currentRoom) {
         if (contextDockSummoned && !nativeMobilePage) {
           clearTimeout(desktopVideoFitTimer);
@@ -6502,29 +6509,32 @@
     document.addEventListener('ziggy-mobile-shell:ready', publishSuiteState);
     window.addEventListener('pagehide', () => {
       if (contextDockSummoned) setDockCollapsed(true);
-      delete document.documentElement.dataset.ziggySuiteAvailable;
-      delete document.documentElement.dataset.ziggySuiteRoom;
-      delete document.documentElement.dataset.ziggySuiteSaved;
-      delete document.documentElement.dataset.ziggySuiteDockOpen;
+    });
+    // A mobile page restored from the back-forward cache keeps this document and
+    // its Suite runtime. Re-publish state instead of exposing the legacy fallback
+    // launcher until a later hard refresh.
+    window.addEventListener('pageshow', () => {
+      refreshNativeLayoutMode();
+      publishSuiteState();
+      syncSuitePageMountsSoon();
     });
 
     const dockCard = $('div', { class: 'roomgrid-dock-card' }, [head, body]);
     root.appendChild(dockCard);
-    if (!nativeMobilePage && !contextOnly) {
-      ensureWorkshopHeaderButton();
-      const ensureWorkshopHeaderButtonSoon = debounce(ensureWorkshopHeaderButton, 120);
-      try {
-        const workshopButtonMo = new MutationObserver(ensureWorkshopHeaderButtonSoon);
-        workshopButtonMo.observe(document.body, { childList: true, subtree: true });
-      } catch (_) {}
-    }
+    if (!nativeMobilePage && !contextOnly) ensureWorkshopHeaderButton();
     updateDockRoom();
     setDockTab('multicam');
     syncDock();
     syncNativeRoomGridPlacement();
 
-    const syncNativeRoomGridPlacementSoon = debounce(syncNativeRoomGridPlacement, 100);
-    currentRoomSubs.add(syncNativeRoomGridPlacementSoon);
+    function syncSuitePageMounts() {
+      recalcCurrentRoom();
+      syncNativeRoomGridPlacement();
+      if (!nativeMobilePage && !contextOnly) ensureWorkshopHeaderButton();
+    }
+    const syncSuitePageMountsSoon = debounce(syncSuitePageMounts, 100);
+    const syncNativeRoomGridPlacementSoon = syncSuitePageMountsSoon;
+    currentRoomSubs.add(syncSuitePageMountsSoon);
     if (!desktopInitialRoomPositionCancelled) {
       desktopInitialRoomInputCancel = event => {
         if (desktopInitialRoomPositioned || desktopInitialRoomPositionCancelled) return;
@@ -6537,13 +6547,14 @@
     }
     if (!contextOnly) {
       try {
-        const nativeRoomGridMo = new MutationObserver(syncNativeRoomGridPlacementSoon);
+        const nativeRoomGridMo = new MutationObserver(syncSuitePageMountsSoon);
         nativeRoomGridMo.observe(document.body, { childList: true, subtree: true });
       } catch (_) {}
     }
     addEventListener('resize', () => {
+      refreshNativeLayoutMode();
       if (!nativeMobilePage && !collapsed) positionDesktopRoomGridMenu();
-      else syncNativeRoomGridPlacementSoon();
+      syncSuitePageMountsSoon();
     }, { passive: true });
     document.addEventListener('pointerdown', event => {
       if (collapsed || nativeMobilePage) return;
@@ -6644,8 +6655,10 @@
       setTimeout(() => toastEl.remove(), ms);
     }
 
-    function initMobileReloadedMenu() {
-      if (!nativeMobilePage) return;
+    let mobileSuiteMenuInitialized = false;
+    function initMobileSuiteMenu() {
+      if (!nativeMobilePage || mobileSuiteMenuInitialized) return;
+      mobileSuiteMenuInitialized = true;
       const style = $('style', { html: trustedHtml(`
         .ziggy-mobile-reloaded-link { display:flex !important; width:100% !important; min-height:54px !important; align-items:center !important; justify-content:flex-start !important; gap:12px !important; padding:0 22px !important; color:inherit !important; text-decoration:none !important; cursor:pointer !important; touch-action:manipulation; }
         .ziggy-mobile-reloaded-link .ziggy-mobile-reloaded-icon { font-size:25px; line-height:1; }
@@ -6693,12 +6706,12 @@
         document.dispatchEvent(new CustomEvent('ziggy-suite:reloaded-setting-changed', { detail: definition.key }));
       }
 
-      function openMobileReloadedPanel() {
+      function openMobileSuitePanel() {
         document.getElementById('ziggy-mobile-reloaded-backdrop')?.remove();
         const backdrop = $('div', { id: 'ziggy-mobile-reloaded-backdrop', class: 'ziggy-mobile-reloaded-backdrop' });
         const panel = $('section', { class: 'ziggy-mobile-reloaded-panel', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Ziggy Suite' });
         const close = () => backdrop.remove();
-        const closeButton = $('button', { class: 'ziggy-mobile-reloaded-close', type: 'button', 'aria-label': 'Close Reloaded settings', onclick: close }, '×');
+        const closeButton = $('button', { class: 'ziggy-mobile-reloaded-close', type: 'button', 'aria-label': 'Close Suite settings', onclick: close }, '×');
         const toggles = settingDefinitions.map(definition => {
           const input = $('input', { type: 'checkbox', checked: settingEnabled(definition), 'aria-label': definition.label });
           input.addEventListener('change', () => setSettingEnabled(definition, input.checked));
@@ -6734,10 +6747,10 @@
               $('button', { class: 'ziggy-mobile-reloaded-action', type: 'button', onclick: () => { close(); UnifiedRecorder.openHub(true); } }, 'Recorder Hub'),
               toolButton(room ? (saved ? `Remove ${room}` : `Add ${room}`) : 'Add current model', 'ziggy-suite:toggle-current-room'),
               toolButton('Rooms', 'ziggy-suite:toggle-roomgrid', { tab: 'multicam' }),
-              toolButton('Cam ARNA', 'ziggy-suite:toggle-roomgrid', { tab: 'arna' }),
+              toolButton('Archive Search', 'ziggy-suite:toggle-roomgrid', { tab: 'arna' }),
               toolButton('Video fullscreen', 'ziggy-mobile-clean-view:fullscreen'),
               toolButton('Picture-in-Picture', 'ziggy-mobile-clean-view:pip'),
-              toolButton('Mobile Clean View settings', 'ziggy-mobile-clean-view:open-panel', { view: 'settings' }),
+              toolButton('Mobile view settings', 'ziggy-mobile-clean-view:open-panel', { view: 'settings' }),
             ]),
           ]),
           $('div', { class: 'ziggy-mobile-reloaded-section' }, [
@@ -6749,10 +6762,10 @@
             ]),
           ]),
           $('div', { class: 'ziggy-mobile-reloaded-section' }, [
-            $('div', { class: 'ziggy-mobile-reloaded-section-title' }, 'Reloaded settings'),
+            $('div', { class: 'ziggy-mobile-reloaded-section-title' }, 'Browsing and playback'),
             ...toggles,
           ]),
-          $('div', { class: 'ziggy-mobile-reloaded-note' }, 'Chat is hidden only on Chaturbate’s native mobile layout. Desktop pages keep their normal chat and player. The encrypted backup includes MultiCam, Reloaded, and Mobile Clean View settings.'),
+          $('div', { class: 'ziggy-mobile-reloaded-note' }, 'Chat is hidden only on Chaturbate’s native mobile layout. Desktop pages keep their normal chat and player. The encrypted backup includes all Ziggy Chaturbate Suite settings.'),
         );
         backdrop.appendChild(panel);
         backdrop.addEventListener('click', event => { if (event.target === backdrop) close(); });
@@ -6782,7 +6795,7 @@
           link.addEventListener('click', event => {
             event.preventDefault();
             event.stopPropagation();
-            openMobileReloadedPanel();
+            openMobileSuitePanel();
           });
         }
       }
@@ -6804,7 +6817,7 @@
       observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['href'] });
     }
 
-    initMobileReloadedMenu();
+    initMobileSuiteMenu();
 
     function readSuiteCookie(name) {
       const prefix = `${name}=`;
@@ -7099,7 +7112,7 @@
   }
 
   /* =============================================================
-   * 7.5. Cam ARNA archive search — native RoomGrid dock tab
+   * 7.5. Archive search — native Rooms dock tab
    * ============================================================= */
   function createCamArnaDock(container, options = {}) {
     const config = { version: '2.5', maxHistory: 10 };
@@ -7603,7 +7616,7 @@
     const startupView = String(store.state.settings.startupView || 'last');
     if (startupView === 'auto') {
       startupPatch.viewMode = phoneEnvironment ? 'phone' : 'grid';
-    } else if (['grid', 'focus', 'phone'].includes(startupView)) {
+    } else if (['grid', 'phone'].includes(startupView)) {
       startupPatch.viewMode = startupView;
     } else if (phoneEnvironment && store.state.settings.phoneModeAuto) {
       startupPatch.viewMode = 'phone';
@@ -7737,23 +7750,6 @@
         .cam-card.tiny .name-label { display:none; }
         .cam-card.tiny .pill { padding:2px 6px; font-size:10px; }
 
-        /* —— 主屏（focus 模式）—— */
-        .grid.view-focus { display:grid; grid-template-areas:'main' 'bar' 'thumbs';
-          grid-template-rows:minmax(0,var(--focus-main-pct,68fr)) 10px minmax(108px,var(--focus-thumb-pct,32fr));
-          grid-template-columns:minmax(0,1fr); gap:12px; padding:18px; height:100%; overflow:hidden; }
-        .grid.view-focus .focused-row { grid-area:main; min-height:0; min-width:0; display:grid; place-items:center; overflow:hidden; position:relative; z-index:1; }
-        .grid.view-focus .focused-row .cam-card { max-width:100%; max-height:100%; flex:0 0 auto; min-height:0; }
-        .grid.view-focus .focused-row .cam-card.is-focus-main { border-color:var(--accent); box-shadow:0 0 0 1px rgba(16,163,127,.25); }
-        .grid.view-focus .resizer { grid-area:bar; height:8px; min-height:8px; cursor:ns-resize; background:transparent; position:relative; z-index:2; }
-        .grid.view-focus .resizer::before { content:''; position:absolute; left:50%;
-          top:50%; transform:translate(-50%,-50%); width:50px; height:3px; border-radius:2px;
-          background:var(--border-strong); transition:background .15s, width .15s; }
-        .grid.view-focus .resizer:hover::before,
-        .grid.view-focus .resizer.dragging::before { background:var(--accent); width:80px; }
-        .grid.view-focus .thumbs-row { grid-area:thumbs; min-height:0; min-width:0; display:grid; grid-template-columns:repeat(auto-fill,minmax(var(--focus-thumb-min,180px),1fr));
-          grid-auto-flow:row; gap:12px; overflow:auto; padding:2px 2px 8px; align-content:start; align-items:start; position:relative; z-index:1; }
-        .grid.view-focus .thumbs-row .cam-card { cursor:pointer; width:100%; height:auto; min-height:0; aspect-ratio:var(--focus-thumb-aspect,16/9); }
-        .grid.view-focus .thumbs-row .cam-card:hover { border-color:var(--accent); }
 
         /* —— 控件 —— */
         .group-tab { padding:10px 12px; border-radius:12px; cursor:pointer; font-size:13px;
@@ -7857,20 +7853,6 @@
         .cam-card:hover .name-label,
         .cam-card:focus-within .name-label { transform:translateY(0); }
         .cam-card .pill { top:8px !important; right:8px !important; left:auto !important; }
-        .grid.view-focus { grid-template-areas:'main thumbs' !important; grid-template-columns:minmax(0,1fr) minmax(190px,var(--focus-rail-width,260px)) !important; grid-template-rows:minmax(0,1fr) !important; gap:10px !important; padding:10px !important; background:#050607 !important; }
-        .grid.view-focus .focused-row { background:#050607; border-radius:12px; }
-        .grid.view-focus .focused-row .cam-card { border-radius:12px; border-color:rgba(255,255,255,.10); box-shadow:none; background:#000; }
-        .grid.view-focus .focused-row .cam-video { background:#000; }
-        .grid.view-focus .resizer { display:none !important; }
-        .grid.view-focus .thumbs-row { grid-template-columns:1fr !important; gap:8px !important; padding:0 2px 0 0 !important; background:transparent; }
-        .grid.view-focus .thumbs-row .cam-card { border-radius:10px; border-color:rgba(255,255,255,.12); opacity:.82; transition:opacity .14s,border-color .14s,transform .14s; }
-        .grid.view-focus .thumbs-row .cam-card:hover { opacity:1; transform:translateY(-1px); }
-        body.rg-focus-thumbs-collapsed .grid.view-focus { grid-template-areas:'main' !important; grid-template-columns:minmax(0,1fr) !important; }
-        body.rg-focus-thumbs-collapsed .grid.view-focus .thumbs-row { display:none !important; }
-        @media (max-width: 980px) {
-          .grid.view-focus { grid-template-areas:'main' 'thumbs' !important; grid-template-columns:minmax(0,1fr) !important; grid-template-rows:minmax(0,1fr) minmax(92px,24vh) !important; }
-          .grid.view-focus .thumbs-row { grid-template-columns:repeat(auto-fill,minmax(var(--focus-thumb-min,150px),1fr)) !important; padding:0 0 2px !important; }
-        }
 
         /* —— v13.2：窗口优先最终覆盖。卡片默认只看画面，主屏默认只看主画面。 —— */
         .cam-card .ops-row .ops-extra,
@@ -7885,36 +7867,6 @@
         .cam-card.is-online:focus-within .pill,
         .cam-card.is-online:hover .name-label,
         .cam-card.is-online:focus-within .name-label { opacity:1 !important; }
-        .grid.view-focus { display:block !important; position:relative !important; grid-template-areas:none !important; grid-template-columns:none !important; grid-template-rows:none !important; padding:0 !important; gap:0 !important; background:#000 !important; overflow:hidden !important; }
-        .grid.view-focus .focused-row { position:absolute !important; inset:0 !important; grid-area:auto !important; min-width:0 !important; min-height:0 !important; display:grid !important; place-items:center !important; background:#000 !important; border-radius:0 !important; overflow:hidden !important; }
-        .grid.view-focus .focused-row .cam-card { border:0 !important; border-radius:0 !important; box-shadow:none !important; background:#000 !important; }
-        .grid.view-focus .focused-row .ops-row { top:14px !important; right:14px !important; bottom:auto !important; left:auto !important; transform:translateY(-6px) !important; }
-        .grid.view-focus .focused-row .cam-card:hover .ops-row,
-        .grid.view-focus .focused-row .cam-card:focus-within .ops-row { transform:translateY(0) !important; }
-        .grid.view-focus .focused-row .name-label { top:auto !important; bottom:14px !important; left:14px !important; }
-        .grid.view-focus .resizer { display:none !important; }
-        .grid.view-focus .thumbs-row { position:absolute !important; grid-area:auto !important; left:14px !important; right:14px !important; bottom:10px !important; height:var(--focus-filmstrip-height,118px) !important;
-          display:flex !important; gap:10px !important; overflow-x:auto !important; overflow-y:hidden !important; padding:10px !important; z-index:12 !important;
-          background:rgba(15,23,42,.56) !important; border:1px solid rgba(255,255,255,.16) !important; border-radius:16px !important; box-shadow:0 14px 40px rgba(0,0,0,.32) !important;
-          backdrop-filter:blur(14px) !important; -webkit-backdrop-filter:blur(14px) !important; transform:translateY(calc(100% - 20px)) !important; opacity:.20 !important;
-          transition:transform .18s ease, opacity .18s ease, background .18s ease !important; }
-        .grid.view-focus .thumbs-row:hover,
-        .grid.view-focus .thumbs-row:focus-within { transform:translateY(0) !important; opacity:1 !important; background:rgba(15,23,42,.70) !important; }
-        .grid.view-focus .thumbs-row .cam-card { flex:0 0 var(--focus-thumb-min,150px) !important; width:auto !important; height:100% !important; border-radius:10px !important; border-color:rgba(255,255,255,.18) !important; box-shadow:none !important; opacity:.86; }
-        .grid.view-focus .thumbs-row .cam-card:hover { opacity:1; transform:translateY(-1px); }
-        .grid.view-focus .thumbs-row .pill,
-        .grid.view-focus .thumbs-row .name-label,
-        .grid.view-focus .thumbs-row .ops-row { display:none !important; }
-        body.rg-focus-thumbs-collapsed .grid.view-focus .thumbs-row { display:none !important; }
-        body.rg-focus-mode { background:#000; }
-        body.rg-focus-mode .app-shell { padding:0 !important; gap:0 !important; }
-        body.rg-focus-mode .sidebar { display:none !important; }
-        body.rg-focus-mode main { width:100vw !important; height:100vh !important; border:0 !important; border-radius:0 !important; box-shadow:none !important; background:#000 !important; position:relative !important; }
-        body.rg-focus-mode .top-accent { display:none !important; }
-        body.rg-focus-mode header { position:absolute !important; left:12px !important; right:12px !important; top:10px !important; z-index:70 !important;
-          transform:translateY(calc(-100% + 8px)) !important; opacity:.14 !important; transition:transform .18s ease, opacity .18s ease !important; }
-        body.rg-focus-mode header:hover,
-        body.rg-focus-mode header:focus-within { transform:translateY(0) !important; opacity:1 !important; }
 
 
         /* —— v14.0：重新按“多窗口视频优先”收敛。窗口是产品主体，控件只做临时 HUD。 —— */
@@ -7969,31 +7921,6 @@
         .status-layer { color:#cbd5e1 !important; background:linear-gradient(180deg,rgba(15,23,42,.10),rgba(15,23,42,.24)) !important; }
         .status-layer .status-chip { background:rgba(255,255,255,.06) !important; color:#e5e7eb !important; border-color:rgba(255,255,255,.10) !important; }
 
-        body.rg-focus-mode { background:#000 !important; }
-        body.rg-focus-mode .app-shell { padding:0 !important; gap:0 !important; }
-        body.rg-focus-mode .sidebar,
-        body.rg-focus-mode .top-accent { display:none !important; }
-        body.rg-focus-mode main { width:100vw !important; height:100vh !important; border:0 !important; border-radius:0 !important; box-shadow:none !important; background:#000 !important; }
-        body.rg-focus-mode header { transform:translateY(calc(-100% + 4px)) !important; opacity:.02 !important; pointer-events:auto !important; }
-        body.rg-focus-mode header:hover,
-        body.rg-focus-mode header:focus-within { transform:translateY(0) !important; opacity:1 !important; pointer-events:auto !important; }
-        body.rg-focus-mode::before { content:''; position:fixed; left:0; right:0; top:0; height:14px; z-index:69; pointer-events:none; }
-        body.rg-focus-mode:hover header { pointer-events:auto !important; }
-        .grid.view-focus { padding:0 !important; background:#000 !important; }
-        .grid.view-focus .focused-row .cam-card { border:0 !important; border-radius:0 !important; }
-        .grid.view-focus .focused-row .name-label { top:auto !important; bottom:14px !important; left:14px !important; background:rgba(0,0,0,.34) !important; opacity:0 !important; }
-        .grid.view-focus .focused-row .cam-card:hover .name-label,
-        .grid.view-focus .focused-row .cam-card:focus-within .name-label { opacity:1 !important; }
-        .grid.view-focus .focused-row .ops-row { top:14px !important; right:14px !important; opacity:0 !important; }
-        .grid.view-focus .focused-row .cam-card:hover .ops-row,
-        .grid.view-focus .focused-row .cam-card:focus-within .ops-row { opacity:1 !important; }
-        .grid.view-focus .thumbs-row { transform:translateY(calc(100% + 6px)) !important; opacity:0 !important; bottom:8px !important; left:8px !important; right:8px !important; height:104px !important; }
-        .grid.view-focus .thumbs-row:hover,
-        .grid.view-focus .thumbs-row:focus-within { transform:translateY(0) !important; opacity:1 !important; }
-        body:not(.rg-focus-thumbs-collapsed) .grid.view-focus::after { content:''; position:absolute; left:50%; bottom:7px; width:64px; height:4px; transform:translateX(-50%); border-radius:999px; background:rgba(255,255,255,.22); z-index:11; pointer-events:none; }
-        body.rg-focus-thumbs-collapsed .grid.view-focus::after { display:none !important; }
-        .grid.view-focus .thumbs-row .cam-card { border-radius:6px !important; }
-        .grid.view-focus .thumbs-row .cam-card.is-focus-main { outline:2px solid rgba(96,165,250,.92) !important; outline-offset:-2px; }
 
         /* —— 纯净模式：隐藏工具栏、按钮和所有浮层，只保留画面 —— */
         body.rg-pure-mode { background:#000; }
@@ -8011,9 +7938,6 @@
         body.rg-pure-mode .mc-tooltip { display:none !important; }
         body.rg-pure-mode main { width:100vw; height:100vh; background:#000; }
         body.rg-pure-mode .grid { padding:0 !important; gap:0 !important; background:#000; }
-        body.rg-pure-mode .grid.view-focus { padding:0 !important; gap:0 !important; grid-template-areas:'main'; grid-template-rows:minmax(0,1fr) !important; }
-        body.rg-pure-mode .grid.view-focus .focused-row { grid-area:main; }
-        body.rg-pure-mode .grid.view-focus .thumbs-row { display:none !important; }
         body.rg-pure-mode .cam-card { border:none !important; border-radius:0 !important; box-shadow:none !important; background:#000 !important; outline:none !important; }
         body.rg-pure-mode .cam-video { background:#000 !important; }
         body.rg-pure-mode.pure-cursor-hidden,
@@ -8062,30 +7986,6 @@
         .icon-btn { background:rgba(255,254,251,.88) !important; border-color:#e3e0d7 !important; box-shadow:none !important; color:#334155 !important; }
         .icon-btn:hover { background:#fff !important; color:var(--accent) !important; transform:none !important; }
 
-        /* Focus multiview: main top-left, secondary right and bottom; resizers adapt secondaries */
-        .grid.view-focus { display:grid !important; height:100% !important; overflow:hidden !important;
-          grid-template-columns:minmax(260px,var(--focus-main-w,62fr)) 8px minmax(190px,var(--focus-side-w,38fr)) !important;
-          grid-template-rows:minmax(220px,var(--focus-main-h,64fr)) 8px minmax(120px,var(--focus-bottom-h,36fr)) !important;
-          grid-template-areas:'main vbar side' 'hbar hbar side' 'bottom bottom side' !important;
-          gap:8px !important; padding:10px !important; background:#ece9df !important; }
-        .grid.view-focus.no-bottom { grid-template-rows:minmax(0,1fr) !important; grid-template-areas:'main vbar side' !important; }
-        .grid.view-focus.no-bottom .focus-bottom-row,
-        .grid.view-focus.no-bottom .focus-h-resizer { display:none !important; }
-        .grid.view-focus .focused-row { grid-area:main !important; display:grid !important; place-items:stretch !important; min-width:0; min-height:0; overflow:hidden; }
-        .grid.view-focus .focus-side-row { grid-area:side; display:grid; grid-auto-flow:row; gap:8px; min-width:0; min-height:0; overflow:hidden; }
-        .grid.view-focus .focus-bottom-row { grid-area:bottom; display:grid; grid-auto-flow:column; gap:8px; min-width:0; min-height:0; overflow:hidden; }
-        .grid.view-focus .focus-side-row .cam-card,
-        .grid.view-focus .focus-bottom-row .cam-card { width:100% !important; height:100% !important; min-height:0 !important; aspect-ratio:auto !important; border-radius:8px !important; }
-        .grid.view-focus .focused-row .cam-card { width:100% !important; height:100% !important; max-width:100% !important; max-height:100% !important; border-radius:8px !important; }
-        .grid.view-focus .resizer { display:block !important; background:transparent !important; position:relative; z-index:3; }
-        .grid.view-focus .focus-v-resizer { grid-area:vbar; cursor:ew-resize; }
-        .grid.view-focus .focus-h-resizer { grid-area:hbar; cursor:ns-resize; }
-        .grid.view-focus .resizer::before { content:''; position:absolute; inset:0; margin:auto; border-radius:999px; background:#d4d0c6; opacity:.72; transition:opacity .12s, background .12s; }
-        .grid.view-focus .focus-v-resizer::before { width:3px; height:52px; }
-        .grid.view-focus .focus-h-resizer::before { width:52px; height:3px; }
-        .grid.view-focus .resizer:hover::before,
-        .grid.view-focus .resizer.dragging::before { background:var(--accent); opacity:1; }
-        .grid.view-focus .thumbs-row { display:none !important; }
 
         /* v15.1 repairs: reliable collapsed sidebar, wheel-safe controls and readable group contrast */
         .app-shell { display:flex !important; min-width:0 !important; min-height:0 !important; }
@@ -8236,14 +8136,8 @@
         body { min-height:100vh; overflow-x:hidden !important; overflow-y:auto !important; }
         .app-shell { min-height:640px !important; }
         .grid.view-grid { overflow:auto !important; overscroll-behavior:contain; }
-        body.rg-pure-mode,
-        body.rg-focus-mode { overflow:hidden !important; }
-        body.rg-pure-mode .app-shell,
-        body.rg-focus-mode .app-shell { height:100vh !important; min-height:0 !important; }
-        .grid.view-focus .focus-side-row .cam-card,
-        .grid.view-focus .focus-bottom-row .cam-card { cursor:pointer; transition:border-color .12s ease, transform .12s ease, opacity .12s ease; }
-        .grid.view-focus .focus-side-row .cam-card:hover,
-        .grid.view-focus .focus-bottom-row .cam-card:hover { transform:translateY(-1px); border-color:rgba(37,99,235,.62) !important; }
+        body.rg-pure-mode { overflow:hidden !important; }
+        body.rg-pure-mode .app-shell { height:100vh !important; min-height:0 !important; }
         .roomgrid-modal-backdrop { position:fixed; inset:0; z-index:1000003; display:flex; align-items:center; justify-content:center; padding:18px; background:rgba(15,23,42,.40); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); }
         .roomgrid-modal { width:min(560px, calc(100vw - 36px)); background:#fffefb; border:1px solid #e3e0d7; border-radius:14px; box-shadow:0 22px 80px rgba(15,23,42,.24); padding:14px; color:#111827; }
         .roomgrid-modal-title { font-size:15px; font-weight:800; margin-bottom:6px; }
@@ -8268,9 +8162,6 @@
         .workshop-refresh-status[hidden] { display:none!important; }
         .workshop-refresh-track { height:7px; overflow:hidden; border:1px solid var(--border); border-radius:999px; background:#17202a; }
         .workshop-refresh-fill { display:block; width:0; height:100%; background:#0c6a93; transition:width .18s ease; }
-        .grid.view-focus .focus-side-row { overflow-y:auto !important; overflow-x:hidden !important; align-content:start !important; overscroll-behavior:contain; padding-right:2px; }
-        .grid.view-focus .focus-bottom-row,
-        .grid.view-focus .focus-h-resizer { display:none !important; }
 
         body.rg-phone-device .ctrl-btn,
         body.rg-phone-device .icon-btn,
@@ -8683,19 +8574,15 @@
       const on = !!store.state.settings.pureMode;
       const splitOn = !!store.state.settings.splitViewActive && !on;
       const phoneOn = store.state.settings.viewMode === 'phone' && !on && !splitOn;
-      const focusOn = store.state.settings.viewMode === 'focus' && !on && !splitOn;
-      const thumbsCollapsed = !!store.state.settings.focusThumbsCollapsed;
       const videoFit = store.state.settings.videoFit === 'cover' ? 'cover' : 'contain';
       document.body.classList.toggle('rg-pure-mode', on);
       document.body.classList.toggle('rg-toolbar-collapsed', !!store.state.settings.toolbarCollapsed && !on);
       document.body.classList.toggle('rg-sidebar-collapsed', !!store.state.settings.sidebarCollapsed && !on);
-      document.body.classList.toggle('rg-focus-thumbs-collapsed', thumbsCollapsed);
       document.body.classList.toggle('rg-video-cover', videoFit === 'cover');
       document.body.classList.toggle('rg-video-contain', videoFit !== 'cover');
-      document.body.classList.toggle('rg-focus-mode', focusOn);
       document.body.classList.toggle('rg-phone-mode', phoneOn);
       document.body.classList.toggle('rg-split-mode', splitOn);
-      const hideSidebar = splitOn || on || focusOn || !!store.state.settings.sidebarCollapsed;
+      const hideSidebar = splitOn || on || !!store.state.settings.sidebarCollapsed;
       sidebar.style.setProperty('display', hideSidebar ? 'none' : 'flex', 'important');
       if (splitOn) requestAnimationFrame(() => window.scrollTo(0, 0));
       syncShellControls?.();
@@ -8707,11 +8594,6 @@
         pureModeBtn.classList.toggle('primary', on);
         setElementHint(pureModeBtn, on ? t('pureModeOff') + ' · Alt+P/C' : t('pureModeHint'));
       }
-      if (typeof focusThumbToggleBtn !== 'undefined' && focusThumbToggleBtn) {
-        setTrustedHtml(focusThumbToggleBtn, trustedHtml(iconLabel('grid', thumbsCollapsed ? t('focusThumbsShow') : t('focusThumbsHide'))));
-        focusThumbToggleBtn.classList.toggle('primary', !thumbsCollapsed && store.state.settings.viewMode === 'focus');
-        setElementHint(focusThumbToggleBtn, t('focusThumbsHint'));
-      }
       if (typeof videoFitBtn !== 'undefined' && videoFitBtn) {
         setTrustedHtml(videoFitBtn, trustedHtml(iconLabel('expand', videoFit === 'cover' ? t('videoFitCover') : t('videoFitContain'))));
         videoFitBtn.classList.toggle('primary', videoFit === 'cover');
@@ -8719,14 +8601,13 @@
       }
       if (typeof splitViewBtn !== 'undefined' && splitViewBtn) syncSplitButton();
       if (on) closeTransientUi();
-      requestAnimationFrame(() => { applyGridSize(); applyFocusMainSizing(); });
+      requestAnimationFrame(applyGridSize);
     }
     function setPureMode(on) {
       store.patchSettings({ pureMode: !!on });
       if (on) toast(t('pureModeOn') + ' · Alt+P/C / Esc');
     }
     function togglePureMode() { setPureMode(!store.state.settings.pureMode); }
-    function toggleFocusThumbs() { store.patchSettings({ focusThumbsCollapsed: !store.state.settings.focusThumbsCollapsed }); }
     function toggleVideoFit() { store.patchSettings({ videoFit: store.state.settings.videoFit === 'cover' ? 'contain' : 'cover' }); }
     function bumpPureCursor() {
       if (!store.state.settings.pureMode) return;
@@ -8869,27 +8750,18 @@
         return;
       }
       const phoneOverride = phoneEnvironment ? { phoneModeAuto: false } : {};
-      if (mode !== 'focus') { store.patchSettings({ viewMode: 'grid', ...phoneOverride }); return; }
-      if (!store.state.settings.focusedRoomId) {
-        const vr = renderVisibleRooms();
-        const first = vr.find(r => r.lastStatus === 'online') || vr[0];
-        if (first) store.patchSettings({ viewMode: 'focus', focusedRoomId: first.id, focusThumbsCollapsed: false, ...phoneOverride });
-        else store.patchSettings({ viewMode: 'focus', focusThumbsCollapsed: false, ...phoneOverride });
-      } else {
-        store.patchSettings({ viewMode: 'focus', focusThumbsCollapsed: false, ...phoneOverride });
-      }
+      store.patchSettings({ viewMode: 'grid', ...phoneOverride });
     }
     const viewModeSel = $('select', {
       class: 'ctrl-input roomgrid-compact-select',
-      title: t('viewModeLabel') + ' · G/F',
+      title: t('viewModeLabel') + ' · G',
       onchange: (e) => setViewMode(e.target.value),
     }, [
       $('option', { value: 'grid' }, t('viewGrid')),
-      $('option', { value: 'focus' }, t('viewFocus')),
       $('option', { value: 'phone' }, t('viewPhone')),
     ]);
     function syncViewSeg() {
-      viewModeSel.value = ['grid', 'focus', 'phone'].includes(store.state.settings.viewMode) ? store.state.settings.viewMode : 'grid';
+      viewModeSel.value = store.state.settings.viewMode === 'phone' ? 'phone' : 'grid';
     }
     syncViewSeg();
 
@@ -8928,58 +8800,6 @@
         applyGridSize();
       },
       onchange: (e) => store.patchSettings({ gridSize: parseInt(e.target.value, 10) }),
-    });
-
-    const focusScaleSlider = $('input', {
-      type: 'range', min: '78', max: '94', value: String(store.state.settings.focusMainPct || 84),
-      title: t('hintMainRatio'),
-      style: { width: '95px', cursor: 'pointer', accentColor: 'var(--accent)' },
-      oninput: (e) => {
-        const focusMainPct = parseInt(e.target.value, 10);
-        store.state.settings.focusMainPct = focusMainPct;
-        patchSettingsSoft({ focusMainPct });
-        applyGridSize();
-        applyFocusMainSizing();
-      },
-      onchange: (e) => store.patchSettings({ focusMainPct: parseInt(e.target.value, 10) }),
-    });
-
-    const focusAspectSel = $('select', {
-      class: 'ctrl-input',
-      title: t('hintMainAspect'),
-      style: { padding: '6px 8px', width: '86px' },
-      onchange: (e) => {
-        store.patchSettings({ focusAspect: e.target.value });
-        applyFocusMainSizing();
-      },
-    }, [
-      $('option', { value: 'auto' }, LANG === 'zh' ? '自适应' : 'Auto'),
-      $('option', { value: '16:9' }, '16:9'),
-      $('option', { value: '4:3' }, '4:3'),
-      $('option', { value: '1:1' }, '1:1'),
-      $('option', { value: '9:16' }, '9:16'),
-    ]);
-    focusAspectSel.value = store.state.settings.focusAspect || 'auto';
-
-    const focusThumbSlider = $('input', {
-      type: 'range', min: '96', max: '260', value: String(store.state.settings.focusThumbSize || 150),
-      title: t('hintThumbSize'),
-      style: { width: '80px', cursor: 'pointer', accentColor: 'var(--accent)' },
-      oninput: (e) => {
-        const focusThumbSize = parseInt(e.target.value, 10);
-        store.state.settings.focusThumbSize = focusThumbSize;
-        patchSettingsSoft({ focusThumbSize });
-        applyGridSize();
-      },
-      onchange: (e) => store.patchSettings({ focusThumbSize: parseInt(e.target.value, 10) }),
-    });
-
-    const focusThumbToggleBtn = $('button', {
-      class: 'ctrl-btn',
-      title: t('focusThumbsHint'),
-      style: { cursor: 'pointer' },
-      onclick: () => toggleFocusThumbs(),
-      html: trustedHtml(iconLabel('grid', t('focusThumbsHide'))),
     });
 
     const videoFitBtn = $('button', {
@@ -9268,7 +9088,6 @@
     }
 
     function applyGridSize() {
-      const mode = store.state.settings.viewMode;
       if (store.state.settings.splitViewActive) {
         grid.style.display = 'grid';
         grid.style.gridTemplateAreas = '';
@@ -9279,24 +9098,6 @@
         grid.style.alignContent = 'stretch';
         grid.style.overflow = 'hidden';
         grid.style.setProperty('--split-ratio', clampInt(store.state.settings.splitRatio, 20, 80, 50) + '%');
-        return;
-      }
-      if (mode === 'focus') {
-        const w = Math.max(45, Math.min(76, Number(store.state.settings.focusMainPct || 62)));
-        const h = Math.max(44, Math.min(78, Number(store.state.settings.focusMainHPct || 64)));
-        grid.style.display = 'grid';
-        grid.style.gridTemplateColumns = `minmax(260px, ${w}fr) 8px minmax(190px, ${100 - w}fr)`;
-        grid.style.gridTemplateRows = `minmax(220px, ${h}fr) 8px minmax(120px, ${100 - h}fr)`;
-        grid.style.gridTemplateAreas = `'main vbar side' 'hbar hbar side' 'bottom bottom side'`;
-        grid.style.gap = '8px';
-        grid.style.alignItems = 'stretch';
-        grid.style.alignContent = 'stretch';
-        grid.style.overflow = 'hidden';
-        grid.style.setProperty('--focus-main-w', w + 'fr');
-        grid.style.setProperty('--focus-side-w', (100 - w) + 'fr');
-        grid.style.setProperty('--focus-main-h', h + 'fr');
-        grid.style.setProperty('--focus-bottom-h', (100 - h) + 'fr');
-        requestAnimationFrame(applyFocusMainSizing);
         return;
       }
       const shape = layoutShape();
@@ -9351,15 +9152,6 @@
       card.style.aspectRatio = 'auto';
     }
 
-    function parseFocusAspect() {
-      const v = store.state.settings.focusAspect || 'auto';
-      if (v === 'auto') return null;
-      if (v === '4:3') return 4 / 3;
-      if (v === '1:1') return 1;
-      if (v === '9:16') return 9 / 16;
-      return 16 / 9;
-    }
-
     function resetCardSizing(card) {
       if (!card) return;
       card.classList.remove('is-focus-main');
@@ -9375,28 +9167,13 @@
       card.style.gridRow = '';
     }
 
-    function applyFocusMainSizing() {
-      if (store.state.settings.viewMode !== 'focus') return;
-      const row = grid.querySelector('.focused-row');
-      const card = row && row.querySelector('.cam-card');
-      if (!row || !card) return;
-      card.classList.add('is-focus-main');
-      card.style.width = '100%';
-      card.style.height = '100%';
-      card.style.maxWidth = '100%';
-      card.style.maxHeight = '100%';
-      card.style.flex = '1 1 auto';
-      card.style.aspectRatio = 'auto';
-    }
-
     window.addEventListener('resize', debounce(() => {
       // Entering fullscreen resizes the viewport. Rebuilding the grid here
       // reparents its cards, and browsers immediately leave fullscreen when
       // the fullscreen element is moved in the DOM. The exit resize runs after
       // fullscreenElement clears, so normal layout sizing still resumes then.
       if (document.fullscreenElement) return;
-      if (store.state.settings.viewMode === 'focus') applyFocusMainSizing();
-      else renderGrid();
+      renderGrid();
     }, 120));
 
     // ---- 侧边栏渲染 ----
@@ -9414,8 +9191,7 @@
 
     function renderSidebar() {
       const shellHidesSidebar = !!store.state.settings.pureMode
-        || !!store.state.settings.splitViewActive
-        || store.state.settings.viewMode === 'focus';
+        || !!store.state.settings.splitViewActive;
       if (shellHidesSidebar) {
         sidebar.style.setProperty('display', 'none', 'important');
         return;
@@ -9641,8 +9417,7 @@
 
     function isRoomMediaProtected(roomId) {
       const room = findRoomAny(roomId);
-      return store.state.settings.focusedRoomId === roomId && store.state.settings.viewMode === 'focus'
-        || store.state.settings.splitRoomIds.includes(roomId)
+      return store.state.settings.splitRoomIds.includes(roomId)
         || !!room && room.muted === false;
     }
 
@@ -10289,7 +10064,7 @@
             registerOnlineFollowingFailure(result.error || new Error('Following list was incomplete'), true);
           }
         } catch (error) {
-          console.warn('[RoomGrid] Online Following sync failed', error);
+          console.warn('[Ziggy Suite] Online Following sync failed', error);
           registerOnlineFollowingFailure(error);
         } finally {
           onlineFollowingSyncBusy = false;
@@ -10520,7 +10295,7 @@
         toast(t('unfollowAccountDone', target));
         return true;
       } catch (error) {
-        console.warn('[RoomGrid] Chaturbate unfollow failed', error);
+        console.warn('[Ziggy Suite] Chaturbate unfollow failed', error);
         toast(`${t('unfollowAccountFailed', target)}: ${error?.message || error}`, 4000);
         return false;
       }
@@ -10746,19 +10521,6 @@
         if (entry) entry.resizeObserver = ro;
       } catch (_) { /* 旧浏览器忽略 */ }
 
-      // —— focus 模式：单击非主屏卡片（缩略图）→ 设为主屏 ——
-      card.addEventListener('click', (e) => {
-        if (store.state.settings.viewMode !== 'focus') return;
-        if (e.target.tagName === 'VIDEO') return; // 让 video 控件正常响应
-        if (e.target.closest('.icon-btn')) return;
-        if (store.state.settings.focusedRoomId === room.id) return;
-        // v15.4：新主屏布局的右侧 / 下方副窗口也可以直接点击切主屏。
-        const p = card.parentElement;
-        const canPromote = p?.classList.contains('thumbs-row') || p?.classList.contains('focus-side-row') || p?.classList.contains('focus-bottom-row');
-        if (!canPromote) return;
-        focusRoom(room.id);
-      });
-
       return card;
     }
 
@@ -10817,7 +10579,7 @@
           toast(t('screenshotSaved'));
         }, 'image/png');
       } catch (err) {
-        console.warn('[RoomGrid] screenshot failed', err);
+        console.warn('[Ziggy Suite] screenshot failed', err);
         toast(t('captureFailed'));
       }
     }
@@ -11182,7 +10944,7 @@
         } catch (_) {}
         return true;
       } catch (err) {
-        console.warn('[RoomGrid] shared workspace import failed', err);
+        console.warn('[Ziggy Suite] shared workspace import failed', err);
         toast(t('shareInvalid'));
         return false;
       }
@@ -11333,9 +11095,6 @@
       openToolPanel(t('layoutSettings'), (body, close) => {
         const layout = $('select', { class: 'ctrl-input' }, [2, 4, 6, 9].map(n => $('option', { value: String(n), selected: Number(store.state.settings.layoutSize) === n }, LANG === 'zh' ? `${n} 位可见` : `${n} visible`)));
         const phoneLayout = $('select', { class: 'ctrl-input' }, [2, 4, 6, 9].map(n => $('option', { value: String(n), selected: Number(store.state.settings.phoneLayoutSize) === n }, LANG === 'zh' ? `${n} 位可见` : `${n} visible`)));
-        const mainW = $('input', { class: 'ctrl-input', type: 'number', min: '45', max: '76', value: String(store.state.settings.focusMainPct || 62) });
-        const mainH = $('input', { class: 'ctrl-input', type: 'number', min: '44', max: '78', value: String(store.state.settings.focusMainHPct || 64) });
-        const thumb = $('input', { class: 'ctrl-input', type: 'number', min: '96', max: '260', value: String(store.state.settings.focusThumbSize || 150) });
         const notify = $('input', { type: 'checkbox', checked: !!store.state.settings.notifyOnline });
         const notifyFavoritesOnly = $('input', { type: 'checkbox', checked: !!store.state.settings.notifyFavoritesOnly, disabled: !store.state.settings.notifyOnline });
         const phoneModeAuto = $('input', { type: 'checkbox', checked: store.state.settings.phoneModeAuto !== false });
@@ -11344,9 +11103,6 @@
           $('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px' } }, [
             $('label', { style: { display: 'grid', gap: '5px', fontSize: '12px', color: 'var(--text-muted)' } }, [LANG === 'zh' ? '网格单屏可见' : 'Grid visible models', layout]),
             $('label', { style: { display: 'grid', gap: '5px', fontSize: '12px', color: 'var(--text-muted)' } }, [LANG === 'zh' ? '手机单屏可见' : 'Phone visible models', phoneLayout]),
-            $('label', { style: { display: 'grid', gap: '5px', fontSize: '12px', color: 'var(--text-muted)' } }, [t('hintThumbSize'), thumb]),
-            $('label', { style: { display: 'grid', gap: '5px', fontSize: '12px', color: 'var(--text-muted)' } }, [LANG === 'zh' ? '主屏宽度' : 'Main width', mainW]),
-            $('label', { style: { display: 'grid', gap: '5px', fontSize: '12px', color: 'var(--text-muted)' } }, [LANG === 'zh' ? '主屏高度' : 'Main height', mainH]),
           ]),
           $('label', { class: 'toggle', style: { marginTop: '10px' } }, [phoneModeAuto, t('phoneAutoMode')]),
           $('label', { class: 'toggle', style: { marginTop: '10px' } }, [notify, t('notifyOnline')]),
@@ -11360,9 +11116,6 @@
                 phoneLayoutSize: Number(phoneLayout.value),
                 phoneModeAuto: !!phoneModeAuto.checked,
                 ...(phoneEnvironment && phoneModeAuto.checked ? { viewMode: 'phone', sidebarCollapsed: true } : {}),
-                focusMainPct: clampInt(mainW.value, 45, 76, 62),
-                focusMainHPct: clampInt(mainH.value, 44, 78, 64),
-                focusThumbSize: clampInt(thumb.value, 96, 260, 150),
                 notifyOnline: !!notify.checked,
                 notifyFavoritesOnly: !!notifyFavoritesOnly.checked,
               });
@@ -11379,7 +11132,6 @@
           $('option', { value: 'last' }, t('startupLastUsed')),
           $('option', { value: 'auto' }, t('startupAutomatic')),
           $('option', { value: 'grid' }, t('viewGrid')),
-          $('option', { value: 'focus' }, t('viewFocus')),
           $('option', { value: 'phone' }, t('viewPhone')),
         ]);
         view.value = store.state.settings.startupView || 'last';
@@ -11558,9 +11310,7 @@
           ['focusAdd', t('shortcutFocusAdd')],
           ['refreshAll', t('shortcutRefreshAll')],
           ['gridView', t('shortcutGridView')],
-          ['focusView', t('shortcutFocusView')],
           ['pureMode', t('shortcutPureMode')],
-          ['focusThumbs', t('shortcutFocusThumbs')],
           ['recordingCenter', t('shortcutRecordingCenter')],
           ['recordPage', t('shortcutRecordPage')],
         ];
@@ -11626,7 +11376,7 @@
       });
     }
 
-    /* ---- 卡片"更多"操作菜单（全屏 / 移动到分组 / 主屏聚焦）---- */
+    /* ---- 卡片“更多”操作菜单 ---- */
     let cardOpsMenuCleanup = null;
     function closeCardOpsMenu() {
       if (typeof cardOpsMenuCleanup === 'function') cardOpsMenuCleanup();
@@ -11647,14 +11397,6 @@
         onclick: () => { closeCardOpsMenu(); onclick(); },
       }, label), label);
 
-      // 主屏切换（focus 模式专属）
-      if (store.state.settings.viewMode === 'focus') {
-        const isFocused = store.state.settings.focusedRoomId === roomId;
-        menu.appendChild(item(isFocused ? '' : '', isFocused
-          ? (LANG === 'zh' ? '已是主屏' : 'Currently main')
-          : (LANG === 'zh' ? '设为主屏' : 'Set as main'),
-          () => { if (!isFocused) store.patchSettings({ focusedRoomId: roomId }); }));
-      }
       menu.appendChild(item('', service.isPaused(roomId) ? t('opResume') : t('opPause'), () => service.togglePause(roomId)));
       menu.appendChild(item('', t('opRefresh'), () => service.refresh(roomId)));
       const currentRoom = store.state.rooms.find(x => x.id === roomId);
@@ -11781,12 +11523,6 @@
 
       const patch = {};
       if (store.state.settings.sortBy !== 'manual') patch.sortBy = 'manual';
-      if (store.state.settings.viewMode === 'focus') {
-        const focusedId = store.state.settings.focusedRoomId;
-        // 主屏与副屏互拖时按“交换屏幕位置”处理：拖副屏到主屏，副屏变主屏；拖主屏到副屏，目标变主屏。
-        if (focusedId === toId && fromId !== focusedId) patch.focusedRoomId = fromId;
-        else if (focusedId === fromId && toId !== focusedId) patch.focusedRoomId = toId;
-      }
 
       store.reorderRooms(mergedIds, targetGroup);
       if (Object.keys(patch).length) store.patchSettings(patch);
@@ -11866,7 +11602,7 @@
         title: opts.title || label,
         onclick: () => {
           closeDrawer();
-          try { onClick?.(); } catch (err) { console.warn('[RoomGrid] menu action failed', err); }
+          try { onClick?.(); } catch (err) { console.warn('[Ziggy Suite] menu action failed', err); }
         },
       }, label);
       const addSection = (label, items) => {
@@ -11901,7 +11637,6 @@
 
       addSection(sectionLabel('窗口', 'Windows'), [
         item(t('menuToggleFit'), () => toggleVideoFit(), { title: t('videoFitHint') }),
-        item(t('menuToggleThumbs'), () => toggleFocusThumbs(), { title: t('focusThumbsHint') }),
         item(t('menuPauseVisible'), () => {
           const ids = currentPageIds();
           service.pauseAll(ids);
@@ -11949,7 +11684,7 @@
         item(t('menuExport'), () => {
           const data = JSON.stringify(sanitizeState(store.state), null, 2);
           const blob = new Blob([data], { type: 'application/json' });
-          downloadBlob(blob, `roomgrid-config-${Date.now()}.json`);
+          downloadBlob(blob, `ziggy-suite-config-${Date.now()}.json`);
         }),
         item(t('menuImport'), () => {
           const inp = $('input', { type: 'file', accept: 'application/json',
@@ -11987,7 +11722,7 @@
         }),
         item(t('menuExportUsernames'), () => {
           const names = store.state.rooms.map(r => r.id).sort().join('\n');
-          downloadBlob(new Blob([names + (names ? '\n' : '')], { type: 'text/plain;charset=utf-8' }), `roomgrid-usernames-${Date.now()}.txt`);
+          downloadBlob(new Blob([names + (names ? '\n' : '')], { type: 'text/plain;charset=utf-8' }), `ziggy-suite-usernames-${Date.now()}.txt`);
         }),
         item(t('menuRepairData'), () => {
           store.repairData();
@@ -12679,9 +12414,8 @@
         && Array.isArray(store.state.settings.splitRoomIds)
         && store.state.settings.splitRoomIds.length === 2;
       // 切换 grid class
-      grid.classList.toggle('view-grid', (mode === 'grid' || mode === 'phone') && !splitActive);
+      grid.classList.toggle('view-grid', !splitActive);
       grid.classList.toggle('view-phone', mode === 'phone' && !splitActive);
-      grid.classList.toggle('view-focus', mode === 'focus' && !splitActive);
       grid.classList.toggle('view-split', splitActive);
 
       applyGridSize();
@@ -12725,24 +12459,12 @@
       const empty = grid.querySelector('.empty-state');
       if (empty) empty.remove();
 
-      if (mode === 'focus') {
-        renderFocusLayout(list);
-      } else {
-        renderGridLayout(list);
-      }
+      renderGridLayout(list);
     }
 
     /* —— grid 布局：均分 —— */
     function renderGridLayout(list) {
       syncLayoutControls();
-      grid.classList.remove('no-bottom');
-      // 清掉 focus 模式专属容器
-      grid.querySelectorAll('.focused-row, .thumbs-row, .focus-side-row, .focus-bottom-row, .resizer').forEach(el => {
-        // 先把里面的 cam-card detach 出来，避免一并被 remove
-        el.querySelectorAll('.cam-card').forEach(c => grid.appendChild(c));
-        el.remove();
-      });
-
       const orderedCards = document.createDocumentFragment();
       list.forEach((room) => {
         let c = cardMap.get(room.id);
@@ -12762,180 +12484,9 @@
       });
     }
 
-    function focusRoom(roomId) {
-      if (!roomId) return;
-      store.patchSettings({ viewMode: 'focus', focusedRoomId: roomId, focusThumbsCollapsed: false });
-    }
-
-    function focusStep(delta) {
-      const list = renderVisibleRooms();
-      if (!list.length) return;
-      const cur = store.state.settings.focusedRoomId;
-      let idx = list.findIndex(r => r.id === cur);
-      if (idx < 0) idx = 0;
-      const next = list[(idx + delta + list.length) % list.length];
-      if (next) focusRoom(next.id);
-    }
-
-    /* —— focus 模式分隔条拖动：调整主屏宽高，副窗口自适应 —— */
-    function attachFocusResizerHandlers(resizer, axis) {
-      let dragging = false, startX = 0, startY = 0, startW = 62, startH = 64, currentW = 62, currentH = 64;
-      const apply = (w, h) => {
-        currentW = Math.max(45, Math.min(76, w));
-        currentH = Math.max(44, Math.min(78, h));
-        grid.style.gridTemplateColumns = `minmax(260px, ${currentW}fr) 8px minmax(190px, ${100 - currentW}fr)`;
-        grid.style.gridTemplateRows = `minmax(220px, ${currentH}fr) 8px minmax(120px, ${100 - currentH}fr)`;
-        grid.style.setProperty('--focus-main-w', currentW + 'fr');
-        grid.style.setProperty('--focus-side-w', (100 - currentW) + 'fr');
-        grid.style.setProperty('--focus-main-h', currentH + 'fr');
-        grid.style.setProperty('--focus-bottom-h', (100 - currentH) + 'fr');
-        requestAnimationFrame(applyFocusMainSizing);
-      };
-      resizer.addEventListener('mousedown', (e) => {
-        dragging = true;
-        startX = e.clientX;
-        startY = e.clientY;
-        startW = Math.max(45, Math.min(76, Number(store.state.settings.focusMainPct || 62)));
-        startH = Math.max(44, Math.min(78, Number(store.state.settings.focusMainHPct || 64)));
-        currentW = startW;
-        currentH = startH;
-        resizer.classList.add('dragging');
-        document.body.style.cursor = axis === 'x' ? 'ew-resize' : 'ns-resize';
-        document.body.style.userSelect = 'none';
-        e.preventDefault();
-      });
-      const move = (e) => {
-        if (!dragging) return;
-        if (axis === 'x') {
-          const gridW = Math.max(1, grid.clientWidth || window.innerWidth || 1);
-          apply(startW + ((e.clientX - startX) / gridW) * 100, currentH);
-        } else {
-          const gridH = Math.max(1, grid.clientHeight || window.innerHeight || 1);
-          apply(currentW, startH + ((e.clientY - startY) / gridH) * 100);
-        }
-      };
-      const up = () => {
-        if (!dragging) return;
-        dragging = false;
-        resizer.classList.remove('dragging');
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-        store.patchSettings({ focusMainPct: Math.round(currentW), focusMainHPct: Math.round(currentH) });
-      };
-      document.addEventListener('mousemove', move);
-      document.addEventListener('mouseup', up);
-    }
-
-    /* —— focus 布局：左上主屏；右侧 / 右下 / 下方为副窗口 —— */
-    function renderFocusLayout(list) {
-      let focusedId = store.state.settings.focusedRoomId;
-      if (!list.some(r => r.id === focusedId)) {
-        const preferred = list.find(r => r.lastStatus === 'online') || list[0];
-        focusedId = preferred?.id || null;
-        if (focusedId !== store.state.settings.focusedRoomId) store.state.settings.focusedRoomId = focusedId;
-      }
-
-      let focusedRow = grid.querySelector('.focused-row');
-      let sideRow = grid.querySelector('.focus-side-row');
-      let bottomRow = grid.querySelector('.focus-bottom-row');
-      let vResizer = grid.querySelector('.focus-v-resizer');
-      let hResizer = grid.querySelector('.focus-h-resizer');
-      if (!focusedRow) focusedRow = $('div', { class: 'focused-row' });
-      if (!sideRow) sideRow = $('div', { class: 'focus-side-row' });
-      if (!bottomRow) bottomRow = $('div', { class: 'focus-bottom-row' });
-      if (!vResizer) {
-        vResizer = $('div', { class: 'resizer focus-v-resizer', title: LANG === 'zh' ? '拖动调整主屏宽度' : 'Drag to resize main width' });
-        attachFocusResizerHandlers(vResizer, 'x');
-      }
-      if (!hResizer) {
-        hResizer = $('div', { class: 'resizer focus-h-resizer', title: LANG === 'zh' ? '拖动调整主屏高度' : 'Drag to resize main height' });
-        attachFocusResizerHandlers(hResizer, 'y');
-      }
-
-      focusedRow.style.gridArea = 'main';
-      vResizer.style.gridArea = 'vbar';
-      hResizer.style.gridArea = 'hbar';
-      sideRow.style.gridArea = 'side';
-      bottomRow.style.gridArea = 'bottom';
-
-      [focusedRow, vResizer, hResizer, sideRow, bottomRow].forEach(el => {
-        if (el.parentElement !== grid) grid.appendChild(el);
-      });
-
-      // Remove legacy containers if any
-      grid.querySelectorAll('.thumbs-row').forEach(el => {
-        el.querySelectorAll('.cam-card').forEach(c => sideRow.appendChild(c));
-        el.remove();
-      });
-
-      // Direct children cards are collected before assigning.
-      [...grid.children].forEach(el => {
-        if (el.classList && el.classList.contains('cam-card')) sideRow.appendChild(el);
-      });
-
-      const focusedRoom = list.find(r => r.id === focusedId);
-      const secondary = list.filter(r => r.id !== focusedId);
-      const sideList = secondary;
-      const bottomList = [];
-
-      grid.classList.add('no-bottom');
-      sideRow.style.gridTemplateRows = '';
-      sideRow.style.gridAutoRows = 'minmax(104px, 140px)';
-      sideRow.style.gridTemplateColumns = 'minmax(0, 1fr)';
-      sideRow.style.overflowY = 'auto';
-      bottomRow.style.gridTemplateColumns = bottomList.length ? `repeat(${bottomList.length}, minmax(0, 1fr))` : '1fr';
-      bottomRow.style.gridTemplateRows = 'minmax(0, 1fr)';
-      if (!bottomList.length) {
-        grid.style.gridTemplateRows = 'minmax(0, 1fr)';
-        grid.style.gridTemplateAreas = `'main vbar side'`;
-      } else {
-        applyGridSize();
-      }
-
-      const ensureCard = (room, parent, idx) => {
-        let c = cardMap.get(room.id);
-        if (!c) {
-          buildCard(room);
-          c = cardMap.get(room.id);
-        }
-        activateCardEntry(room.id);
-        resetCardSizing(c.root);
-        const cards = [...parent.children].filter(el => el.classList && el.classList.contains('cam-card'));
-        const ref = cards[idx];
-        if (c.root.parentElement !== parent || ref !== c.root) parent.insertBefore(c.root, ref || null);
-        requestRoomMediaIfNeeded(room.id);
-        renderCardState(room);
-        c.root.classList.toggle('is-focus-main', room.id === focusedId);
-        return c;
-      };
-
-      if (focusedRoom) {
-        const c = ensureCard(focusedRoom, focusedRow, 0);
-        c.root.classList.add('is-focus-main');
-        applyFocusMainSizing();
-      } else {
-        [...focusedRow.children].forEach(el => { if (el.classList && el.classList.contains('cam-card')) sideRow.appendChild(el); });
-      }
-
-      sideList.forEach((room, idx) => ensureCard(room, sideRow, idx));
-      bottomList.forEach((room, idx) => ensureCard(room, bottomRow, idx));
-
-      const keep = new Set(list.map(r => r.id));
-      [focusedRow, sideRow, bottomRow].forEach(parent => {
-        [...parent.children].forEach(el => {
-          const id = el.dataset?.roomId;
-          if (id && !keep.has(id)) sideRow.appendChild(el);
-        });
-      });
-
-      requestAnimationFrame(applyFocusMainSizing);
-      syncLayoutControls();
-    }
-
     // ---- 渲染调度：合并同一帧内的多次状态变化，减少批量添加、切页和状态刷新时的抖动 ----
     let sidebarRenderRaf = 0;
     let gridRenderRaf = 0;
-    let focusSizingRaf = 0;
     let sidebarRenderDeferred = false;
     let gridRenderDeferred = false;
     function scheduleSidebarRender() {
@@ -12947,10 +12498,6 @@
       if (document.hidden) { gridRenderDeferred = true; return; }
       if (gridRenderRaf) return;
       gridRenderRaf = requestAnimationFrame(() => { gridRenderRaf = 0; gridRenderDeferred = false; renderGrid(); });
-    }
-    function scheduleFocusSizing() {
-      if (focusSizingRaf) return;
-      focusSizingRaf = requestAnimationFrame(() => { focusSizingRaf = 0; applyFocusMainSizing(); });
     }
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) return;
@@ -12974,7 +12521,7 @@
         const needsSidebar = fullRefresh || hasSetting('activeGroup', 'sidebarCollapsed');
         const needsGrid = fullRefresh || hasSetting(
           'activeGroup', 'filter', 'sortBy', 'searchQuery', 'layoutSize', 'phoneLayoutSize', 'phoneModeAuto', 'pageIndex', 'onlineFollowingPageIndex',
-          'viewMode', 'focusedRoomId', 'focusMainPct', 'focusMainHPct', 'focusAspect', 'focusThumbSize',
+          'viewMode',
           'showRecordingOnly', 'favoriteFirst', 'splitRoomIds', 'splitViewActive', 'splitRatio', 'splitAudioRoomId', 'splitToolbarPosition'
         );
 
@@ -12985,9 +12532,6 @@
         filterSel.value = filterModeFromState();
         sizeSlider.value = String(state.settings.gridSize);
         if (document.activeElement !== searchInput) searchInput.value = state.settings.searchQuery || '';
-        focusScaleSlider.value = String(state.settings.focusMainPct || 62);
-        focusAspectSel.value = state.settings.focusAspect || 'auto';
-        focusThumbSlider.value = String(state.settings.focusThumbSize || 150);
         syncViewSeg();
         syncLayoutControls();
         syncShellControls();
@@ -12998,7 +12542,6 @@
           if (state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID) syncOnlineFollowing();
         }
         if (hasSetting('videoTransforms')) applyAllVideoTransforms();
-        if (needsGrid || hasSetting('toolbarCollapsed', 'sidebarCollapsed', 'pureMode')) scheduleFocusSizing();
       }
       if (path && path.startsWith('room:')) {
         const id = path.slice(5);
@@ -13025,7 +12568,6 @@
       service.startHls(id, hlsSource);
       const r = findRoomAny(id);
       if (r) renderCardState(r);
-      requestAnimationFrame(applyFocusMainSizing);
     });
     EventBus.on('room:status', ({ id, status, extra }) => {
       const room = findOnlineFollowingRoom(id);
@@ -13082,8 +12624,7 @@
       const removedRoomIds = [...curIds].filter(id => !nextIds.has(id));
       const newRoomIds = [...nextIds].filter(id => !curIds.has(id));
 
-      // 多窗口只同步房间 / 分组，不同步 viewMode / focusedRoomId / filter 等本窗口视图设置。
-      // 否则一个窗口切主屏会把另一个窗口的主屏也顶掉。
+      // 多窗口只同步房间 / 分组，不同步本窗口的视图与筛选设置。
       const localSettings = JSON.parse(JSON.stringify(store.state.settings || defaultState().settings));
       const nextState = {
         ...normalized,
@@ -13093,11 +12634,6 @@
       };
       const groupIds = new Set(nextState.groups.map(g => g.id));
       if (!groupIds.has(nextState.settings.activeGroup)) nextState.settings.activeGroup = DEFAULT_GROUP_ID;
-      if (nextState.settings.focusedRoomId && !nextIds.has(nextState.settings.focusedRoomId)) {
-        const preferred = extRooms.find(r => r.lastStatus === 'online') || extRooms[0];
-        nextState.settings.focusedRoomId = preferred?.id || null;
-      }
-
       // 外部标签页同步只替换内存状态，不回写 localStorage，避免多个工作台互相触发 storage ping-pong。
       store.replaceState(nextState, 'all');
 
@@ -13122,7 +12658,6 @@
       const key = String(e.key || '').toLowerCase();
       if (e.key === 'Escape') closeTransientUi();
       if (shortcutMatches(e, 'pureMode') || (e.altKey && key === 'c')) { e.preventDefault(); togglePureMode(); return; }
-      if (shortcutMatches(e, 'focusThumbs')) { e.preventDefault(); toggleFocusThumbs(); return; }
       if (e.key === 'Escape' && store.state.settings.pureMode) { e.preventDefault(); setPureMode(false); return; }
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       if (shortcutMatches(e, 'refreshAll')) { e.preventDefault(); refreshAllSources(); return; }
@@ -13130,22 +12665,8 @@
       if (shortcutMatches(e, 'recordingCenter')) { e.preventDefault(); openRecordingCenter(); return; }
       if (shortcutMatches(e, 'recordPage')) { e.preventDefault(); recordCurrentPage(); return; }
       if (e.key === 'Escape' && document.fullscreenElement) document.exitFullscreen();
-      if (store.state.settings.viewMode === 'focus') {
-        if (e.code === 'Space') {
-          e.preventDefault();
-          const id = store.state.settings.focusedRoomId;
-          if (id) { service.togglePause(id); requestAnimationFrame(() => updateCardButtons(id)); }
-        }
-        if (e.key === 'ArrowRight' || e.key === ']') { e.preventDefault(); focusStep(1); }
-        if (e.key === 'ArrowLeft' || e.key === '[') { e.preventDefault(); focusStep(-1); }
-      }
-      // 视图切换：g = grid, f = focus
+      // View shortcut: G returns to Grid.
       if (shortcutMatches(e, 'gridView')) { e.preventDefault(); setViewMode('grid'); return; }
-      if (shortcutMatches(e, 'focusView')) {
-        e.preventDefault();
-        setViewMode('focus');
-        return;
-      }
     });
 
     // ---- 首次渲染 + 全量启动 service ----
@@ -13189,24 +12710,23 @@
 
 })();
 
-
 /* =============================================================
- * Integrated component: Chaturbate Reloaded 1.8.0
+ * Integrated Suite browsing and chat component (storage-compatible with Chaturbate Reloaded 1.8.0)
  * Original author: Ladroop. License: MIT.
- * Its storage resets are scoped so they cannot erase MultiCam.
+ * Its storage resets are scoped so they cannot erase the Suite room library.
  * ============================================================= */
 (function() {
     'use strict';
 
-    // Integrated Reloaded 1.8.0: keep it off the standalone MultiCam workstation and prevent duplicate startup.
+    // Integrated browsing/chat component: keep it off the standalone Workshop and prevent duplicate startup.
     if (new URLSearchParams(location.search).get('multicam_mode') === '1' || new URLSearchParams(location.search).get('multicam_recorder') === '1') { return; }
     var reloadedPath = String(location.pathname || '');
     if (location.hostname === 'secure.chaturbate.com' || /^\/(?:security|auth|apps|api|b|fullvideo)(?:\/|$)/.test(reloadedPath) || /^\/accounts\/followers(?:\/|$)/.test(reloadedPath)) { return; }
     if (window.__chaturbateReloadedIntegratedRunning) { return; }
     window.__chaturbateReloadedIntegratedRunning = true;
 
-    // Reloaded historically cleared all site storage. In the suite that would erase MultiCam.
-    // Limit the reset to Reloaded settings and runtime caches.
+    // The legacy component historically cleared all site storage, which would erase Suite data.
+    // Limit reset behavior to its own compatibility settings and runtime caches.
     var reloadedOwnedStorageKeys = [
         'animationoff', 'bigthumb', 'defaultVideoWidth', 'hidemt', 'hpfltopen',
         'ignoredusers', 'isTheaterMode', 'login', 'newtabon', 'pclean',
@@ -13247,7 +12767,7 @@
 
     // The native mobile site uses a completely different layout. Stop the
     // legacy desktop component before it injects any CSS; the Suite's compact
-    // mobile Reloaded panel above still exposes the useful shared settings.
+    // The mobile Suite panel above still exposes the useful shared settings.
     if (!document.getElementById("desktop-spa-header")){return;}
     setgenstyle();
     if (roomname=="photo_videos"){
@@ -13452,20 +12972,21 @@
         }
         n=0;
     }
-    if (!document.hasFocus()){
-        document.addEventListener("visibilitychange",headerReady);
-        return;
+    var headerReadyAttempts=0;
+    if (document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',headerReady,{once:true});
+    }else{
+        headerReady();
     }
-    headerReady();
     return;
     function headerReady(){
-        document.removeEventListener("visibilitychange",headerReady);
+        if (document.getElementById('scriptsettings')){return;}
         if (document.querySelector('[data-testid="header-top-row"]')){
             getUserinfo();
             return;
         }
-        n++;
-        if(n==100){return;}
+        headerReadyAttempts++;
+        if(headerReadyAttempts>=100){return;}
         setTimeout(headerReady,100);
     }
     function getUserinfo(){
@@ -13779,7 +13300,7 @@
         var workspace=makeSection('Workspace');
         makeRow(workspace,'suiteopenworkshop','Open Workshop',function(){dispatchSuite('ziggy-suite:open-workshop');},{icon:'▦',primary:true});
         makeRow(workspace,'suiteroomgrid','Rooms',function(){dispatchSuite('ziggy-suite:toggle-roomgrid',{tab:'multicam'});},{icon:'⊞'});
-        makeRow(workspace,'suitecamarna','Cam ARNA',function(){dispatchSuite('ziggy-suite:toggle-roomgrid',{tab:'arna'});},{icon:'⌕'});
+        makeRow(workspace,'suitecamarna','Archive Search',function(){dispatchSuite('ziggy-suite:toggle-roomgrid',{tab:'arna'});},{icon:'⌕'});
         var recorderRow=makeRow(workspace,'suiterecorderhub','Recorder Hub',function(){window.__ziggyUnifiedRecorder?.openHub?.(true);},{icon:'●'});
         function syncRecorderRow(){
             var count=window.__ziggyUnifiedRecorder?.countActive?.()||0;
@@ -13790,7 +13311,7 @@
         syncRecorderRow();
 
         var tools=makeSection('Tools');
-        var reloaded=makeRow(tools,'reloadedtoolsbutton','Reloaded Tools',toggleReloadedToolsFromMenu,{icon:'⚙'});
+        var reloaded=makeRow(tools,'reloadedtoolsbutton','Playback and Chat',toggleReloadedToolsFromMenu,{icon:'⚙'});
         reloaded.setAttribute('aria-controls','reloadedtoolspanel');
         reloaded.setAttribute('aria-expanded','false');
         var mount=document.createElement('div');
@@ -13823,160 +13344,13 @@
         makeRow(data,'suitelocalexport','Download local backup',function(){window.__chaturbateSuiteSettings?.exportLocalSettings?.();},{icon:'⇩'});
         makeRow(data,'suitelocalimport','Import local backup',function(){window.__chaturbateSuiteSettings?.importLocalSettings?.();},{icon:'⇧'});
         if(login){
-            makeRow(data,'saved','Save Reloaded settings',savesetting,{icon:'✓'});
-            makeRow(data,'clear','Clear Reloaded settings',clearsettings,{icon:'×',danger:true});
+            makeRow(data,'saved','Save Suite browsing settings',savesetting,{icon:'✓'});
+            makeRow(data,'clear','Reset Suite browsing settings',clearsettings,{icon:'×',danger:true});
         }
         setsw();
         root.querySelectorAll('.suite-menu-switch').forEach(function(input){input.setAttribute('value',input.value);});
     }
 
-    function legacyMoreoptions(){
-        var newelem=document.createElement('div');
-        newelem.id="scriptcontrols";
-        newelem.style.display="none";
-        newelem.className="scriptset";
-        document.querySelector('[data-testid="header-top-row"]').appendChild(newelem);
-
-        newelem=document.createElement('span');
-        newelem.id="scriptinfo";
-        newelem.innerHTML=scriptname+" Version: "+version;
-        document.getElementById("scriptcontrols").appendChild(newelem);
-
-        newelem=document.createElement('span');
-        newelem.id="suiteexport";
-        newelem.style.cursor="pointer";
-        newelem.innerHTML="Export all Suite settings to GitHub";
-        newelem.addEventListener("click", function(event){
-            event.stopPropagation();
-            if (window.__chaturbateSuiteSettings){window.__chaturbateSuiteSettings.exportSettings();}
-        });
-        document.getElementById("scriptcontrols").appendChild(newelem);
-
-        newelem=document.createElement('span');
-        newelem.id="suiteimport";
-        newelem.style.cursor="pointer";
-        newelem.innerHTML="Import all Suite settings from GitHub";
-        newelem.addEventListener("click", function(event){
-            event.stopPropagation();
-            if (window.__chaturbateSuiteSettings){window.__chaturbateSuiteSettings.importSettings();}
-        });
-        document.getElementById("scriptcontrols").appendChild(newelem);
-
-        newelem=document.createElement('span');
-        newelem.id="githubsyncbutton";
-        newelem.style.cursor="pointer";
-        newelem.innerHTML=window.__chaturbateSuiteSettings?.isGithubSyncConfigured?.()
-            ? "GitHub Cloud: Configured"
-            : "GitHub Cloud: Setup required";
-        newelem.addEventListener("click", function(event){
-            event.stopPropagation();
-            if (window.__chaturbateSuiteSettings){window.__chaturbateSuiteSettings.configureGithubSync();}
-        });
-        document.getElementById("scriptcontrols").appendChild(newelem);
-
-        newelem=document.createElement('span');
-        newelem.id="reloadedtoolsbutton";
-        newelem.style.cursor="pointer";
-        newelem.innerHTML="Reloaded Tools";
-        newelem.setAttribute("role","button");
-        newelem.setAttribute("tabindex","0");
-        newelem.setAttribute("aria-controls","reloadedtoolspanel");
-        newelem.setAttribute("aria-expanded","false");
-        newelem.addEventListener("click",toggleReloadedToolsFromMenu);
-        newelem.addEventListener("keydown",function(event){
-            if ((event.key=="Enter")||(event.key==" ")){
-                event.preventDefault();
-                toggleReloadedToolsFromMenu(event);
-            }
-        });
-        document.getElementById("scriptcontrols").appendChild(newelem);
-
-        newelem=document.createElement('div');
-        newelem.id="reloadedtoolsmount";
-        newelem.style.clear="both";
-        newelem.style.width="100%";
-        document.getElementById("scriptcontrols").appendChild(newelem);
-
-        newelem=document.createElement('span');
-        newelem.innerHTML="--Script settings--<div style='float:right'>Off ↔ On</div>";
-        document.getElementById("scriptcontrols").appendChild(newelem);
-
-        newelem=document.createElement('span');
-        newelem.id="h2";
-        newelem.innerHTML="Preview rooms : <input type='range' id='a2' min=0 max=1 value=1 style='width: 40px;height:11px;cursor: pointer;float: right;accent-color: #f47321;'>";
-        if (supporter){
-            newelem.style.display="none";
-        }
-        document.getElementById("scriptcontrols").appendChild(newelem);
-
-        newelem=document.createElement('span');
-        newelem.id="h3";
-        newelem.innerHTML="Open rooms in new tab : <input type='range' id='a3' min=0 max=1 value=1 style='width: 40px;height:11px;cursor: pointer;float: right;accent-color: #f47321;'>";
-        document.getElementById("scriptcontrols").appendChild(newelem);
-
-        newelem=document.createElement('span');
-        newelem.id="h4";
-        if (!login){
-            newelem.style.display="none";
-        }
-        newelem.innerHTML="Auto refresh followed : <input type='range' id='a4' min=0 max=1 value=0 style='width: 40px;height:11px;cursor: pointer;float: right;accent-color: #f47321;'>";
-        document.getElementById("scriptcontrols").appendChild(newelem);
-
-        newelem=document.createElement('span');
-        newelem.id="h6";
-        newelem.innerHTML="Big thumbnails : <input type='range' id='a6' min=0 max=1 value=0 style='width: 40px;height:11px;cursor: pointer;float: right;accent-color: #f47321;'>";
-        document.getElementById("scriptcontrols").appendChild(newelem);
-
-        newelem=document.createElement('span');
-        newelem.id="h5";
-        newelem.innerHTML="Hide male/trans : <input type='range' id='a5' min=0 max=1 value=0 style='width: 40px;height:11px;cursor: pointer;float: right;accent-color: #f47321;'>";
-        document.getElementById("scriptcontrols").appendChild(newelem);
-
-        newelem=document.createElement('span');
-        newelem.id="h9";
-        newelem.innerHTML="480px snapshots : <input type='range' id='a9' min=0 max=1 value=0 style='width: 40px;height:11px;cursor: pointer;float: right;accent-color: #f47321;'>";
-        document.getElementById("scriptcontrols").appendChild(newelem);
-
-        if(login){
-        newelem=document.createElement('span');
-        newelem.id="saved";
-        newelem.style.cursor="pointer";
-        newelem.innerHTML="Save all settings.";
-        newelem.addEventListener("click", savesetting );
-        document.getElementById("scriptcontrols").appendChild(newelem);
-        newelem=document.createElement('span');
-        newelem.id="clear";
-        newelem.style.cursor="pointer";
-        newelem.innerHTML="Clear all saved settings.";
-        newelem.addEventListener("click", clearsettings );
-        document.getElementById("scriptcontrols").appendChild(newelem);
-        newelem=document.createElement('span');
-        newelem.id="clear";
-        newelem.style.cursor="pointer";
-        newelem.innerHTML="Manage ban's.";
-        newelem.addEventListener("click", bantoggle );
-        document.getElementById("scriptcontrols").appendChild(newelem);
-        newelem=document.createElement('span');
-        newelem.innerHTML="<select id='banusers' class='darkselect' style='width:220px'></select><br><input id='unbanbut' type='button' value='Unban' style='margin:8px 0px 0px 0px'><input id='permbut' type='button' value='Make permanent' style='margin:8px 15px 0px 8px'>";
-        newelem.id="banlist";
-        newelem.style.display="none";
-        document.getElementById("scriptcontrols").appendChild(newelem);
-        newelem=document.createElement('span');
-        newelem.innerHTML="Ban/ignore this room.";
-        newelem.id="ignore";
-        newelem.style.cursor="pointer";
-        newelem.addEventListener("click", banignore );
-        document.getElementById("scriptcontrols").appendChild(newelem);
-        }
-        document.getElementById("a1").addEventListener("change",zoomoff);
-        document.getElementById("a2").addEventListener("change",anionoff);
-        document.getElementById("a3").addEventListener("change",newtabon);
-        document.getElementById("a4").addEventListener("change",refreshoff);
-        document.getElementById("a5").addEventListener("change",hidemt);
-        document.getElementById("a6").addEventListener("change",bigthumb);
-        document.getElementById("a9").addEventListener("change",smallsnap);
-        setsw();
-    }
 
     function setsw(){
         if (localStorage.getItem("smallsnap")){
@@ -15144,7 +14518,7 @@
         var closeToolsTab=document.createElement('button');
         closeToolsTab.type="button";
         closeToolsTab.innerHTML="&times;";
-        closeToolsTab.title="Close Reloaded tools";
+        closeToolsTab.title="Close playback and chat tools";
         closeToolsTab.style.border="0";
         closeToolsTab.style.background="#0c6a93";
         closeToolsTab.style.borderRadius="10px";
@@ -18104,7 +17478,7 @@
 
 })();
 
-/* Integrated component: Ziggy Mobile Clean View 2.2.0 (native mobile only) */
+/* Integrated Suite mobile-view component 2.2.0 (native mobile only) */
 (function () {
   'use strict';
 
@@ -18862,7 +18236,7 @@
     closeButton.setAttribute('aria-label', 'Close');
     closeButton.addEventListener('click', () => setPanelOpen(false));
     const title = makeElement('div', 'zmc-sheet-title');
-    title.append(makeElement('strong', '', 'Mobile Clean View'), makeElement('span', 'zmc-room-label', 'Chat is hidden'));
+    title.append(makeElement('strong', '', 'Mobile view'), makeElement('span', 'zmc-room-label', 'Chat is hidden'));
     const head = makeElement('div', 'zmc-sheet-head');
     head.append(title, closeButton);
 
@@ -18872,9 +18246,9 @@
     fullscreenButton.classList.add('zmc-fullscreen-action');
     const pipButton = makeAction('▣', 'Picture-in-Picture', 'Pop out the current video', '', togglePictureInPicture);
     pipButton.classList.add('zmc-pip-action');
-    const workshopButton = makeAction('▦', 'Workshop', 'Open the MultiCam workstation', '', () => requestSuiteAction(SUITE_EVENTS.workshop));
+    const workshopButton = makeAction('▦', 'Workshop', 'Open the Suite Workshop', '', () => requestSuiteAction(SUITE_EVENTS.workshop));
     workshopButton.classList.add('zmc-workshop-action');
-    const roomGridButton = makeAction('⊞', 'Rooms', 'Open rooms and Cam ARNA', '', () => requestSuiteAction(SUITE_EVENTS.roomGrid));
+    const roomGridButton = makeAction('⊞', 'Rooms', 'Open room tools and Archive Search', '', () => requestSuiteAction(SUITE_EVENTS.roomGrid));
     roomGridButton.classList.add('zmc-roomgrid-action');
     const addButton = makeAction('★', 'Add model', 'Save this room to Workshop', 'success', () => requestSuiteAction(SUITE_EVENTS.toggleRoom));
     addButton.classList.add('zmc-add-action');
@@ -19966,4 +19340,6 @@
   });
 
   start();
+})();
+
 })();

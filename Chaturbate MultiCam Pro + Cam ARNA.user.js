@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.29
+// @version           16.5.30
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -12,7 +12,7 @@
 // @match             https://chaturbate.com/*
 // @match             https://*.chaturbate.com/*
 // @require           https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js
-// @require           https://cdn.jsdelivr.net/npm/mediabunny@1.55.5/dist/bundles/mediabunny.min.cjs
+// @require           https://unpkg.com/mediabunny@1.55.5/dist/bundles/mediabunny.min.cjs
 // @grant             GM_xmlhttpRequest
 // @grant             GM_getValue
 // @grant             GM_setValue
@@ -95,7 +95,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.29');
+  instanceMarker.setAttribute('data-suite-version', '16.5.30');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1297,7 +1297,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.29',
+    version: '16.5.30',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',

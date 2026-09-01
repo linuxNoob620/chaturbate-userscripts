@@ -151,7 +151,7 @@ const metadata = parseUserscript(source);
 if (!/^\d+(?:\.\d+){1,3}$/.test(metadata.version)) throw new Error(`Unsupported extension version: ${metadata.version}`);
 const expectedRequires = [
   'https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js',
-  'https://cdn.jsdelivr.net/npm/mediabunny@1.55.5/dist/bundles/mediabunny.min.cjs',
+  'https://unpkg.com/mediabunny@1.55.5/dist/bundles/mediabunny.min.cjs',
 ];
 if (JSON.stringify(metadata.requires) !== JSON.stringify(expectedRequires)) {
   throw new Error('The userscript @require dependency changed; audit it before rebuilding extensions');

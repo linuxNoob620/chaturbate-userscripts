@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.28
+// @version           16.5.29
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -12,6 +12,7 @@
 // @match             https://chaturbate.com/*
 // @match             https://*.chaturbate.com/*
 // @require           https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js
+// @require           https://cdn.jsdelivr.net/npm/mediabunny@1.55.5/dist/bundles/mediabunny.min.cjs
 // @grant             GM_xmlhttpRequest
 // @grant             GM_getValue
 // @grant             GM_setValue
@@ -94,7 +95,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.28');
+  instanceMarker.setAttribute('data-suite-version', '16.5.29');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1296,7 +1297,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.28',
+    version: '16.5.29',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -4344,6 +4345,83 @@
       return wait > 0 ? new Promise(resolve => setTimeout(resolve, wait)) : Promise.resolve();
     }
 
+    function recorderMediaToolkit() {
+      try {
+        if (typeof Mediabunny !== 'undefined' && Mediabunny) return Mediabunny;
+        return globalThis.Mediabunny || null;
+      } catch (_) { return null; }
+    }
+
+    async function convertRecordingToMp4(blob, job) {
+      const media = recorderMediaToolkit();
+      if (!media) throw new Error('MP4 converter unavailable');
+      const {
+        ALL_FORMATS, BlobSource, BufferTarget, Conversion, Input,
+        Mp4OutputFormat, Output, Quality, StreamTarget,
+      } = media;
+      if (![ALL_FORMATS, BlobSource, BufferTarget, Conversion, Input, Mp4OutputFormat, Output, Quality, StreamTarget].every(Boolean)) {
+        throw new Error('MP4 converter is incomplete');
+      }
+
+      const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS });
+      let target = null;
+      let outputHandle = null;
+      let outputWritable = null;
+      if (job.opfsDir) {
+        job.opfsOutputName = `${safeFilePart(job.id)}-${job.startedAt}.mp4.part`;
+        outputHandle = await job.opfsDir.getFileHandle(job.opfsOutputName, { create: true });
+        job.opfsOutputHandle = outputHandle;
+        outputWritable = await outputHandle.createWritable();
+        target = new StreamTarget(outputWritable, { chunked: true, chunkSize: 8 * 1024 * 1024 });
+      } else {
+        target = new BufferTarget();
+      }
+      const output = new Output({ format: new Mp4OutputFormat(), target });
+      const videoBitrate = job.height >= 1080 ? 10000000 : (job.height >= 720 ? 6000000 : Math.max(2500000, Math.round((job.width || 1280) * (job.height || 720) * 8)));
+      const conversion = await Conversion.init({
+        input,
+        output,
+        video: {
+          codec: 'avc',
+          quality: new Quality({ bitrate: Math.min(12000000, videoBitrate), bitrateMode: 'variable' }),
+          hardwareAcceleration: 'prefer-hardware',
+          forceTranscode: true,
+        },
+        audio: {
+          codec: 'aac',
+          quality: new Quality({ bitrate: 192000, bitrateMode: 'variable' }),
+          forceTranscode: true,
+        },
+      });
+      if (!conversion.isValid) {
+        const reasons = (conversion.discardedTracks || []).map(item => item?.reason).filter(Boolean).join('; ');
+        try { await outputWritable?.abort?.(); } catch (_) {}
+        throw new Error(reasons ? `MP4 conversion unsupported: ${reasons}` : 'MP4 conversion unsupported in this browser');
+      }
+      let lastProgress = 0;
+      let lastPublishedAt = 0;
+      conversion.onProgress = value => {
+        const progress = Math.max(0, Math.min(1, Number(value) || 0));
+        const mapped = 65 + Math.round(progress * 30);
+        if (mapped <= lastProgress && Date.now() - lastPublishedAt < 250) return;
+        lastProgress = mapped;
+        lastPublishedAt = Date.now();
+        job.finalizingProgress = mapped;
+        publishState();
+      };
+      try {
+        await conversion.execute();
+      } catch (error) {
+        try { await outputWritable?.abort?.(); } catch (_) {}
+        throw error;
+      }
+      let converted = null;
+      if (outputHandle) converted = await outputHandle.getFile();
+      else if (target.buffer) converted = new Blob([target.buffer], { type: 'video/mp4' });
+      if (!converted?.size) throw new Error('MP4 conversion produced no data');
+      return converted.type === 'video/mp4' ? converted : new Blob([converted], { type: 'video/mp4' });
+    }
+
     async function finalizeJob(job, reason = 'manual', command = null) {
       if (!job || job.stopRequested || job.finalizing) return;
       job.stopRequested = true;
@@ -4384,7 +4462,7 @@
           blob = new Blob(job.chunks || [], { type: job.mimeType || 'video/webm' });
         }
         await waitForFinalizingMilestone(job, 900);
-        job.finalizingProgress = 82; publishState();
+        job.finalizingProgress = 62; publishState();
         if (!blob?.size) {
           await waitForFinalizingMilestone(job, 1400);
           if (Number(job.bytes || 0) <= 0) {
@@ -4402,15 +4480,30 @@
           }
           throw pipelineError || new Error(t('recordingNoData'));
         }
-        const ext = String(job.mimeType || '').includes('mp4') ? 'mp4' : 'webm';
+        let outputBlob = blob;
+        let ext = String(job.mimeType || '').includes('mp4') ? 'mp4' : 'webm';
+        let conversionError = null;
+        if (ext !== 'mp4') {
+          try {
+            outputBlob = await convertRecordingToMp4(blob, job);
+            ext = 'mp4';
+            job.mimeType = 'video/mp4';
+          } catch (error) {
+            conversionError = error;
+            console.warn('[RoomGrid] MP4 conversion failed; preserving the WebM recording', error);
+          }
+        }
+        job.finalizingProgress = 96; publishState();
         job.filename = `${safeFilePart(job.id)}_${fileStamp(job.startedAt)}.${ext}`;
-        downloadBlob(blob, job.filename);
+        downloadBlob(outputBlob, job.filename);
         await waitForFinalizingMilestone(job, 1400);
         cleanupJob(job);
         job.finalizingProgress = 100;
         job.status = 'saved';
         job.finalizing = false;
-        job.error = pipelineError ? `Saved partial recording after ${reason}: ${pipelineError.message || pipelineError}` : '';
+        job.error = conversionError
+          ? `MP4 conversion failed; saved WebM instead: ${conversionError.message || conversionError}`
+          : (pipelineError ? `Saved partial recording after ${reason}: ${pipelineError.message || pipelineError}` : '');
         publishState();
         publishCommandAck(command, 'completed', 'saved');
         setTimeout(() => removeJob(job.id), 8000);
@@ -4447,6 +4540,7 @@
       if (!job) return;
       cleanupJob(job);
       if (job.opfsDir && job.opfsName) job.opfsDir.removeEntry(job.opfsName).catch(() => {});
+      if (job.opfsDir && job.opfsOutputName) job.opfsDir.removeEntry(job.opfsOutputName).catch(() => {});
       jobs.delete(job.id);
       hubStore.state.rooms = hubStore.state.rooms.filter(room => room.id !== job.id);
       publishState();
@@ -10679,11 +10773,9 @@
       }
     }
 
-    function startCardRecording(roomId, options = {}) {
+    function startCardRecording(roomId) {
       roomId = normalizeUsername(roomId);
       if (UnifiedRecorder.has(roomId)) return;
-      const opts = options && typeof options === 'object' ? options : {};
-      if (!opts.skipConfirm && !confirm(t('recordingConsent'))) return;
       if (!UnifiedRecorder.start(roomId)) { toast(t('recordingUnsupported')); return; }
       updateCardButtons(roomId);
       toast(t('dockRecordQueued'));
@@ -11066,8 +11158,7 @@
     function recordRoomIds(ids) {
       const clean = [...new Set((ids || []).map(normalizeUsername).filter(Boolean))];
       if (!clean.length) return;
-      if (!confirm(t('recordingConsent'))) return;
-      clean.forEach(id => startCardRecording(id, { skipConfirm: true, waitForSource: true }));
+      clean.forEach(id => startCardRecording(id));
       renderGrid();
     }
 

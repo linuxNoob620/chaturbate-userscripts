@@ -23,10 +23,12 @@ const expectedHosts = [...new Set(connects.map(host => host === '*' ? '<all_urls
 const bodyHash = createHash('sha256').update(authoritativeBody).digest('hex');
 const backgroundSource = await readFile(path.join(root, 'extension', 'shared', 'background.js'), 'utf8');
 const hlsSource = await readFile(path.join(root, 'node_modules', 'hls.js', 'dist', 'hls.min.js'));
+const mediabunnySource = await readFile(path.join(root, 'node_modules', 'mediabunny', 'dist', 'bundles', 'mediabunny.min.cjs'));
 const packageJson = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
 
 if (packageJson.version !== version) failures.push(`package.json version ${packageJson.version} does not match userscript ${version}`);
 if (packageJson.dependencies?.['hls.js'] !== '1.6.16') failures.push('package.json does not pin hls.js 1.6.16');
+if (packageJson.dependencies?.mediabunny !== '1.55.5') failures.push('package.json does not pin Mediabunny 1.55.5');
 
 for (const platform of platforms) {
   if (!['chrome', 'firefox'].includes(platform)) throw new Error('Usage: node tools/verify-extension-parity.mjs [all|chrome|firefox]');
@@ -65,6 +67,8 @@ for (const platform of platforms) {
   if (generatedBackground !== backgroundSource) failures.push(`${platform}: background adapter differs from shared source`);
   const generatedHls = await readFile(path.join(directory, 'vendor', 'hls.min.js'));
   if (!generatedHls.equals(hlsSource)) failures.push(`${platform}: bundled HLS differs from pinned 1.6.16 package`);
+  const generatedMediabunny = await readFile(path.join(directory, 'vendor', 'mediabunny.min.js'));
+  if (!generatedMediabunny.equals(mediabunnySource)) failures.push(`${platform}: bundled Mediabunny differs from pinned 1.55.5 package`);
 
   for (const scriptPath of [contentPath, backgroundPath]) {
     const check = spawnSync(process.execPath, ['--check', scriptPath], { encoding: 'utf8' });

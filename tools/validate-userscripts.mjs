@@ -157,6 +157,9 @@ for (const item of scripts) {
     if (!source.includes('function handleStorageFailure(job, error)')) failures.push(`${item.file}: recorder storage failure salvage path is missing`);
     if (!source.includes("finalizeJob(job, 'storage-error')")) failures.push(`${item.file}: storage failures do not automatically finalize partial recordings`);
     if (!source.includes("withTimeout(job.writeQueue, 20000")) failures.push(`${item.file}: recorder finalization write timeout is missing`);
+    if (!source.includes('async function convertRecordingToMp4(blob, job)')) failures.push(`${item.file}: recorder MP4 finalization conversion is missing`);
+    if (!source.includes("codec: 'avc'") || !source.includes("codec: 'aac'")) failures.push(`${item.file}: recorder MP4 conversion codecs are missing`);
+    if (source.includes("confirm(t('recordingConsent'))")) failures.push(`${item.file}: recording still displays the removed consent warning`);
     if (!source.includes("findDesktopNavigationSlot('private')")) failures.push(`${item.file}: desktop Workshop navigation does not replace Private Shows`);
     if (!source.includes("const WORKSHOP_TAB_TITLE = 'Ziggy Room Suite'")) failures.push(`${item.file}: unique Workshop tab title is missing`);
     if (!source.includes("function canonicalWorkshopUrl()")) failures.push(`${item.file}: canonical Workshop URL helper is missing`);

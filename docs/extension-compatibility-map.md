@@ -1,6 +1,6 @@
 # Extension compatibility map
 
-This document records the compatibility audit for `Chaturbate MultiCam Pro + Cam ARNA.user.js` version 16.5.28. The userscript remains the reference implementation. Extension builds copy its complete post-metadata body verbatim between explicit parity markers.
+This document records the compatibility audit for `Chaturbate MultiCam Pro + Cam ARNA.user.js` version 16.5.29. The userscript remains the reference implementation. Extension builds copy its complete post-metadata body verbatim between explicit parity markers.
 
 ## Userscript metadata
 
@@ -11,6 +11,7 @@ This document records the compatibility audit for `Chaturbate MultiCam Pro + Cam
 | `@run-at document-end` | `content_scripts[].run_at: document_end` |
 | no `@noframes` | `content_scripts[].all_frames: true` |
 | `@require hls.js@1.6.16` | Exact pinned `hls.js` 1.6.16 file packaged locally and loaded immediately before the Suite |
+| `@require mediabunny@1.55.5` | Exact pinned Mediabunny 1.55.5 browser bundle packaged locally and loaded immediately before the Suite for local WebM-to-MP4 finalization |
 | each `@connect` domain | Generated HTTPS host permission for the same domain |
 | userscript name, description and version | Generated manifest name, description and version |
 | `@downloadURL` / `@updateURL` | Continue to govern Tampermonkey only; extension packages use browser extension update/signing mechanisms |

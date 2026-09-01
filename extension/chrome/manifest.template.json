@@ -19,6 +19,7 @@
       ],
       "js": [
         "vendor/hls.min.js",
+        "vendor/mediabunny.min.js",
         "content.js"
       ],
       "run_at": "document_end",

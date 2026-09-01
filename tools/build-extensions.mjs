@@ -149,7 +149,11 @@ async function writeStoredZip(sourceDirectory, destination) {
 const source = await readFile(sourcePath, 'utf8');
 const metadata = parseUserscript(source);
 if (!/^\d+(?:\.\d+){1,3}$/.test(metadata.version)) throw new Error(`Unsupported extension version: ${metadata.version}`);
-if (metadata.requires.length !== 1 || metadata.requires[0] !== 'https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js') {
+const expectedRequires = [
+  'https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js',
+  'https://cdn.jsdelivr.net/npm/mediabunny@1.55.5/dist/bundles/mediabunny.min.cjs',
+];
+if (JSON.stringify(metadata.requires) !== JSON.stringify(expectedRequires)) {
   throw new Error('The userscript @require dependency changed; audit it before rebuilding extensions');
 }
 
@@ -163,6 +167,8 @@ const content = preambleTemplate
   + postamble;
 const hlsPath = path.join(root, 'node_modules', 'hls.js', 'dist', 'hls.min.js');
 const hlsLicensePath = path.join(root, 'node_modules', 'hls.js', 'LICENSE');
+const mediabunnyPath = path.join(root, 'node_modules', 'mediabunny', 'dist', 'bundles', 'mediabunny.min.cjs');
+const mediabunnyLicensePath = path.join(root, 'node_modules', 'mediabunny', 'LICENSE');
 
 await mkdir(distRoot, { recursive: true });
 await mkdir(packageRoot, { recursive: true });
@@ -182,8 +188,10 @@ for (const platform of platforms) {
   await writeFile(path.join(output, 'content.js'), content, 'utf8');
   await writeFile(path.join(output, 'background.js'), background, 'utf8');
   await copyFile(hlsPath, path.join(output, 'vendor', 'hls.min.js'));
+  await copyFile(mediabunnyPath, path.join(output, 'vendor', 'mediabunny.min.js'));
   await copyFile(path.join(root, 'LICENSE'), path.join(output, 'LICENSE.txt'));
   await copyFile(hlsLicensePath, path.join(output, 'THIRD_PARTY_HLS_LICENSE.txt'));
+  await copyFile(mediabunnyLicensePath, path.join(output, 'THIRD_PARTY_MEDIABUNNY_LICENSE.txt'));
 
   const extension = platform === 'firefox' ? 'xpi' : 'zip';
   const archive = path.join(packageRoot, `ziggy-chaturbate-suite-${platform}-${metadata.version}.${extension}`);

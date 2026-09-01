@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.34
+// @version           16.5.35
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -96,7 +96,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.34');
+  instanceMarker.setAttribute('data-suite-version', '16.5.35');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1298,7 +1298,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.34',
+    version: '16.5.35',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3868,8 +3868,8 @@
       .rec-row.is-recording{border-left:4px solid #ef4444}.rec-row.is-waiting{border-left:4px solid #d97706}.rec-row.is-finalizing{border-left:4px solid #68b5f0}.rec-name{overflow-wrap:anywhere;font:700 16px/1.2 UbuntuMedium,UbuntuRegular,Arial,sans-serif;color:#68b5f0}.rec-meta{margin-top:7px;color:#b3b3b3;font-size:12px;line-height:1.55;overflow-wrap:anywhere}.rec-progress{height:8px;background:#17202a;border-radius:999px;margin-top:10px;overflow:hidden}.rec-progress>i{display:block;height:100%;background:#68b5f0;transition:width .2s}.rec-hidden-media{position:fixed;left:-10000px;top:-10000px;width:2px;height:2px;overflow:hidden}
       @media(max-width:640px){
         .rec-hub,.rec-head,.rec-list,.rec-row,.rec-actions{min-width:0;max-width:100%}.rec-hub{width:100%;padding:12px max(10px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))}
-        .rec-head{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding-bottom:14px}.rec-title{font-size:21px}.rec-sub{font-size:12px;line-height:1.4}
-        .rec-head>.rec-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0}.rec-head>.rec-actions .rec-btn{width:100%;min-width:0;min-height:44px;padding:0 8px;white-space:normal;overflow-wrap:anywhere}
+        .rec-head{display:grid!important;grid-template-columns:minmax(0,1fr)!important;grid-template-rows:auto auto!important;grid-template-areas:"copy" "actions"!important;grid-auto-flow:row!important;grid-auto-columns:minmax(0,1fr)!important;gap:12px!important;align-items:stretch!important;height:auto!important;padding-bottom:14px}.rec-head>div:first-child{grid-area:copy!important;min-width:0!important;width:100%!important}.rec-title,.rec-sub{width:100%!important}.rec-title{font-size:21px}.rec-sub{font-size:12px;line-height:1.4}
+        .rec-head>.rec-actions{grid-area:actions!important;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;width:100%!important;gap:8px!important;margin:0!important}.rec-head>.rec-actions .rec-btn{width:100%;min-width:0;min-height:44px;padding:0 8px;white-space:normal;overflow-wrap:anywhere}
         .rec-list{gap:10px;margin-top:12px}.rec-empty{padding:28px 12px}.rec-row{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:12px 10px}
         .rec-row>.rec-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:0}.rec-row>.rec-actions .rec-btn{width:100%;min-width:0;min-height:42px;padding:0 8px}.rec-row>.rec-actions .rec-btn.danger:last-child:nth-child(odd){grid-column:1/-1}
         .rec-meta{font-size:11px;line-height:1.6}.rec-progress{height:10px}

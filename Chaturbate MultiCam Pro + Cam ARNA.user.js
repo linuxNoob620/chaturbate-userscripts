@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.27
+// @version           16.5.28
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.27');
+  instanceMarker.setAttribute('data-suite-version', '16.5.28');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1296,7 +1296,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.27',
+    version: '16.5.28',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3271,14 +3271,14 @@
         setStatus(id, 'error', { errorMsg: 'request throttled', transient: true });
         EventBus.emit('room:transient-error', { id, error: 'request throttled' });
         schedulePoll(id, wait);
-        return;
+        return { id, status: 'throttled', retryAfterMs: wait };
       }
 
       let data;
       try {
         data = await fetchContext(id, ac.signal);
       } catch (e) {
-        if (ac.signal.aborted || !sessions.has(id) || sessions.get(id) !== s) return;
+        if (ac.signal.aborted || !sessions.has(id) || sessions.get(id) !== s) return { id, status: 'aborted' };
         s.retryCount = (s.retryCount || 0) + 1;
         const throttled = Number(e?.httpStatus || 0) === 429;
         const errorText = throttled ? 'request throttled' : 'request failed';
@@ -3293,10 +3293,10 @@
           wait = Math.min(60000, store.state.settings.pollMs.error * Math.pow(1.6, s.retryCount));
         }
         schedulePoll(id, wait);
-        return;
+        return { id, status: throttled ? 'throttled' : 'error', retryAfterMs: wait };
       }
 
-      if (ac.signal.aborted || !sessions.has(id) || sessions.get(id) !== s) return;
+      if (ac.signal.aborted || !sessions.has(id) || sessions.get(id) !== s) return { id, status: 'aborted' };
       if (s.abortController === ac) s.abortController = null;
 
       s.retryCount = 0;
@@ -3309,39 +3309,40 @@
         s.video = null;
         sessions.set(id, s);
         schedulePoll(id, cfg.offline);
-        return;
+        return { id, status: 'offline' };
       }
       if (['private', 'hidden', 'away', 'secret', 'group', 'password'].includes(String(data.room_status || '').toLowerCase())) {
         setStatus(id, 'private', { privateLabel: data.room_status });
         destroyPlayer(id);
         sessions.set(id, sessions.get(id) || s);
         schedulePoll(id, cfg.private);
-        return;
+        return { id, status: 'private' };
       }
       if (!data.hls_source) {
         setStatus(id, 'error', { errorMsg: 'no stream' });
         schedulePoll(id, cfg.error);
-        return;
+        return { id, status: 'error' };
       }
       if (!isSafeStreamUrl(data.hls_source)) {
         setStatus(id, 'error', { errorMsg: 'invalid stream url' });
         schedulePoll(id, cfg.error);
-        return;
+        return { id, status: 'error' };
       }
 
       // 在线 —— 触发 UI 创建 video，再回调 attach。
       // v15.5: 如果只是例行探测且流地址没变、video 仍在播放，不重建 video/HLS。
       // 这能消除多窗口/多房间场景中周期性 attach/detach 造成的闪屏。
-      if (!sessions.has(id) || sessions.get(id) !== s) return;
+      if (!sessions.has(id) || sessions.get(id) !== s) return { id, status: 'aborted' };
       const prevSource = s.hlsSource;
       const hasLiveVideo = !!s.video && !s.video.ended && (s.hls || s.video.src || s.video.srcObject);
       const sameActiveStream = s.status === 'online' && hasLiveVideo && prevSource === data.hls_source;
       s.hlsSource = data.hls_source;
       const viewerCount = numeric(data.num_users ?? data.viewer_count ?? data.users_in_room, 0);
       setStatus(id, 'online', viewerCount > 0 ? { viewerCount } : {});
-      if (!sessions.has(id) || sessions.get(id) !== s) return;
+      if (!sessions.has(id) || sessions.get(id) !== s) return { id, status: 'aborted' };
       if (!sameActiveStream) EventBus.emit('room:online', { id, hlsSource: data.hls_source });
       if (sessions.has(id) && sessions.get(id) === s) schedulePoll(id, cfg.online || onlinePollMs());
+      return { id, status: 'online' };
     }
 
     function startHls(id, hlsSource) {
@@ -3408,9 +3409,37 @@
         s.hlsSource = null;
       }
       if (!sessions.has(id)) sessions.set(id, { retryCount: 0 });
-      connect(id);
+      return connect(id);
     }
-    function refreshAll() { for (const id of [...sessions.keys()]) refresh(id); }
+    function probe(id) {
+      id = normalizeUsername(id);
+      if (!sessions.has(id)) sessions.set(id, { retryCount: 0, background: true });
+      return connect(id);
+    }
+    async function refreshMany(ids, options = {}) {
+      const unique = [...new Set((Array.isArray(ids) ? ids : []).map(normalizeUsername).filter(isLikelyUsername))];
+      const concurrency = clampInt(options.concurrency, 1, 4, 2);
+      const spacingMs = clampInt(options.spacingMs, 0, 2000, 300);
+      const results = new Array(unique.length);
+      let cursor = 0;
+      let completed = 0;
+      const worker = async () => {
+        while (cursor < unique.length) {
+          const index = cursor++;
+          const id = unique[index];
+          let result;
+          try { result = await probe(id); }
+          catch (error) { result = { id, status: 'error', error: String(error?.message || error) }; }
+          results[index] = result || { id, status: 'unknown' };
+          completed++;
+          try { options.onProgress?.({ completed, total: unique.length, id, result: results[index] }); } catch (_) {}
+          if (spacingMs && cursor < unique.length) await new Promise(resolve => setTimeout(resolve, spacingMs));
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(concurrency, Math.max(1, unique.length)) }, worker));
+      return results;
+    }
+    function refreshAll() { return refreshMany([...sessions.keys()]); }
     function start(id, options = {}) {
       id = normalizeUsername(id);
       // 幂等：已有 session 就跳过（避免切分组时重复启动轮询）
@@ -3431,7 +3460,7 @@
     function stopAll() { for (const id of [...sessions.keys()]) stop(id); stopAllPageMedia(); }
     function has(id) { id = normalizeUsername(id); return sessions.has(id); }
 
-    return { start, startBackground, promote, stop, stopAll, refresh, refreshAll, attachVideo, detachVideo, startHls, has, pause, resume, togglePause, isPaused, pauseAll, resumeAll, refreshQuality, setQualityCap, clearQualityCaps };
+    return { start, startBackground, promote, stop, stopAll, refresh, refreshAll, refreshMany, attachVideo, detachVideo, startHls, has, pause, resume, togglePause, isPaused, pauseAll, resumeAll, refreshQuality, setQualityCap, clearQualityCaps };
   }
 
   /* =============================================================
@@ -3819,15 +3848,23 @@
 
     document.head.appendChild($('style', { html: trustedHtml(`
       html.ziggy-recorder-hub,html.ziggy-recorder-hub body{margin:0;min-height:100%;background:#17202a;color:#f1f1f1;font-family:UbuntuRegular,Arial,sans-serif}
-      .rec-hub{max-width:980px;margin:0 auto;padding:24px}.rec-head{display:flex;gap:14px;align-items:center;justify-content:space-between;border-bottom:1px solid #2d3e50;padding-bottom:18px}
+      .rec-hub{box-sizing:border-box;max-width:980px;margin:0 auto;padding:24px}.rec-head{display:flex;gap:14px;align-items:center;justify-content:space-between;border-bottom:1px solid #2d3e50;padding-bottom:18px}
       .rec-title{font:700 24px/1.2 UbuntuMedium,UbuntuRegular,Arial,sans-serif}.rec-sub{color:#b3b3b3;font-size:13px;margin-top:5px}.rec-actions{display:flex;gap:8px;flex-wrap:wrap}
-      .rec-btn{min-height:38px;border:1px solid #2d3e50;border-radius:4px;background:#202c39;color:#f1f1f1;padding:0 14px;cursor:pointer}.rec-btn:hover{background:#253648}.rec-btn.danger{background:#8b1d1d;border-color:#a52a2a}.rec-btn.primary{background:#0c6a93;border-color:#0c6a93}
-      .rec-list{display:grid;gap:12px;margin-top:18px}.rec-empty{padding:36px 16px;border:1px dashed #2d3e50;color:#b3b3b3;text-align:center}.rec-row{border:1px solid #2d3e50;border-radius:4px;background:#202c39;padding:14px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center}
-      .rec-row.is-recording{border-left:4px solid #ef4444}.rec-row.is-waiting{border-left:4px solid #d97706}.rec-row.is-finalizing{border-left:4px solid #68b5f0}.rec-name{font:700 16px/1.2 UbuntuMedium,UbuntuRegular,Arial,sans-serif;color:#68b5f0}.rec-meta{margin-top:7px;color:#b3b3b3;font-size:12px;line-height:1.55}.rec-progress{height:8px;background:#17202a;border-radius:999px;margin-top:10px;overflow:hidden}.rec-progress>i{display:block;height:100%;background:#68b5f0;transition:width .2s}.rec-hidden-media{position:fixed;left:-10000px;top:-10000px;width:2px;height:2px;overflow:hidden}
-      @media(max-width:640px){.rec-hub{padding:16px}.rec-head,.rec-row{grid-template-columns:1fr;display:grid}.rec-actions{margin-top:10px}.rec-row>.rec-actions{justify-content:stretch}.rec-row>.rec-actions .rec-btn{flex:1}}
+      .rec-btn{box-sizing:border-box;min-height:38px;border:1px solid #2d3e50;border-radius:4px;background:#202c39;color:#f1f1f1;padding:0 14px;cursor:pointer}.rec-btn:hover{background:#253648}.rec-btn.danger{background:#8b1d1d;border-color:#a52a2a}.rec-btn.primary{background:#0c6a93;border-color:#0c6a93}
+      .rec-list{display:grid;gap:12px;margin-top:18px}.rec-empty{padding:36px 16px;border:1px dashed #2d3e50;color:#b3b3b3;text-align:center}.rec-row{border:1px solid #2d3e50;border-radius:4px;background:#202c39;padding:14px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center}.rec-copy{min-width:0}
+      .rec-row.is-recording{border-left:4px solid #ef4444}.rec-row.is-waiting{border-left:4px solid #d97706}.rec-row.is-finalizing{border-left:4px solid #68b5f0}.rec-name{overflow-wrap:anywhere;font:700 16px/1.2 UbuntuMedium,UbuntuRegular,Arial,sans-serif;color:#68b5f0}.rec-meta{margin-top:7px;color:#b3b3b3;font-size:12px;line-height:1.55;overflow-wrap:anywhere}.rec-progress{height:8px;background:#17202a;border-radius:999px;margin-top:10px;overflow:hidden}.rec-progress>i{display:block;height:100%;background:#68b5f0;transition:width .2s}.rec-hidden-media{position:fixed;left:-10000px;top:-10000px;width:2px;height:2px;overflow:hidden}
+      @media(max-width:640px){
+        .rec-hub{width:100%;padding:12px max(10px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))}
+        .rec-head{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding-bottom:14px}.rec-title{font-size:21px}.rec-sub{font-size:12px;line-height:1.4}
+        .rec-head>.rec-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0}.rec-head>.rec-actions .rec-btn{width:100%;min-width:0;padding:0 8px}
+        .rec-list{gap:10px;margin-top:12px}.rec-empty{padding:28px 12px}.rec-row{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:12px 10px}
+        .rec-row>.rec-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:0}.rec-row>.rec-actions .rec-btn{width:100%;min-width:0;min-height:42px;padding:0 8px}.rec-row>.rec-actions .rec-btn.danger:last-child:nth-child(odd){grid-column:1/-1}
+        .rec-meta{font-size:11px;line-height:1.6}.rec-progress{height:10px}
+      }
     `) }));
 
-    const list = $('div', { class: 'rec-list' });
+    const list = $('div', { class: 'rec-list', 'aria-live': 'polite' });
+    const hubRows = new Map();
     const shell = $('main', { class: 'rec-hub' }, [
       $('header', { class: 'rec-head' }, [
         $('div', {}, [
@@ -3861,7 +3898,11 @@
 
     function recorderMimeType() {
       if (typeof MediaRecorder === 'undefined') return '';
-      return ['video/mp4;codecs=h264,aac', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+      // WebM is the only long-running MediaRecorder container that currently
+      // produces dependable timesliced chunks in both Chromium and Firefox.
+      // Chromium advertises MP4 recording before every MP4 pipeline can
+      // actually flush canvas + audio data, which left the Hub at 0.0 KB.
+      return ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4;codecs=h264,aac', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4']
         .find(type => { try { return MediaRecorder.isTypeSupported(type); } catch (_) { return false; } }) || '';
     }
 
@@ -3960,33 +4001,65 @@
       return t('recorderConnecting');
     }
 
+    function createHubRow(id) {
+      const name = $('div', { class: 'rec-name' }, id);
+      const meta = $('div', { class: 'rec-meta' });
+      const progressFill = $('i');
+      const progress = $('div', { class: 'rec-progress', hidden: true, role: 'progressbar', 'aria-label': t('recorderFinalizing') }, [progressFill]);
+      const openButton = $('button', { class: 'rec-btn', onclick: () => openNoopener(`${location.origin}/${encodeURIComponent(id)}/`) }, t('recorderOpenRoom'));
+      const retryButton = $('button', { class: 'rec-btn primary', onclick: () => ownsRecorder ? retryJob(id) : UnifiedRecorder.retry(id) }, t('recorderRetry'));
+      const pauseButton = $('button', { class: 'rec-btn', onclick: () => {
+        const job = (ownsRecorder ? jobs : UnifiedRecorder.recordings).get(id);
+        if (!job) return;
+        if (ownsRecorder) job.manualPaused ? resumeJob(id) : pauseJob(id);
+        else job.manualPaused ? UnifiedRecorder.resume(id) : UnifiedRecorder.pause(id);
+      } }, t('recorderPause'));
+      const stopButton = $('button', { class: 'rec-btn danger', onclick: () => ownsRecorder ? stopJob(id) : UnifiedRecorder.stop(id) }, t('opRecordStop'));
+      const row = $('section', { class: 'rec-row is-waiting', dataset: { recorderId: id } }, [
+        $('div', { class: 'rec-copy' }, [name, meta, progress]),
+        $('div', { class: 'rec-actions' }, [openButton, retryButton, pauseButton, stopButton]),
+      ]);
+      const entry = { row, name, meta, progress, progressFill, retryButton, pauseButton, stopButton };
+      hubRows.set(id, entry);
+      return entry;
+    }
+
     function render() {
       const visibleJobs = ownsRecorder ? jobs : UnifiedRecorder.recordings;
-      list.replaceChildren();
-      if (!visibleJobs.size) { list.appendChild($('div', { class: 'rec-empty' }, t('recordingCenterEmpty'))); return; }
+      if (!visibleJobs.size) {
+        hubRows.forEach(entry => entry.row.remove());
+        hubRows.clear();
+        if (!list.querySelector('.rec-empty')) list.replaceChildren($('div', { class: 'rec-empty' }, t('recordingCenterEmpty')));
+        return;
+      }
+      list.querySelector('.rec-empty')?.remove();
+      const liveIds = new Set(visibleJobs.keys());
+      hubRows.forEach((entry, id) => {
+        if (!liveIds.has(id)) { entry.row.remove(); hubRows.delete(id); }
+      });
       visibleJobs.forEach(job => {
+        const entry = hubRows.get(job.id) || createHubRow(job.id);
         const terminal = !!job.finalizing || ['finalizing', 'saved', 'failed', 'stopped', 'interrupted'].includes(job.status);
         const recordedMs = terminal ? Number(job.recordedMs || 0) : currentRecordedMs(job);
         const waitingMs = terminal ? Number(job.waitingMs || 0) : currentWaitingMs(job);
         const resolution = job.resolution || (job.width && job.height ? `${job.width}×${job.height}` : '—');
-        const row = $('section', { class: `rec-row is-${job.status === 'recording' ? 'recording' : (job.status === 'finalizing' ? 'finalizing' : 'waiting')}` }, [
-          $('div', {}, [
-            $('div', { class: 'rec-name' }, job.id),
-            $('div', { class: 'rec-meta' }, [
-              document.createTextNode(`${statusLabel(job)} · ${t('recordingDuration')}: ${formatDuration(recordedMs)} · ${t('recorderWaitingTime')}: ${formatDuration(waitingMs)}`),
-              $('br'),
-              document.createTextNode(`${resolution} · ${job.audioEnabled || job.audio ? t('recorderAudioOn') : t('recorderAudioOff')} · ${formatBytes(job.bytes)}`),
-            ]),
-            job.status === 'finalizing' ? $('div', { class: 'rec-progress' }, [$('i', { style: { width: `${Math.max(1, job.finalizingProgress || 0)}%` } })]) : null,
-          ]),
-          $('div', { class: 'rec-actions' }, [
-            $('button', { class: 'rec-btn', onclick: () => openNoopener(`${location.origin}/${encodeURIComponent(job.id)}/`) }, t('recorderOpenRoom')),
-            job.status === 'error' ? $('button', { class: 'rec-btn primary', onclick: () => ownsRecorder ? retryJob(job.id) : UnifiedRecorder.retry(job.id) }, t('recorderRetry')) : null,
-            !['finalizing', 'saved', 'failed', 'stopped', 'interrupted'].includes(job.status) ? $('button', { class: 'rec-btn', onclick: () => ownsRecorder ? (job.manualPaused ? resumeJob(job.id) : pauseJob(job.id)) : (job.manualPaused ? UnifiedRecorder.resume(job.id) : UnifiedRecorder.pause(job.id)) }, job.manualPaused ? t('recorderResume') : t('recorderPause')) : null,
-            !['finalizing', 'saved', 'failed', 'stopped', 'interrupted'].includes(job.status) ? $('button', { class: 'rec-btn danger', onclick: () => ownsRecorder ? stopJob(job.id) : UnifiedRecorder.stop(job.id) }, t('opRecordStop')) : null,
-          ]),
-        ]);
-        list.appendChild(row);
+        entry.row.className = `rec-row is-${job.status === 'recording' ? 'recording' : (job.status === 'finalizing' ? 'finalizing' : 'waiting')}`;
+        entry.meta.replaceChildren(
+          document.createTextNode(`${statusLabel(job)} · ${t('recordingDuration')}: ${formatDuration(recordedMs)} · ${t('recorderWaitingTime')}: ${formatDuration(waitingMs)}`),
+          $('br'),
+          document.createTextNode(`${resolution} · ${job.audioEnabled || job.audio ? t('recorderAudioOn') : t('recorderAudioOff')} · ${formatBytes(job.bytes)}`),
+        );
+        const progressValue = Math.max(1, Number(job.finalizingProgress || 0));
+        entry.progress.hidden = job.status !== 'finalizing';
+        entry.progress.setAttribute('aria-valuemin', '0');
+        entry.progress.setAttribute('aria-valuemax', '100');
+        entry.progress.setAttribute('aria-valuenow', String(Math.round(progressValue)));
+        entry.progressFill.style.width = `${progressValue}%`;
+        entry.retryButton.hidden = job.status !== 'error';
+        entry.pauseButton.hidden = terminal;
+        entry.pauseButton.textContent = job.manualPaused ? t('recorderResume') : t('recorderPause');
+        entry.stopButton.hidden = terminal;
+        if (!entry.row.isConnected) list.appendChild(entry.row);
       });
     }
 
@@ -4066,8 +4139,39 @@
     function drawFrame(job) {
       if (!job.canvas || !job.ctx || !job.video) return;
       if (job.video.readyState >= 2 && job.status === 'recording') {
-        try { job.ctx.drawImage(job.video, 0, 0, job.width, job.height); } catch (_) {}
+        try {
+          job.ctx.drawImage(job.video, 0, 0, job.width, job.height);
+          job.canvasTrack?.requestFrame?.();
+        } catch (_) {}
       }
+    }
+
+    function startFramePump(job) {
+      if (!job?.video || job.framePumpActive) return;
+      job.framePumpActive = true;
+      if (typeof job.video.requestVideoFrameCallback === 'function') {
+        const pump = () => {
+          if (!job.framePumpActive) return;
+          drawFrame(job);
+          try { job.frameCallbackId = job.video.requestVideoFrameCallback(pump); } catch (_) { job.frameCallbackId = 0; }
+        };
+        try { job.frameCallbackId = job.video.requestVideoFrameCallback(pump); } catch (_) { job.frameCallbackId = 0; }
+      } else {
+        // Older Firefox builds have no requestVideoFrameCallback. 24 fps is a
+        // much lighter fallback than an unconditional 30-fps 1080p timer.
+        job.drawTimer = setInterval(() => drawFrame(job), 1000 / 24);
+      }
+    }
+
+    function stopFramePump(job) {
+      if (!job) return;
+      job.framePumpActive = false;
+      if (job.frameCallbackId && typeof job.video?.cancelVideoFrameCallback === 'function') {
+        try { job.video.cancelVideoFrameCallback(job.frameCallbackId); } catch (_) {}
+      }
+      job.frameCallbackId = 0;
+      clearInterval(job.drawTimer);
+      job.drawTimer = 0;
     }
 
     async function beginRecorder(job) {
@@ -4082,8 +4186,9 @@
       job.canvas.width = job.width;
       job.canvas.height = job.height;
       job.ctx = job.canvas.getContext('2d', { alpha: false });
-      const canvasStream = job.canvas.captureStream(30);
+      const canvasStream = job.canvas.captureStream(0);
       const tracks = [...canvasStream.getVideoTracks()];
+      job.canvasTrack = tracks[0] || null;
       try {
         const capture = job.video.captureStream || job.video.mozCaptureStream;
         if (typeof capture === 'function') {
@@ -4113,7 +4218,8 @@
       job.recorder.ondataavailable = event => queueChunk(job, event.data);
       job.recorder.onerror = event => { job.error = event.error?.message || 'Recorder error'; job.status = 'error'; pauseClock(job); publishState(); };
       job.recorder.start(2000);
-      job.drawTimer = setInterval(() => drawFrame(job), 1000 / 30);
+      drawFrame(job);
+      startFramePump(job);
       return true;
     }
 
@@ -4172,6 +4278,7 @@
             return;
           }
           else if (job.recorder.state === 'paused') job.recorder.resume();
+          startFramePump(job);
           job.status = 'recording';
           job.offlineDeadline = 0;
           resumeClock(job);
@@ -4188,6 +4295,7 @@
       if (!job || job.stopRequested || job.finalizing) return;
       clearStableTimer(job);
       clearPlaybackRetry(job);
+      stopFramePump(job);
       pauseClock(job);
       try { if (job.recorder?.state === 'recording') job.recorder.pause(); } catch (_) {}
       job.sourceStatus = status;
@@ -4324,7 +4432,7 @@
       clearStableTimer(job);
       clearPlaybackRetry(job);
       clearTimeout(job.offlineTimer);
-      clearInterval(job.drawTimer);
+      stopFramePump(job);
       service.stop(job.id);
       service.setQualityCap(job.id, 0);
       try { job.captureStream?.getTracks().forEach(track => track.stop()); } catch (_) {}
@@ -4379,6 +4487,7 @@
       if (!job || job.stopRequested || job.finalizing) return;
       job.manualPaused = true;
       clearStableTimer(job);
+      stopFramePump(job);
       pauseClock(job);
       try { if (job.recorder?.state === 'recording') job.recorder.pause(); } catch (_) {}
       job.status = 'manual-paused';
@@ -8010,8 +8119,12 @@
         .sidebar-group-more { width:34px; min-width:34px; border:1px solid transparent; border-radius:8px; background:transparent; color:#64748b; cursor:pointer; font-weight:850; }
         .sidebar-group-more:hover { background:#f1efe7; border-color:#d8d3c5; color:#111827; }
         .sidebar-summary { margin-top:auto; padding:10px 8px 4px; color:#64748b; font-size:12px; font-weight:650; }
-        .sidebar-footer { display:grid; grid-template-columns:1fr 1fr; gap:6px; padding-top:4px; }
+        .sidebar-footer { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,.65fr); gap:6px; padding-top:4px; }
         .sidebar-footer .ctrl-btn { justify-content:center; min-width:0; }
+        .workshop-refresh-status { display:grid; gap:5px; padding:7px 4px 2px; color:var(--text-muted); font-size:10px; line-height:1.25; }
+        .workshop-refresh-status[hidden] { display:none!important; }
+        .workshop-refresh-track { height:7px; overflow:hidden; border:1px solid var(--border); border-radius:999px; background:#17202a; }
+        .workshop-refresh-fill { display:block; width:0; height:100%; background:#0c6a93; transition:width .18s ease; }
         .grid.view-focus .focus-side-row { overflow-y:auto !important; overflow-x:hidden !important; align-content:start !important; overscroll-behavior:contain; padding-right:2px; }
         .grid.view-focus .focus-bottom-row,
         .grid.view-focus .focus-h-resizer { display:none !important; }
@@ -8906,7 +9019,9 @@
       }, 80),
     });
     nativeHeaderCenter.append(tbInput, tempUrlBtn, searchInput);
-    nativeHeaderActions.append(recorderHeaderBtn, settingsBtn, moreBtn);
+    // Settings and maintenance now share the organized sidebar Menu. Keeping
+    // only the live recorder indicator here removes the duplicated controls.
+    nativeHeaderActions.append(recorderHeaderBtn);
     toolbar.append(
       toolbarGroup([sidebarToggleBtn, groupTitle(LANG === 'zh' ? '分组' : 'Groups')]),
       mobileAddBtn,
@@ -9142,6 +9257,18 @@
     }, 120));
 
     // ---- 侧边栏渲染 ----
+    const workshopRefreshState = {
+      busy: false,
+      completed: 0,
+      total: 0,
+      failed: 0,
+      throttled: 0,
+      message: '',
+      lastCompletedAt: 0,
+      clearTimer: 0,
+    };
+    let workshopRefreshPromise = null;
+
     function renderSidebar() {
       const shellHidesSidebar = !!store.state.settings.pureMode
         || !!store.state.settings.splitViewActive
@@ -9224,6 +9351,9 @@
           onclick: () => {
             grid.scrollTop = 0;
             store.setActiveGroup(g.id);
+            if (g.id === ONLINE_GROUP_ID || g.id === ONLINE_FAVORITES_GROUP_ID) {
+              setTimeout(() => refreshWorkshopRooms({ scope: g.id, automatic: true }), 0);
+            }
             if (phoneEnvironment || store.state.settings.viewMode === 'phone') store.patchSettings({ sidebarCollapsed: true });
           },
           oncontextmenu: (e) => { if (!g.system) { e.preventDefault(); openGroupMenu(e, g); } },
@@ -9285,9 +9415,40 @@
         ? `${total} 位主播 · ${online} 位在线`
         : `${total} models · ${online} online`));
 
-      const sidebarSettings = $('button', { class: 'ctrl-btn', onclick: openSettingsCenter }, t('settingsCenter'));
-      const sidebarMore = $('button', { class: 'ctrl-btn', onclick: () => openMoreMenu(sidebarMore) }, t('moreMenu'));
-      sidebar.appendChild($('div', { class: 'sidebar-footer' }, [sidebarSettings, sidebarMore]));
+      const refreshLabel = workshopRefreshState.busy
+        ? (LANG === 'zh' ? '刷新中…' : 'Refreshing…')
+        : (LANG === 'zh' ? '刷新工作台' : 'Refresh Workshop');
+      const sidebarRefresh = $('button', {
+        class: 'ctrl-btn primary workshop-refresh-btn',
+        type: 'button',
+        disabled: workshopRefreshState.busy,
+        onclick: () => refreshWorkshopRooms({ scope: 'all', force: true }),
+      }, refreshLabel);
+      const sidebarMenu = $('button', { class: 'ctrl-btn', type: 'button', onclick: () => openMoreMenu(sidebarMenu) }, LANG === 'zh' ? '菜单' : 'Menu');
+      const percent = workshopRefreshState.total
+        ? Math.round(workshopRefreshState.completed / workshopRefreshState.total * 100)
+        : 0;
+      const progressText = workshopRefreshState.busy
+        ? (LANG === 'zh'
+          ? `正在刷新 ${workshopRefreshState.completed}/${workshopRefreshState.total}`
+          : `Refreshing ${workshopRefreshState.completed}/${workshopRefreshState.total}`)
+        : workshopRefreshState.message;
+      const refreshStatus = $('div', {
+        class: 'workshop-refresh-status',
+        hidden: !progressText,
+        role: 'status',
+        'aria-live': 'polite',
+      }, [
+        $('span', {}, progressText),
+        $('div', {
+          class: 'workshop-refresh-track',
+          role: 'progressbar',
+          'aria-valuemin': '0',
+          'aria-valuemax': '100',
+          'aria-valuenow': String(percent),
+        }, [$('i', { class: 'workshop-refresh-fill', style: { width: `${percent}%` } })]),
+      ]);
+      sidebar.append(refreshStatus, $('div', { class: 'sidebar-footer' }, [sidebarRefresh, sidebarMenu]));
     }
 
     function countByGroup() {
@@ -9333,7 +9494,7 @@
     const backgroundServiceQueue = [];
     const backgroundServiceQueuedIds = new Set();
     let backgroundServicePumpTimer = 0;
-    const BACKGROUND_SERVICE_STAGGER_MS = 6000;
+    const BACKGROUND_SERVICE_STAGGER_MS = 1000;
 
     function isRoomMediaProtected(roomId) {
       const room = findRoomAny(roomId);
@@ -9571,6 +9732,7 @@
     }
     runtimeSplitRoomAvailable = id => !!findOnlineFollowingRoom(normalizeUsername(id));
     let onlineFollowingSyncBusy = false;
+    let onlineFollowingSyncPromise = null;
     let onlineFollowingLastSync = 0;
     let onlineFollowingInitialOrderReady = false;
     let onlineFollowingNextOrder = 0;
@@ -9952,7 +10114,7 @@
     }
 
     async function syncOnlineFollowing(force = false) {
-      if (onlineFollowingSyncBusy) return;
+      if (onlineFollowingSyncBusy) return onlineFollowingSyncPromise;
       if (!force && Date.now() - onlineFollowingLastSync < 4.5 * 60 * 1000) return;
       if (Date.now() < onlineFollowingRateLimitUntil) {
         const wait = onlineFollowingRateLimitUntil - Date.now();
@@ -9967,32 +10129,99 @@
       setOnlineFollowingStatus(onlineFollowingRooms().length ? 'cached' : 'loading', onlineFollowingRooms().length
         ? 'Showing the last successful list · checking for updates'
         : 'Loading followed rooms…');
-      try {
-        const result = await loadAllOnlineFollowing();
-        const followed = result.rooms.filter(item => !onlineFollowingIsSuppressed(item.id));
-        applyOnlineFollowingRooms(followed, { preserveMissing: !result.complete });
-        if (result.complete) {
-          writeOnlineFollowingCache(followed);
-          onlineFollowingCacheSavedAt = Date.now();
-          onlineFollowingRetryDelayMs = 2 * 60 * 1000;
-          onlineFollowingRateLimitUntil = 0;
-          clearTimeout(onlineFollowingRetryTimer);
-          onlineFollowingRetryTimer = 0;
-          setOnlineFollowingStatus('ready', '');
-        } else {
-          registerOnlineFollowingFailure(result.error || new Error('Following list was incomplete'), true);
+      onlineFollowingSyncPromise = (async () => {
+        try {
+          const result = await loadAllOnlineFollowing();
+          const followed = result.rooms.filter(item => !onlineFollowingIsSuppressed(item.id));
+          applyOnlineFollowingRooms(followed, { preserveMissing: !result.complete });
+          if (result.complete) {
+            writeOnlineFollowingCache(followed);
+            onlineFollowingCacheSavedAt = Date.now();
+            onlineFollowingRetryDelayMs = 2 * 60 * 1000;
+            onlineFollowingRateLimitUntil = 0;
+            clearTimeout(onlineFollowingRetryTimer);
+            onlineFollowingRetryTimer = 0;
+            setOnlineFollowingStatus('ready', '');
+          } else {
+            registerOnlineFollowingFailure(result.error || new Error('Following list was incomplete'), true);
+          }
+        } catch (error) {
+          console.warn('[RoomGrid] Online Following sync failed', error);
+          registerOnlineFollowingFailure(error);
+        } finally {
+          onlineFollowingSyncBusy = false;
+          onlineFollowingSyncPromise = null;
         }
-      } catch (error) {
-        console.warn('[RoomGrid] Online Following sync failed', error);
-        registerOnlineFollowingFailure(error);
+      })();
+      return onlineFollowingSyncPromise;
+    }
+
+    function roomIdsForWorkshopRefresh(scope = 'all') {
+      if (scope === 'all' || scope === LIBRARY_GROUP_ID || scope === ONLINE_GROUP_ID) return store.state.rooms.map(room => room.id);
+      if (scope === ONLINE_FAVORITES_GROUP_ID) return store.state.rooms.filter(room => roomInGroup(room, FAVORITE_GROUP_ID)).map(room => room.id);
+      return store.state.rooms.filter(room => roomInGroup(room, scope)).map(room => room.id);
+    }
+
+    async function refreshWorkshopRooms(options = {}) {
+      const scope = options.scope || 'all';
+      if (scope === ONLINE_FOLLOWING_GROUP_ID) return syncOnlineFollowing(true);
+      if (workshopRefreshPromise) return workshopRefreshPromise;
+      const freshnessKey = scope === ONLINE_GROUP_ID ? 'all' : scope;
+      workshopRefreshState.lastByScope ||= new Map();
+      if (options.automatic && Date.now() - Number(workshopRefreshState.lastByScope.get(freshnessKey) || 0) < 60000) return null;
+      const ids = roomIdsForWorkshopRefresh(scope);
+      clearTimeout(workshopRefreshState.clearTimer);
+      Object.assign(workshopRefreshState, { busy: true, completed: 0, total: ids.length, failed: 0, throttled: 0, message: '' });
+      refreshAllBtn.disabled = true;
+      scheduleSidebarRender();
+      if (!ids.length) {
+        Object.assign(workshopRefreshState, { busy: false, message: LANG === 'zh' ? '没有可刷新的房间' : 'No rooms to refresh' });
+        refreshAllBtn.disabled = false;
+        scheduleSidebarRender();
+        return [];
+      }
+      workshopRefreshPromise = service.refreshMany(ids, {
+        concurrency: 2,
+        spacingMs: 300,
+        onProgress: ({ completed, result }) => {
+          workshopRefreshState.completed = completed;
+          if (result?.status === 'throttled') workshopRefreshState.throttled++;
+          else if (result?.status === 'error') workshopRefreshState.failed++;
+          scheduleSidebarRender();
+        },
+      });
+      try {
+        const results = await workshopRefreshPromise;
+        const notes = [];
+        if (workshopRefreshState.throttled) notes.push(`${workshopRefreshState.throttled} deferred`);
+        if (workshopRefreshState.failed) notes.push(`${workshopRefreshState.failed} failed`);
+        workshopRefreshState.message = LANG === 'zh'
+          ? `工作台已刷新${notes.length ? ` · ${notes.join(' · ')}` : ''}`
+          : `Workshop refreshed${notes.length ? ` · ${notes.join(' · ')}` : ''}`;
+        workshopRefreshState.lastCompletedAt = Date.now();
+        workshopRefreshState.lastByScope.set(freshnessKey, workshopRefreshState.lastCompletedAt);
+        return results;
       } finally {
-        onlineFollowingSyncBusy = false;
+        workshopRefreshState.busy = false;
+        workshopRefreshPromise = null;
+        refreshAllBtn.disabled = false;
+        scheduleSidebarRender();
+        workshopRefreshState.clearTimer = setTimeout(() => {
+          workshopRefreshState.message = '';
+          scheduleSidebarRender();
+        }, 6000);
       }
     }
 
-    function refreshAllSources() {
-      service.refreshAll();
-      syncOnlineFollowing(true);
+    async function refreshAllSources() {
+      const scope = store.state.settings.activeGroup || DEFAULT_GROUP_ID;
+      if (scope === ONLINE_FOLLOWING_GROUP_ID) {
+        refreshAllBtn.disabled = true;
+        try { await syncOnlineFollowing(true); }
+        finally { refreshAllBtn.disabled = false; }
+        return;
+      }
+      return refreshWorkshopRooms({ scope, force: true });
     }
     function isDirectMediaUrl(url) { return /\.(m3u8|mp4|webm|mov|m4v)(?:[?#].*)?$/i.test(String(url || '')); }
     function isHlsUrl(url) { return /\.m3u8(?:[?#].*)?$/i.test(String(url || '')) || /m3u8/i.test(String(url || '')); }
@@ -12790,15 +13019,13 @@
     applyPureModeState();
     const freshOnlineFollowingCache = hydratedOnlineFollowingCache
       && Date.now() - onlineFollowingCacheSavedAt < 5 * 60 * 1000;
-    const initialFollowingSync = freshOnlineFollowingCache ? Promise.resolve() : syncOnlineFollowing(true);
-    initialFollowingSync.finally(() => {
-      // Avoid a cold-start request storm: let the followed-room list finish
-      // first, let its visible previews settle, then bring saved-room
-      // background monitoring online at a deliberately quiet cadence.
-      setTimeout(() => {
-        for (const r of store.state.rooms) queueBackgroundServiceStart(r.id);
-      }, 12000);
-    });
+    // Online Following and saved-room status are independent data sources.
+    // Start both without making one wait for the other; the saved-room queue is
+    // already paced and therefore cannot create the old cold-start burst.
+    if (!freshOnlineFollowingCache) void syncOnlineFollowing(true);
+    setTimeout(() => {
+      for (const r of store.state.rooms) queueBackgroundServiceStart(r.id);
+    }, 1200);
     UnifiedRecorder.subscribe(() => {
       cardMap.forEach((_, id) => updateCardButtons(id));
       if (store.state.settings.showRecordingOnly) scheduleGridRender();
@@ -12811,7 +13038,7 @@
         if (!service.has(r.id)) queueBackgroundServiceStart(r.id);
       }
     }, 60000);
-    setInterval(() => syncOnlineFollowing(), 5 * 60 * 1000);
+    setInterval(() => { if (!workshopRefreshState.busy) syncOnlineFollowing(); }, 5 * 60 * 1000);
 
     // 调试入口默认不暴露到页面；需要时先在控制台设置 localStorage.ryujo_multicam_debug = '1' 后刷新。
     try {

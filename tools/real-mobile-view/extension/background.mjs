@@ -2,6 +2,7 @@ import { getDeviceProfile } from './profiles.mjs';
 
 const MESSAGE_TYPE = 'ziggy-real-mobile-view-command';
 const SESSION_PREFIX = 'ziggy-real-mobile-view-tab-';
+const expectedDetachResolvers = new Map();
 
 const debuggee = tabId => ({ tabId });
 const sessionKey = tabId => `${SESSION_PREFIX}${tabId}`;
@@ -101,8 +102,28 @@ async function clearOverrides(tabId) {
   await send(tabId, 'Emulation.setUserAgentOverride', desktopUserAgentOverride());
 }
 
+async function detachForReset(tabId) {
+  let resolveDetach;
+  const detached = new Promise(resolve => { resolveDetach = resolve; });
+  expectedDetachResolvers.set(tabId, resolveDetach);
+  try {
+    await chrome.debugger.detach(debuggee(tabId));
+    await Promise.race([detached, new Promise(resolve => setTimeout(resolve, 250))]);
+  } finally {
+    expectedDetachResolvers.delete(tabId);
+  }
+}
+
+async function resetActiveSession(tabId) {
+  if (!await storedSession(tabId)) return;
+  try { await clearOverrides(tabId); } catch { /* the stale attachment may already be gone */ }
+  await clearSession(tabId);
+  try { await detachForReset(tabId); } catch { /* ensureAttached will report a real failure */ }
+}
+
 async function enableMobile(tabId, profileId) {
   const profile = getDeviceProfile(profileId);
+  await resetActiveSession(tabId);
   const attachedNow = await ensureAttached(tabId);
   try {
     await send(tabId, 'Emulation.setDeviceMetricsOverride', {
@@ -177,5 +198,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 chrome.debugger.onDetach.addListener(source => {
-  if (Number.isInteger(source.tabId)) clearSession(source.tabId).catch(() => {});
+  if (!Number.isInteger(source.tabId)) return;
+  const expectedResolver = expectedDetachResolvers.get(source.tabId);
+  if (expectedResolver) {
+    expectedResolver();
+    return;
+  }
+  clearSession(source.tabId).catch(() => {});
 });

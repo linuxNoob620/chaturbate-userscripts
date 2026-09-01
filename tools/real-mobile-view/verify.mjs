@@ -64,6 +64,8 @@ assert.throws(() => verifyMobileMetrics({ ...mobileMetrics, maxTouchPoints: 0 })
 const sessionState = new Map();
 const attachedTabs = new Set();
 const debuggerCommands = [];
+let debuggerAttachCount = 0;
+let debuggerDetachCount = 0;
 let messageListener = null;
 let detachListener = null;
 global.self = {
@@ -75,8 +77,16 @@ global.self = {
 global.chrome = {
   runtime: { onMessage: { addListener(listener) { messageListener = listener; } } },
   debugger: {
-    async attach({ tabId }) { assert.equal(attachedTabs.has(tabId), false); attachedTabs.add(tabId); },
-    async detach({ tabId }) { attachedTabs.delete(tabId); },
+    async attach({ tabId }) {
+      assert.equal(attachedTabs.has(tabId), false);
+      debuggerAttachCount += 1;
+      attachedTabs.add(tabId);
+    },
+    async detach({ tabId }) {
+      debuggerDetachCount += 1;
+      attachedTabs.delete(tabId);
+      detachListener?.({ tabId });
+    },
     async sendCommand({ tabId }, method, params) {
       assert.equal(attachedTabs.has(tabId), true, `${method} was sent before the debugger attached`);
       debuggerCommands.push({ tabId, method, params });
@@ -132,6 +142,28 @@ for (let iteration = 0; iteration < 10; iteration += 1) {
   assert.equal(attachedTabs.has(77), false);
   assert.equal(sessionState.size, 0);
 }
+
+debuggerCommands.length = 0;
+const initialEnable = await sendWorkerMessage('enable', 'samsung-galaxy-s20-ultra');
+assert.equal(initialEnable.ok, true);
+const attachCountBeforeRecovery = debuggerAttachCount;
+const detachCountBeforeRecovery = debuggerDetachCount;
+const recoveredEnable = await sendWorkerMessage('enable', 'samsung-galaxy-s20-ultra');
+assert.equal(recoveredEnable.ok, true);
+assert.equal(
+  debuggerDetachCount,
+  detachCountBeforeRecovery + 1,
+  'Re-enabling an active session must detach the stale debugger session before restoring mobile metrics.',
+);
+assert.equal(
+  debuggerAttachCount,
+  attachCountBeforeRecovery + 1,
+  'Re-enabling an active session must attach a clean debugger session before restoring mobile metrics.',
+);
+assert.equal(attachedTabs.has(77), true);
+await sendWorkerMessage('disable');
+assert.equal(attachedTabs.has(77), false);
+assert.equal(sessionState.size, 0);
 
 delete global.chrome;
 delete global.self;

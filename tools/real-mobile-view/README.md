@@ -38,6 +38,8 @@ The default device is Samsung Galaxy S20 Ultra:
 
 The helper is deliberately restricted to `https://chaturbate.com/*` and its HTTPS subdomains.
 
+Enabling mobile view while it is already active performs a clean debugger detach/reattach before reapplying the profile. This recovers the requested DPR, touch, and device metrics if another DevTools/CDP client changed them during a test.
+
 ## Permission
 
 `debugger` is required because Chrome exposes DPR, touch, mobile user-agent/client-hint, orientation, and device-metric emulation through Chrome DevTools Protocol commands. A viewport-only resize cannot reproduce those behaviors.
@@ -52,4 +54,4 @@ Run:
 node .\tools\real-mobile-view\verify.mjs
 ```
 
-The verifier checks the manifest permission boundary, required CDP commands, enable/reset flows, failure detection, and ten consecutive deterministic command cycles.
+The verifier checks the manifest permission boundary, required CDP commands, enable/reset and active-session recovery flows, failure detection, and ten consecutive deterministic command cycles.

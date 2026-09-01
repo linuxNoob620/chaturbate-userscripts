@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.0
+// @version           16.6.1
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.0');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.1');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -115,7 +115,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.0');
+  instanceMarker.setAttribute('data-suite-version', '16.6.1');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1298,7 +1298,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.0',
+    version: '16.6.1',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3523,6 +3523,7 @@
   const RECORDER_ACK_KEY = 'ziggy_recorder_ack_v1';
   const RECORDER_OWNER_TTL_MS = 6500;
   const RECORDER_STOP_ACK_TIMEOUT_MS = 30000;
+  const RECORDER_PROCESSED_COMMAND_LIMIT = 500;
   const RECORDER_HUB_WINDOW_NAME = 'ziggy-recorder-hub';
 
   function readRecorderOwnerLease() {
@@ -3819,20 +3820,18 @@
       if (node instanceof HTMLMediaElement) stopMediaElement(node, false);
       else stopAllPageMedia(node);
     };
-    const hideRecorderNativeChild = child => {
+    const disposeRecorderNativeChild = child => {
       if (!child || child.classList?.contains('rec-hub')) return;
       stopRecorderNativeNode(child);
-      child.hidden = true;
-      child.inert = true;
-      child.setAttribute?.('aria-hidden', 'true');
-      child.style?.setProperty('display', 'none', 'important');
+      child.remove();
     };
-    [...document.body.children].forEach(hideRecorderNativeChild);
+    [...document.body.children].forEach(disposeRecorderNativeChild);
 
     const hubInstanceId = crypto.randomUUID?.() || `hub-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     let ownsRecorder = claimRecorderOwner(hubInstanceId);
     const jobs = new Map();
     const processedCommands = new Set();
+    let recorderPublishedEmptyState = false;
     const channel = (() => { try { return new BroadcastChannel(RECORDER_CHANNEL_NAME); } catch (_) { return null; } })();
     const hubStore = {
       state: {
@@ -3896,7 +3895,7 @@
       document.documentElement.classList.add('ziggy-recorder-hub');
       if (!shell.isConnected) document.body.appendChild(shell);
       [...document.body.children].forEach(child => {
-        if (child !== shell) hideRecorderNativeChild(child);
+        if (child !== shell) disposeRecorderNativeChild(child);
       });
       for (const record of records || []) {
         for (const node of record.addedNodes || []) stopRecorderNativeNode(node);
@@ -3988,9 +3987,13 @@
 
     function publishState() {
       if (!ownsRecorder) { UnifiedRecorder.loadSnapshot(); render(); return; }
-      const snapshot = { updatedAt: Date.now(), recordings: [...jobs.values()].map(summary) };
-      try { localStorage.setItem(RECORDER_STATE_KEY, JSON.stringify(snapshot)); } catch (_) {}
+      const recordings = [...jobs.values()].map(summary);
+      if (!recordings.length && recorderPublishedEmptyState) { render(); return; }
+      const snapshot = { updatedAt: Date.now(), recordings };
+      let stored = false;
+      try { localStorage.setItem(RECORDER_STATE_KEY, JSON.stringify(snapshot)); stored = true; } catch (_) {}
       try { channel?.postMessage({ type: 'state', snapshot }); } catch (_) {}
+      recorderPublishedEmptyState = !recordings.length && stored;
       render();
     }
 
@@ -4663,6 +4666,9 @@
       if (!ownsRecorder) return;
       if (!command?.commandId || processedCommands.has(command.commandId)) return;
       processedCommands.add(command.commandId);
+      while (processedCommands.size > RECORDER_PROCESSED_COMMAND_LIMIT) {
+        processedCommands.delete(processedCommands.values().next().value);
+      }
       publishCommandAck(command, 'accepted');
       if (command.action === 'start') {
         Promise.resolve(startJob(command.id)).finally(() => publishCommandAck(command, 'completed', 'started'));
@@ -4748,12 +4754,16 @@
     UnifiedRecorder.subscribe(() => { if (!ownsRecorder) render(); });
     setInterval(() => {
       if (ownsRecorder) {
-        if (!renewRecorderOwner(hubInstanceId)) ownsRecorder = false;
+        if (!renewRecorderOwner(hubInstanceId)) {
+          ownsRecorder = false;
+          recorderPublishedEmptyState = false;
+        }
         else { drainCommands(); publishState(); return; }
       }
       UnifiedRecorder.loadSnapshot();
       if (!recorderServiceFresh() && claimRecorderOwner(hubInstanceId)) {
         ownsRecorder = true;
+        recorderPublishedEmptyState = false;
         drainCommands();
         publishState();
       } else render();

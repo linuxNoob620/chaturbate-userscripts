@@ -20,7 +20,11 @@ requireText("document.getElementById(LEGACY_INSTANCE_MARKER_ID)", 'file-wide gua
 requireText('function refreshNativeLayoutMode()', 'dynamic desktop/mobile layout reconciliation is missing');
 requireText('let nativeMobilePage = isNativeMobileSite()', 'layout state is still frozen at injector startup');
 requireText('const stopRecorderNativeNode = node =>', 'Recorder Hub native media teardown is missing');
-requireText("child.inert = true", 'Recorder Hub native shell is not made inert');
+requireText('const disposeRecorderNativeChild = child =>', 'Recorder Hub native document pruning is missing');
+requireText('child.remove();', 'Recorder Hub leaves the hidden native document mounted');
+rejectText('child.hidden = true', 'Recorder Hub still hides the native document instead of pruning it');
+requireText('let recorderPublishedEmptyState = false', 'Recorder Hub does not suppress redundant empty-state broadcasts');
+requireText('const RECORDER_PROCESSED_COMMAND_LIMIT = 500', 'Recorder Hub command de-duplication history is unbounded');
 requireText("window.addEventListener('pageshow', () => {", 'back-forward-cache state restoration is missing');
 requireText('publishSuiteState();', 'Suite availability is not republished after page restoration');
 

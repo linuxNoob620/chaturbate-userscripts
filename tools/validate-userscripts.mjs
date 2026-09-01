@@ -165,7 +165,12 @@ for (const item of scripts) {
     if (!source.includes("codec: 'avc'") || !source.includes("codec: 'aac'")) failures.push(`${item.file}: recorder MP4 conversion codecs are missing`);
     if ((source.match(/bitrateMode: 'constant'/g) || []).length < 2) failures.push(`${item.file}: recorder MP4 video/audio bitrate ceilings are not constant`);
     if (!source.includes('const recorderShellGuard = new MutationObserver(enforceRecorderShell)')) failures.push(`${item.file}: mobile Recorder Hub shell guard is missing`);
-    if (!source.includes("child.style?.setProperty('display', 'none', 'important')")) failures.push(`${item.file}: Recorder Hub does not non-destructively hide native mobile roots`);
+    if (!source.includes('const disposeRecorderNativeChild = child =>') || !source.includes('child.remove();')) {
+      failures.push(`${item.file}: Recorder Hub does not prune the unused native page roots`);
+    }
+    if (source.includes("child.style?.setProperty('display', 'none', 'important')")) {
+      failures.push(`${item.file}: Recorder Hub still retains the hidden native page tree`);
+    }
     if (!source.includes('grid-template-areas:"copy" "actions"!important')
       || !source.includes('grid-area:copy!important')
       || !source.includes('grid-area:actions!important')) {

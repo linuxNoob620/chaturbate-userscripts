@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Ziggy Real Mobile View Bridge",
+  "version": "1.0.0",
+  "description": "Applies verified Chrome DevTools mobile emulation to Chaturbate tabs for Codex testing.",
+  "minimum_chrome_version": "109",
+  "permissions": [
+    "debugger",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://chaturbate.com/*",
+    "https://*.chaturbate.com/*"
+  ],
+  "background": {
+    "service_worker": "background.mjs",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chaturbate.com/*",
+        "https://*.chaturbate.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}

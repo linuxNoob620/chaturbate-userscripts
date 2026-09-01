@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.5.31
+// @version           16.5.32
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -96,7 +96,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.5.31');
+  instanceMarker.setAttribute('data-suite-version', '16.5.32');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1298,7 +1298,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.5.31',
+    version: '16.5.32',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3849,16 +3849,16 @@
     const service = createRoomService(hubStore);
 
     document.head.appendChild($('style', { html: trustedHtml(`
-      html.ziggy-recorder-hub,html.ziggy-recorder-hub body{margin:0;min-height:100%;background:#17202a;color:#f1f1f1;font-family:UbuntuRegular,Arial,sans-serif}
+      html.ziggy-recorder-hub,html.ziggy-recorder-hub body{margin:0;min-height:100%;max-width:100%;overflow-x:hidden;background:#17202a;color:#f1f1f1;font-family:UbuntuRegular,Arial,sans-serif}
       .rec-hub{box-sizing:border-box;max-width:980px;margin:0 auto;padding:24px}.rec-head{display:flex;gap:14px;align-items:center;justify-content:space-between;border-bottom:1px solid #2d3e50;padding-bottom:18px}
       .rec-title{font:700 24px/1.2 UbuntuMedium,UbuntuRegular,Arial,sans-serif}.rec-sub{color:#b3b3b3;font-size:13px;margin-top:5px}.rec-actions{display:flex;gap:8px;flex-wrap:wrap}
       .rec-btn{box-sizing:border-box;min-height:38px;border:1px solid #2d3e50;border-radius:4px;background:#202c39;color:#f1f1f1;padding:0 14px;cursor:pointer}.rec-btn:hover{background:#253648}.rec-btn.danger{background:#8b1d1d;border-color:#a52a2a}.rec-btn.primary{background:#0c6a93;border-color:#0c6a93}
       .rec-list{display:grid;gap:12px;margin-top:18px}.rec-empty{padding:36px 16px;border:1px dashed #2d3e50;color:#b3b3b3;text-align:center}.rec-row{border:1px solid #2d3e50;border-radius:4px;background:#202c39;padding:14px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center}.rec-copy{min-width:0}
       .rec-row.is-recording{border-left:4px solid #ef4444}.rec-row.is-waiting{border-left:4px solid #d97706}.rec-row.is-finalizing{border-left:4px solid #68b5f0}.rec-name{overflow-wrap:anywhere;font:700 16px/1.2 UbuntuMedium,UbuntuRegular,Arial,sans-serif;color:#68b5f0}.rec-meta{margin-top:7px;color:#b3b3b3;font-size:12px;line-height:1.55;overflow-wrap:anywhere}.rec-progress{height:8px;background:#17202a;border-radius:999px;margin-top:10px;overflow:hidden}.rec-progress>i{display:block;height:100%;background:#68b5f0;transition:width .2s}.rec-hidden-media{position:fixed;left:-10000px;top:-10000px;width:2px;height:2px;overflow:hidden}
       @media(max-width:640px){
-        .rec-hub{width:100%;padding:12px max(10px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))}
+        .rec-hub,.rec-head,.rec-list,.rec-row,.rec-actions{min-width:0;max-width:100%}.rec-hub{width:100%;padding:12px max(10px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))}
         .rec-head{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding-bottom:14px}.rec-title{font-size:21px}.rec-sub{font-size:12px;line-height:1.4}
-        .rec-head>.rec-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0}.rec-head>.rec-actions .rec-btn{width:100%;min-width:0;padding:0 8px}
+        .rec-head>.rec-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0}.rec-head>.rec-actions .rec-btn{width:100%;min-width:0;min-height:44px;padding:0 8px;white-space:normal;overflow-wrap:anywhere}
         .rec-list{gap:10px;margin-top:12px}.rec-empty{padding:28px 12px}.rec-row{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:12px 10px}
         .rec-row>.rec-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:0}.rec-row>.rec-actions .rec-btn{width:100%;min-width:0;min-height:42px;padding:0 8px}.rec-row>.rec-actions .rec-btn.danger:last-child:nth-child(odd){grid-column:1/-1}
         .rec-meta{font-size:11px;line-height:1.6}.rec-progress{height:10px}
@@ -4406,13 +4406,13 @@
         output,
         video: {
           codec: 'avc',
-          quality: new Quality({ bitrate: Math.min(12000000, videoBitrate), bitrateMode: 'variable' }),
+          quality: new Quality({ bitrate: Math.min(12000000, videoBitrate), bitrateMode: 'constant' }),
           hardwareAcceleration: 'prefer-hardware',
           forceTranscode: true,
         },
         audio: {
           codec: 'aac',
-          quality: new Quality({ bitrate: 192000, bitrateMode: 'variable' }),
+          quality: new Quality({ bitrate: 192000, bitrateMode: 'constant' }),
           forceTranscode: true,
         },
       });

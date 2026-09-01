@@ -163,6 +163,7 @@ for (const item of scripts) {
     }
     if (source.includes('// @require           https://unpkg.com/mediabunny')) failures.push(`${item.file}: eager Mediabunny @require can block userscript startup`);
     if (!source.includes("codec: 'avc'") || !source.includes("codec: 'aac'")) failures.push(`${item.file}: recorder MP4 conversion codecs are missing`);
+    if ((source.match(/bitrateMode: 'constant'/g) || []).length < 2) failures.push(`${item.file}: recorder MP4 video/audio bitrate ceilings are not constant`);
     if (source.includes("confirm(t('recordingConsent'))")) failures.push(`${item.file}: recording still displays the removed consent warning`);
     if (!source.includes("findDesktopNavigationSlot('private')")) failures.push(`${item.file}: desktop Workshop navigation does not replace Private Shows`);
     if (!source.includes("const WORKSHOP_TAB_TITLE = 'Ziggy Room Suite'")) failures.push(`${item.file}: unique Workshop tab title is missing`);

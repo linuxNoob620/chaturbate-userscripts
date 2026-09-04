@@ -170,6 +170,7 @@ async function testBackgroundAdapter() {
   let tabUpdatedListener;
   const createdTabs = [];
   const removedTabs = [];
+  const groupedTabs = [];
   const sentTabMessages = [];
   const contextMenuItems = [];
   const fetchCalls = [];
@@ -186,6 +187,7 @@ async function testBackgroundAdapter() {
     },
     tabs: {
       async create(value) { createdTabs.push(value); return { id: 88 }; },
+      async group(value) { groupedTabs.push(value); return value.groupId; },
       async remove(value) { removedTabs.push(value); },
       async sendMessage(tabId, message, options) { sentTabMessages.push({ tabId, message, options }); return { ok: true }; },
       onRemoved: { addListener(value) { tabRemovedListener = value; } },
@@ -214,7 +216,7 @@ async function testBackgroundAdapter() {
   installedListener();
   assert.deepEqual(contextMenuItems.map(item => item.title), ['Ziggy Chaturbate Suite', 'Rooms', 'Open Workshop']);
 
-  const dispatch = (message, sender = { tab: { id: 12, index: 3 } }) => new Promise((resolve, reject) => {
+  const dispatch = (message, sender = { tab: { id: 12, index: 3, windowId: 2, groupId: 7 } }) => new Promise((resolve, reject) => {
     let settled = false;
     const sendResponse = value => { settled = true; resolve(value); };
     const keepAlive = listener(message, sender, sendResponse);
@@ -246,8 +248,22 @@ async function testBackgroundAdapter() {
   assert.equal(JSON.stringify(createdTabs[0]), JSON.stringify({
     url: 'https://chaturbate.com/model/',
     active: false,
+    windowId: 2,
     index: 4,
     openerTabId: 12,
+  }));
+  assert.equal(JSON.stringify(groupedTabs[0]), JSON.stringify({ groupId: 7, tabIds: [88] }));
+  await dispatch(
+    { type: 'ziggy-open-tab', url: 'https://chaturbate.com/ungrouped_model/', active: false, insert: true, setParent: true },
+    { tab: { id: 13, index: 5, windowId: 2, groupId: -1 } },
+  );
+  assert.equal(groupedTabs.length, 1);
+  assert.equal(JSON.stringify(createdTabs[1]), JSON.stringify({
+    url: 'https://chaturbate.com/ungrouped_model/',
+    active: false,
+    windowId: 2,
+    index: 6,
+    openerTabId: 13,
   }));
   await dispatch({ type: 'ziggy-close-tab', tabId: 88 });
   await eventually(() => removedTabs.length, 'Tab close was not requested');

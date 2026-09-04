@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.1
+// @version           16.6.2
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.1');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.2');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -115,7 +115,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.1');
+  instanceMarker.setAttribute('data-suite-version', '16.6.2');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -592,6 +592,7 @@
       sortManual: 'Manual',
       sortStatus: 'By status',
       sortName: 'By name',
+      sortViewers: 'Most viewers',
       sortFavoriteName: 'Favorites, then name',
       sortAdded: 'By added time',
       refreshAll: 'Refresh all',
@@ -636,7 +637,7 @@
       hintSort: 'Sort rooms in the current group',
       hintGroupTab: (n) => `Switch to ${n}. Drag rooms here to add them to this group.`,
       hintOnlineFavoritesTab: 'Show favorite rooms that are online now.',
-      hintOnlineFollowingTab: 'Live rooms you follow. This view refreshes automatically, stays alphabetical, and streams at up to 480p.',
+      hintOnlineFollowingTab: 'Live rooms you follow. This view refreshes automatically, keeps its selected stable order, and streams at up to 480p.',
       hintLibraryTab: 'Show every saved room. The remove button deletes globally in this view.',
       hintNewGroup: 'Create an isolated group',
       hintMoreMenu: 'More tools and maintenance',
@@ -951,6 +952,7 @@
       sortManual: '手动排序',
       sortStatus: '按状态',
       sortName: '按名称',
+      sortViewers: '观众最多',
       sortFavoriteName: '收藏优先，再按名称',
       sortAdded: '按添加时间',
       refreshAll: '全部刷新',
@@ -1298,7 +1300,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.1',
+    version: '16.6.2',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -1427,6 +1429,7 @@
       phoneLayoutSize: 2,        // phone capacity: portrait 1x2, landscape 2x1
       pageIndex: 0,
       onlineFollowingPageIndex: 0,
+      onlineFollowingSortBy: 'name',
       toolbarCollapsed: false,
       viewMode: 'grid',           // 'grid' | 'phone'
       phoneModeAuto: true,
@@ -1665,6 +1668,7 @@
     out.settings.phoneLayoutSize = [2, 4, 6, 9].includes(Number(out.settings.phoneLayoutSize)) ? Number(out.settings.phoneLayoutSize) : def.settings.phoneLayoutSize;
     out.settings.pageIndex = clampInt(out.settings.pageIndex, 0, 100000, 0);
     out.settings.onlineFollowingPageIndex = clampInt(out.settings.onlineFollowingPageIndex, 0, 100000, 0);
+    out.settings.onlineFollowingSortBy = ['name', 'viewers'].includes(out.settings.onlineFollowingSortBy) ? out.settings.onlineFollowingSortBy : 'name';
     // Focus was removed in 16.6.0. Old settings and backups migrate safely to
     // Grid while all remaining layout settings keep their previous values.
     out.settings.viewMode = out.settings.viewMode === 'phone' ? 'phone' : 'grid';
@@ -3496,6 +3500,11 @@
 
   function openRoomRecuProfile(name) {
     const url = recuProfileUrl(name);
+    if (url) openBackgroundTab(url);
+  }
+
+  function openRoomPageInBackground(name) {
+    const url = roomPageUrl(name);
     if (url) openBackgroundTab(url);
   }
 
@@ -8192,6 +8201,8 @@
         body.rg-phone-mode header .ctrl-input { min-height:42px !important; max-width:112px !important; }
         body.rg-phone-mode .grid.view-phone { position:relative; z-index:1; padding:4px !important; gap:4px !important; min-height:0 !important; overflow-x:hidden !important; overflow-y:auto !important; overscroll-behavior:contain; scrollbar-gutter:auto; touch-action:pan-y; }
         body.rg-phone-mode .grid.view-phone .cam-card { border-radius:8px !important; touch-action:pan-y; }
+        .rg-sidebar-dismiss-backdrop { display:none; }
+        body.rg-phone-mode:not(.rg-sidebar-collapsed) .rg-sidebar-dismiss-backdrop { display:block; position:fixed; inset:0; z-index:2147482999; background:transparent; touch-action:none; }
         body.rg-phone-mode .sidebar { position:fixed !important; z-index:2147483000 !important; inset:max(4px,env(safe-area-inset-top)) auto max(4px,env(safe-area-inset-bottom)) max(4px,env(safe-area-inset-left)) !important; height:auto !important; border-radius:14px !important; box-shadow:0 22px 70px rgba(15,23,42,.32) !important; pointer-events:auto !important; touch-action:pan-y; overscroll-behavior:contain; }
         body.rg-phone-mode.rg-sidebar-collapsed .sidebar { display:none !important; }
         /* The base rule uses top:10px. Reset it here before anchoring to the
@@ -8554,6 +8565,16 @@
       sidebar.classList.toggle('is-collapsed', collapsed);
       store.patchSettings({ sidebarCollapsed: collapsed });
     }
+    const sidebarDismissBackdrop = $('div', {
+      class: 'rg-sidebar-dismiss-backdrop',
+      'aria-hidden': 'true',
+      onclick: (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setSidebarCollapsed(true);
+      },
+    });
+    document.body.appendChild(sidebarDismissBackdrop);
 
     const showToolbarBtn = $('button', {
       class: 'show-toolbar-btn',
@@ -8714,19 +8735,40 @@
     ]);
     filterSel.value = filterModeFromState();
 
+    const regularSortOptions = [
+      ['manual', t('sortManual')],
+      ['status', t('sortStatus')],
+      ['name', t('sortName')],
+      ['favoriteName', t('sortFavoriteName')],
+      ['addedAt', t('sortAdded')],
+    ];
+    const followingSortOptions = [
+      ['name', t('sortName')],
+      ['viewers', t('sortViewers')],
+    ];
     const sortSel = $('select', {
       class: 'ctrl-input',
       title: t('hintSort'),
       style: { padding: '6px 8px' },
-      onchange: (e) => store.patchSettings({ sortBy: e.target.value, pageIndex: 0 }),
-    }, [
-      $('option', { value: 'manual' }, t('sortManual')),
-      $('option', { value: 'status' }, t('sortStatus')),
-      $('option', { value: 'name' }, t('sortName')),
-      $('option', { value: 'favoriteName' }, t('sortFavoriteName')),
-      $('option', { value: 'addedAt' }, t('sortAdded')),
-    ]);
-    sortSel.value = store.state.settings.sortBy;
+      onchange: (e) => {
+        if (store.state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID) {
+          setOnlineFollowingSortBy(e.target.value);
+          return;
+        }
+        store.patchSettings({ sortBy: e.target.value, pageIndex: 0 });
+      },
+    });
+    function syncSortControl() {
+      const following = store.state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID;
+      const mode = following ? 'following' : 'regular';
+      if (sortSel.dataset.mode !== mode) {
+        const options = following ? followingSortOptions : regularSortOptions;
+        sortSel.replaceChildren(...options.map(([value, label]) => $('option', { value }, label)));
+        sortSel.dataset.mode = mode;
+      }
+      sortSel.value = following ? store.state.settings.onlineFollowingSortBy : store.state.settings.sortBy;
+    }
+    syncSortControl();
 
     const refreshAllBtn = $('button', {
       class: 'ctrl-btn primary',
@@ -9671,7 +9713,6 @@
     let onlineFollowingRetryDelayMs = 2 * 60 * 1000;
     let onlineFollowingRetryTimer = 0;
     let onlineFollowingStatus = { kind: 'idle', message: '' };
-    let onlineFollowingCacheSavedAt = 0;
 
     function setOnlineFollowingStatus(kind, message = '') {
       onlineFollowingStatus = { kind, message };
@@ -9686,6 +9727,7 @@
         const rooms = parsed.rooms.map(item => ({
           id: normalizeUsername(item?.id),
           lastStatus: item?.lastStatus === 'private' ? 'private' : 'online',
+          viewerCount: Math.max(0, Math.trunc(numeric(item?.viewerCount, 0))),
         })).filter(item => isLikelyUsername(item.id));
         return rooms.length ? { savedAt, rooms } : null;
       } catch (_) { return null; }
@@ -9695,7 +9737,11 @@
       try {
         localStorage.setItem(ONLINE_FOLLOWING_CACHE_KEY, JSON.stringify({
           savedAt: Date.now(),
-          rooms: rooms.map(item => ({ id: item.id, lastStatus: item.lastStatus === 'private' ? 'private' : 'online' })),
+          rooms: rooms.map(item => ({
+            id: item.id,
+            lastStatus: item.lastStatus === 'private' ? 'private' : 'online',
+            viewerCount: Math.max(0, Math.trunc(numeric(item.viewerCount, 0))),
+          })),
         }));
       } catch (_) {}
     }
@@ -9747,6 +9793,28 @@
       return false;
     }
 
+    function parseFollowingViewerCount(card) {
+      const parseText = (value, allowBare = false) => {
+        const text = String(value || '').replace(/\u00a0/g, ' ').trim();
+        const match = text.match(/(\d[\d\s,.]*)([km]?)\s*(?:viewers?|watching)\b/i)
+          || (allowBare ? text.match(/^\s*(\d[\d\s,.]*)([km]?)\s*$/i) : null);
+        if (!match) return 0;
+        const suffix = String(match[2] || '').toLowerCase();
+        if (suffix) {
+          const compact = Number.parseFloat(String(match[1]).replace(/\s/g, '').replace(',', '.'));
+          return Number.isFinite(compact) ? Math.max(0, Math.round(compact * (suffix === 'm' ? 1000000 : 1000))) : 0;
+        }
+        const count = Number(String(match[1]).replace(/[^\d]/g, ''));
+        return Number.isFinite(count) ? Math.max(0, count) : 0;
+      };
+      const targeted = card?.querySelector?.('[data-testid="room-card-viewer-count"], [data-testid*="viewer" i], .viewers, [class*="ViewerCount"], [class*="viewerCount"]');
+      if (targeted) {
+        const count = parseText(`${targeted.getAttribute?.('aria-label') || ''} ${targeted.getAttribute?.('title') || ''} ${targeted.textContent || ''}`, true);
+        if (count) return count;
+      }
+      return parseText(card?.textContent || '');
+    }
+
     function parseOnlineFollowingDocument(source) {
       const doc = source?.querySelectorAll
         ? source
@@ -9774,13 +9842,19 @@
         const match = url.pathname.match(/^\/([A-Za-z0-9_-]+)\/?$/);
         const id = normalizeUsername(match?.[1] || '');
         if (!isLikelyUsername(id)) return;
-        const card = anchor.closest('[data-testid="room-card"],li,article,[class*="room"],[class*="Room"],[class*="card"],[class*="Card"]');
+        const card = anchor.closest('[data-testid="room-card"]')
+          || anchor.closest('li,article,[class*="room"],[class*="Room"],[class*="card"],[class*="Card"]');
         if (!anchor.querySelector('img,video') && !card?.querySelector('img,video')) return;
         const label = card?.querySelector('[data-testid="thumbnail-label"]')?.textContent || '';
         const statusText = `${anchor.textContent || ''} ${card?.textContent || ''} ${label}`.toLowerCase();
         const protectedRoom = /\b(?:in private|private|hidden|secret|group|password)\b/.test(statusText);
         const previous = found.get(id);
-        found.set(id, { id, lastStatus: protectedRoom || previous?.lastStatus === 'private' ? 'private' : 'online' });
+        const viewerCount = parseFollowingViewerCount(card);
+        found.set(id, {
+          id,
+          lastStatus: protectedRoom || previous?.lastStatus === 'private' ? 'private' : 'online',
+          viewerCount: Math.max(viewerCount, numeric(previous?.viewerCount, 0)),
+        });
       });
       return [...found.values()];
     }
@@ -9898,7 +9972,10 @@
         error.httpStatus = 429;
         throw error;
       }
-      if (!firstRooms.length && !firstDocument.querySelector('.HomepagePaginatedRoomlist')) {
+      // Chaturbate may server-render the paginated container without any cards
+      // and hydrate the actual followed-room grid later. The presence of the
+      // empty container is therefore not proof that parsing succeeded.
+      if (!firstRooms.length) {
         firstRooms = await loadRenderedOnlineFollowing(firstUrl);
       }
       const merged = new Map();
@@ -9907,6 +9984,7 @@
         merged.set(item.id, {
           id: item.id,
           lastStatus: item.lastStatus === 'private' || previous?.lastStatus === 'private' ? 'private' : 'online',
+          viewerCount: Math.max(numeric(item.viewerCount, 0), numeric(previous?.viewerCount, 0)),
         });
       });
       mergeRooms(firstRooms);
@@ -9922,7 +10000,7 @@
           return { rooms: [...merged.values()], complete: false, expectedCount, error };
         }
         let rooms = parseOnlineFollowingDocument(doc);
-        if (!rooms.length && page === 2) {
+        if (!rooms.length) {
           try { rooms = await loadRenderedOnlineFollowing(pageUrl.href); } catch (_) {}
         }
         if (!rooms.length) break;
@@ -9939,7 +10017,15 @@
       onlineFollowingRooms().forEach(room => service.setQualityCap(room.id, active ? 480 : 0));
     }
 
-    function applyOnlineFollowingRooms(followed, { preserveMissing = false } = {}) {
+    function compareOnlineFollowingRooms(a, b, mode = store.state.settings.onlineFollowingSortBy) {
+      if (mode === 'viewers') {
+        const countDifference = numeric(b.viewerCount, 0) - numeric(a.viewerCount, 0);
+        if (countDifference) return countDifference;
+      }
+      return String(a.id || '').localeCompare(String(b.id || ''));
+    }
+
+    function applyOnlineFollowingRooms(followed, { preserveMissing = false, resort = false } = {}) {
       const followingIsVisible = store.state.settings.activeGroup === ONLINE_FOLLOWING_GROUP_ID;
       const previousVisibleIds = followingIsVisible ? renderVisibleRooms().map(room => room.id) : [];
       const ids = followed.map(item => item.id);
@@ -9953,12 +10039,13 @@
       const createRoom = (item, order) => ({
         id: item.id, displayName: item.id, temporary: true, onlineFollowing: true,
         lastStatus: item.lastStatus, privateLabel: item.lastStatus === 'private' ? 'Private' : '', addedAt: Date.now(),
-        lastSeenOnline: item.lastStatus === 'online' ? Date.now() : 0, order,
+        lastSeenOnline: item.lastStatus === 'online' ? Date.now() : 0,
+        viewerCount: Math.max(0, Math.trunc(numeric(item.viewerCount, 0))), order,
         groups: [], groupOrder: {}, muted: true,
       });
 
       if (!onlineFollowingInitialOrderReady) {
-        followed.slice().sort((a, b) => a.id.localeCompare(b.id)).forEach(item => {
+        followed.slice().sort(compareOnlineFollowingRooms).forEach(item => {
           nextFollowing.push(createRoom(item, onlineFollowingNextOrder++));
         });
         onlineFollowingInitialOrderReady = true;
@@ -9979,10 +10066,12 @@
             }
             const previousStatus = room.lastStatus;
             const previousLabel = room.privateLabel || '';
+            const previousViewerCount = numeric(room.viewerCount, 0);
             room.lastStatus = item.lastStatus;
             room.privateLabel = item.lastStatus === 'private' ? 'Private' : '';
+            room.viewerCount = Math.max(0, Math.trunc(numeric(item.viewerCount, 0)));
             if (item.lastStatus === 'online') room.lastSeenOnline = Date.now();
-            if (previousStatus !== room.lastStatus || previousLabel !== room.privateLabel) changedRooms.push(room);
+            if (previousStatus !== room.lastStatus || previousLabel !== room.privateLabel || previousViewerCount !== room.viewerCount) changedRooms.push(room);
             nextFollowing.push(room);
           });
         followed.forEach(item => {
@@ -9990,7 +10079,12 @@
             nextFollowing.push(createRoom(item, onlineFollowingNextOrder++));
             structureChanged = true;
           }
-        });
+          });
+      }
+      if (resort && onlineFollowingInitialOrderReady) {
+        nextFollowing.sort(compareOnlineFollowingRooms);
+        nextFollowing.forEach((room, index) => { room.order = index; });
+        onlineFollowingNextOrder = nextFollowing.length;
       }
       const currentOrder = currentFollowing.map(room => room.id);
       const nextOrder = nextFollowing.map(room => room.id);
@@ -10031,18 +10125,35 @@
       }
     }
 
+    function resortOnlineFollowingRooms() {
+      if (!onlineFollowingRooms().length) return;
+      applyOnlineFollowingRooms(onlineFollowingRooms().map(room => ({
+        id: room.id,
+        lastStatus: room.lastStatus,
+        viewerCount: room.viewerCount,
+      })), { preserveMissing: true, resort: true });
+    }
+
+    function setOnlineFollowingSortBy(mode) {
+      const normalized = mode === 'viewers' ? 'viewers' : 'name';
+      store.patchSettings({ onlineFollowingSortBy: normalized, onlineFollowingPageIndex: 0 });
+      resortOnlineFollowingRooms();
+    }
+
     function hydrateOnlineFollowingCache() {
       const cached = readOnlineFollowingCache();
       if (!cached) return false;
-      onlineFollowingCacheSavedAt = cached.savedAt;
       const rooms = cached.rooms.filter(item => !onlineFollowingIsSuppressed(item.id));
       applyOnlineFollowingRooms(rooms);
       setOnlineFollowingStatus('cached', 'Showing the last successful list · checking for updates');
       return true;
     }
 
-    async function syncOnlineFollowing(force = false) {
-      if (onlineFollowingSyncBusy) return onlineFollowingSyncPromise;
+    async function syncOnlineFollowing(force = false, resort = false) {
+      if (onlineFollowingSyncBusy) {
+        if (!resort) return onlineFollowingSyncPromise;
+        return Promise.resolve(onlineFollowingSyncPromise).then(resortOnlineFollowingRooms);
+      }
       if (!force && Date.now() - onlineFollowingLastSync < 4.5 * 60 * 1000) return;
       if (Date.now() < onlineFollowingRateLimitUntil) {
         const wait = onlineFollowingRateLimitUntil - Date.now();
@@ -10051,6 +10162,7 @@
           ? `Showing the last successful list · retrying in ${seconds}s`
           : `Following list temporarily unavailable · retrying in ${seconds}s`);
         scheduleOnlineFollowingRetry(wait);
+        if (resort) resortOnlineFollowingRooms();
         return;
       }
       onlineFollowingSyncBusy = true;
@@ -10061,10 +10173,9 @@
         try {
           const result = await loadAllOnlineFollowing();
           const followed = result.rooms.filter(item => !onlineFollowingIsSuppressed(item.id));
-          applyOnlineFollowingRooms(followed, { preserveMissing: !result.complete });
+          applyOnlineFollowingRooms(followed, { preserveMissing: !result.complete, resort });
           if (result.complete) {
             writeOnlineFollowingCache(followed);
-            onlineFollowingCacheSavedAt = Date.now();
             onlineFollowingRetryDelayMs = 2 * 60 * 1000;
             onlineFollowingRateLimitUntil = 0;
             clearTimeout(onlineFollowingRetryTimer);
@@ -10092,7 +10203,7 @@
 
     async function refreshWorkshopRooms(options = {}) {
       const scope = options.scope || 'all';
-      if (scope === ONLINE_FOLLOWING_GROUP_ID) return syncOnlineFollowing(true);
+      if (scope === ONLINE_FOLLOWING_GROUP_ID) return syncOnlineFollowing(true, true);
       if (workshopRefreshPromise) return workshopRefreshPromise;
       const freshnessKey = scope === ONLINE_GROUP_ID ? 'all' : scope;
       workshopRefreshState.lastByScope ||= new Map();
@@ -10145,7 +10256,7 @@
       const scope = store.state.settings.activeGroup || DEFAULT_GROUP_ID;
       if (scope === ONLINE_FOLLOWING_GROUP_ID) {
         refreshAllBtn.disabled = true;
-        try { await syncOnlineFollowing(true); }
+        try { await syncOnlineFollowing(true, true); }
         finally { refreshAllBtn.disabled = false; }
         return;
       }
@@ -10336,6 +10447,13 @@
       });
       card.addEventListener('pointerup', () => { dragStartBlocked = false; });
       card.addEventListener('pointercancel', () => { dragStartBlocked = false; });
+      card.addEventListener('auxclick', (event) => {
+        if (event.button !== 1 || !isLikelyUsername(room.id)) return;
+        if (event.target?.closest?.(dragBlockedSelector)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        openRoomPageInBackground(room.id);
+      });
       card.addEventListener('dragstart', (e) => {
         if (dragStartBlocked || getVideoTransform(room.id).zoom !== 1) {
           e.preventDefault();
@@ -10416,7 +10534,13 @@
           onclick: (event) => {
             event.preventDefault();
             event.stopPropagation();
-            openBackgroundTab(event.currentTarget.href);
+            openRoomPageInBackground(room.id);
+          },
+          onauxclick: (event) => {
+            if (event.button !== 1) return;
+            event.preventDefault();
+            event.stopPropagation();
+            openRoomPageInBackground(room.id);
           },
         } : {}),
       }, room.displayName || room.id);
@@ -12530,7 +12654,7 @@
         const fullRefresh = path === 'groups' || path === 'rooms' || path === 'all' || path === 'settings' || !settingKeys.length;
         const needsSidebar = fullRefresh || hasSetting('activeGroup', 'sidebarCollapsed');
         const needsGrid = fullRefresh || hasSetting(
-          'activeGroup', 'filter', 'sortBy', 'searchQuery', 'layoutSize', 'phoneLayoutSize', 'phoneModeAuto', 'pageIndex', 'onlineFollowingPageIndex',
+          'activeGroup', 'filter', 'sortBy', 'onlineFollowingSortBy', 'searchQuery', 'layoutSize', 'phoneLayoutSize', 'phoneModeAuto', 'pageIndex', 'onlineFollowingPageIndex',
           'viewMode',
           'showRecordingOnly', 'favoriteFirst', 'splitRoomIds', 'splitViewActive', 'splitRatio', 'splitAudioRoomId', 'splitToolbarPosition'
         );
@@ -12538,7 +12662,7 @@
         if (needsSidebar) scheduleSidebarRender();
         if (needsGrid) scheduleGridRender();
 
-        sortSel.value = state.settings.sortBy;
+        syncSortControl();
         filterSel.value = filterModeFromState();
         sizeSlider.value = String(state.settings.gridSize);
         if (document.activeElement !== searchInput) searchInput.value = state.settings.searchQuery || '';
@@ -12583,6 +12707,7 @@
       const room = findOnlineFollowingRoom(id);
       if (!room) return;
       room.lastStatus = status || room.lastStatus;
+      if (Number.isFinite(Number(extra?.viewerCount))) room.viewerCount = Math.max(0, Math.trunc(Number(extra.viewerCount)));
       if (status === 'online') {
         room.lastSeenOnline = Date.now();
       }
@@ -12684,18 +12809,16 @@
     // 这样切到其它分组时，被隐藏房间的上线事件也能被检测到并触发桌面通知。
     loadSharedWorkspaceFromHash();
     loadSavedTemporarySources();
-    const hydratedOnlineFollowingCache = hydrateOnlineFollowingCache();
+    hydrateOnlineFollowingCache();
     renderSidebar();
     renderGrid();
     applyPureModeState();
-    const freshOnlineFollowingCache = hydratedOnlineFollowingCache
-      && Date.now() - onlineFollowingCacheSavedAt < 5 * 60 * 1000;
     // Online Following and saved-room status are independent data sources.
-    // Start both without making one wait for the other; the saved-room queue is
-    // already paced and therefore cannot create the old cold-start burst.
-    if (!freshOnlineFollowingCache) void syncOnlineFollowing(true);
+    // Refresh both on every Workshop mount, including background-tab loads.
+    // Their paced queues remain independent so neither source blocks the other.
+    void syncOnlineFollowing(true, true);
     setTimeout(() => {
-      for (const r of store.state.rooms) queueBackgroundServiceStart(r.id);
+      void refreshWorkshopRooms({ scope: 'all', automatic: true });
     }, 1200);
     UnifiedRecorder.subscribe(() => {
       cardMap.forEach((_, id) => updateCardButtons(id));

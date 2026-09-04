@@ -245,16 +245,28 @@ async function ziggyOpenTab(message, sender) {
     url: String(message.url || 'about:blank'),
     active: message.active !== false,
   };
+  if (Number.isInteger(sender?.tab?.windowId)) createProperties.windowId = sender.tab.windowId;
   if (message.insert && Number.isInteger(sender?.tab?.index)) createProperties.index = sender.tab.index + 1;
   if (message.setParent && Number.isInteger(sender?.tab?.id)) createProperties.openerTabId = sender.tab.id;
+  const warnings = [];
+  let tab;
   try {
-    const tab = await ziggyApi.tabs.create(createProperties);
-    return { tabId: Number.isInteger(tab?.id) ? tab.id : null };
+    tab = await ziggyApi.tabs.create(createProperties);
   } catch (error) {
+    warnings.push(String(error?.message || error));
     delete createProperties.openerTabId;
-    const tab = await ziggyApi.tabs.create(createProperties);
-    return { tabId: Number.isInteger(tab?.id) ? tab.id : null, warning: String(error?.message || error) };
+    tab = await ziggyApi.tabs.create(createProperties);
   }
+  const tabId = Number.isInteger(tab?.id) ? tab.id : null;
+  const sourceGroupId = Number(sender?.tab?.groupId);
+  if (message.setParent && tabId != null && Number.isInteger(sourceGroupId) && sourceGroupId >= 0 && typeof ziggyApi.tabs.group === 'function') {
+    try {
+      await ziggyApi.tabs.group({ groupId: sourceGroupId, tabIds: [tabId] });
+    } catch (error) {
+      warnings.push(`Unable to inherit source tab group: ${String(error?.message || error)}`);
+    }
+  }
+  return { tabId, ...(warnings.length ? { warning: warnings.join(' · ') } : {}) };
 }
 
 ziggyApi.runtime.onMessage.addListener((message, sender, sendResponse) => {

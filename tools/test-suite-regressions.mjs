@@ -44,6 +44,22 @@ rejectText('delete document.documentElement.dataset.ziggySuiteAvailable', 'pageh
 rejectText('`roomgrid-config-${Date.now()}.json`', 'local config download still exposes the retired RoomGrid name');
 rejectText('`roomgrid-usernames-${Date.now()}.txt`', 'username export still exposes the retired RoomGrid name');
 
+requireText("onlineFollowingSortBy: 'name'", 'Online Following does not have an independent persisted sort mode');
+requireText("['viewers', t('sortViewers')]", 'Online Following is missing the Most viewers choice');
+requireText('function parseFollowingViewerCount(card)', 'Following-page viewer counts are not parsed');
+requireText('[data-testid*="viewer" i], .viewers, [class*="ViewerCount"]', 'Following-page viewer parsing does not recognize the current Chaturbate .viewers markup');
+requireText("const card = anchor.closest('[data-testid=\"room-card\"]')\n          || anchor.closest('li,article", 'Following parsing can stop at the RoomCardThumbnail link instead of the complete room card');
+requireText("if (!firstRooms.length) {\n        firstRooms = await loadRenderedOnlineFollowing(firstUrl);", 'Following sync does not fall back when Chaturbate server-renders an empty hydrated container');
+requireText("if (!rooms.length) {\n          try { rooms = await loadRenderedOnlineFollowing(pageUrl.href); } catch (_) {}", 'Following sync does not render later hydrated pages when their HTML contains no cards');
+requireText('function compareOnlineFollowingRooms(a, b, mode = store.state.settings.onlineFollowingSortBy)', 'Online Following snapshot sorting is missing');
+requireText('function resortOnlineFollowingRooms()', 'Online Following cannot explicitly reapply its selected stable order');
+requireText('applyOnlineFollowingRooms(followed, { preserveMissing: !result.complete, resort })', 'Following sync does not distinguish stable automatic updates from explicit resorting');
+requireText('void syncOnlineFollowing(true, true);', 'Workshop mount does not refresh Online Following in the background');
+requireText("void refreshWorkshopRooms({ scope: 'all', automatic: true });", 'Workshop mount does not refresh saved-room status independently');
+requireText("card.addEventListener('auxclick', (event) => {", 'Workshop cards do not handle background middle-click opening');
+requireText('openRoomPageInBackground(room.id);', 'Workshop model links do not use the shared background-tab path');
+requireText("class: 'rg-sidebar-dismiss-backdrop'", 'Phone Workshop sidebar is missing its outside-tap dismiss layer');
+
 if (failures.length) {
   process.stderr.write(`${failures.join('\n')}\n`);
   process.exit(1);

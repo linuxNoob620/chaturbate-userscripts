@@ -58,8 +58,13 @@ requireText('void syncOnlineFollowing(true, true);', 'Workshop mount does not re
 requireText("void refreshWorkshopRooms({ scope: 'all', automatic: true });", 'Workshop mount does not refresh saved-room status independently');
 requireText("card.addEventListener('auxclick', (event) => {", 'Workshop cards do not handle background middle-click opening');
 requireText('openRoomPageInBackground(room.id);', 'Workshop model links do not use the shared background-tab path');
-requireText('loadInBackground: true', 'Background room tabs do not include the Tampermonkey compatibility flag');
+requireText('loadInBackground: options.active !== true', 'Room tabs do not pass the intended foreground/background state to Tampermonkey');
 requireText('preferNativeMobileGroup: true', 'Android room tabs do not request the native mobile group path');
+requireText("const EXTENSION_TAB_BRIDGE_MARKER_ID = 'ziggy-extension-tab-bridge'", 'The userscript cannot use the extension tab-group bridge');
+requireText("return window.open(target.href, '_blank');", 'Tampermonkey lacks the native grouped-child fallback on Android');
+requireText("media.addEventListener('click', event => {", 'Phone Workshop cards do not open rooms from video taps');
+requireText('openRoomPageInBackground(room.id, { active: true });', 'Phone video taps do not request a foreground grouped room tab');
+requireText('openRoomPageInBackground(room.id, { active: phoneEnvironment });', 'Phone model-name taps do not request a foreground grouped room tab');
 requireText("class: 'rg-sidebar-dismiss-backdrop'", 'Phone Workshop sidebar is missing its outside-tap dismiss layer');
 
 if (failures.length) {

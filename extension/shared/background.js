@@ -4,7 +4,7 @@ const ziggyApi = typeof browser !== 'undefined' ? browser : chrome;
 const ziggyRequests = new Map();
 const ziggyContextInvocations = new Map();
 const ZIGGY_CONTEXT_TTL_MS = 8000;
-const ZIGGY_NATIVE_SOURCE_RESTORE_AT_MS = Object.freeze([0, 200, 800]);
+const ZIGGY_SOURCE_RESTORE_AT_MS = Object.freeze([0, 200, 800]);
 const ZIGGY_CONTEXT_MENU_IDS = Object.freeze({
   root: 'ziggy-suite-root',
   rooms: 'ziggy-suite-rooms',
@@ -241,6 +241,52 @@ async function ziggyFetch(requestId, request) {
   }
 }
 
+function ziggyCallTabs(methodName, ...args) {
+  const method = ziggyApi.tabs?.[methodName];
+  if (typeof method !== 'function') return Promise.reject(new Error(`tabs.${methodName} is unavailable`));
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      callback(value);
+    };
+    const callback = value => {
+      const lastError = ziggyApi.runtime?.lastError;
+      if (lastError) finish(reject, new Error(String(lastError.message || lastError)));
+      else finish(resolve, value);
+    };
+    let result;
+    try {
+      result = method.call(ziggyApi.tabs, ...args, callback);
+    } catch (_) {
+      try {
+        result = method.call(ziggyApi.tabs, ...args);
+      } catch (error) {
+        finish(reject, error);
+        return;
+      }
+    }
+    if (result && typeof result.then === 'function') result.then(value => finish(resolve, value), error => finish(reject, error));
+    else if (result !== undefined) finish(resolve, result);
+  });
+}
+
+async function ziggyRestoreSourceTab(sourceTabId, warnings) {
+  if (!Number.isInteger(sourceTabId) || typeof ziggyApi.tabs?.update !== 'function') return;
+  let previousAt = 0;
+  for (const restoreAt of ZIGGY_SOURCE_RESTORE_AT_MS) {
+    const waitMs = Math.max(0, restoreAt - previousAt);
+    previousAt = restoreAt;
+    if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
+    try {
+      await ziggyCallTabs('update', sourceTabId, { active: true });
+    } catch (error) {
+      warnings.push(`Unable to restore the source tab: ${String(error?.message || error)}`);
+    }
+  }
+}
+
 async function ziggyOpenTab(message, sender) {
   const createProperties = {
     url: String(message.url || 'about:blank'),
@@ -252,54 +298,23 @@ async function ziggyOpenTab(message, sender) {
   const warnings = [];
   let tab;
   try {
-    tab = await ziggyApi.tabs.create(createProperties);
+    tab = await ziggyCallTabs('create', createProperties);
   } catch (error) {
     warnings.push(String(error?.message || error));
     delete createProperties.openerTabId;
-    tab = await ziggyApi.tabs.create(createProperties);
+    tab = await ziggyCallTabs('create', createProperties);
   }
   const tabId = Number.isInteger(tab?.id) ? tab.id : null;
   const sourceGroupId = Number(sender?.tab?.groupId);
   if (message.setParent && tabId != null && Number.isInteger(sourceGroupId) && sourceGroupId >= 0 && typeof ziggyApi.tabs.group === 'function') {
     try {
-      await ziggyApi.tabs.group({ groupId: sourceGroupId, tabIds: [tabId] });
+      await ziggyCallTabs('group', { groupId: sourceGroupId, tabIds: [tabId] });
     } catch (error) {
       warnings.push(`Unable to inherit source tab group: ${String(error?.message || error)}`);
     }
   }
-  if (message.active === false && Number.isInteger(sender?.tab?.id) && typeof ziggyApi.tabs.update === 'function') {
-    try {
-      await ziggyApi.tabs.update(sender.tab.id, { active: true });
-    } catch (error) {
-      warnings.push(`Unable to restore the source tab: ${String(error?.message || error)}`);
-    }
-  }
+  if (message.active === false) await ziggyRestoreSourceTab(sender?.tab?.id, warnings);
   return { tabId, ...(warnings.length ? { warning: warnings.join(' · ') } : {}) };
-}
-
-async function ziggyRestoreNativeMobileSource(sender) {
-  const sourceTabId = sender?.tab?.id;
-  if (!Number.isInteger(sourceTabId) || typeof ziggyApi.tabs.update !== 'function') {
-    return { ok: false, warning: 'The source tab is unavailable' };
-  }
-  const warnings = [];
-  let previousAt = 0;
-  let restored = false;
-  for (const restoreAt of ZIGGY_NATIVE_SOURCE_RESTORE_AT_MS) {
-    const waitMs = Math.max(0, restoreAt - previousAt);
-    previousAt = restoreAt;
-    if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
-    try {
-      await ziggyApi.tabs.update(sourceTabId, { active: true });
-      restored = true;
-    } catch (error) {
-      warnings.push(String(error?.message || error));
-    }
-  }
-  return {
-    ok: restored,
-    ...(warnings.length ? { warning: warnings.join(' · ') } : {}),
-  };
 }
 
 ziggyApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -320,10 +335,6 @@ ziggyApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.type === 'ziggy-open-tab') {
     ziggyOpenTab(message, sender).then(sendResponse, error => sendResponse({ error: String(error?.message || error) }));
-    return true;
-  }
-  if (message.type === 'ziggy-native-mobile-tab-opened') {
-    ziggyRestoreNativeMobileSource(sender).then(sendResponse, error => sendResponse({ ok: false, error: String(error?.message || error) }));
     return true;
   }
   if (message.type === 'ziggy-close-tab') {

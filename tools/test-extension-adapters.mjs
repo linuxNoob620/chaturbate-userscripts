@@ -19,7 +19,9 @@ async function testContentAdapter() {
   const storedWrites = [];
   const messages = [];
   const anchors = [];
+  const elementsById = new Map();
   const documentEvents = [];
+  const documentListeners = new Map();
   const navigator = {
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
     userActivation: { isActive: true },
@@ -51,17 +53,38 @@ async function testContentAdapter() {
       },
     },
   };
+  const appendElement = node => {
+    if (node.tagName === 'A') anchors.push(node);
+    if (node.id) elementsById.set(node.id, node);
+    node.isConnected = true;
+    return node;
+  };
   const document = {
-    body: { appendChild(node) { anchors.push(node); } },
-    documentElement: { appendChild(node) { anchors.push(node); } },
-    addEventListener() {},
-    dispatchEvent(event) { documentEvents.push(event); return true; },
+    body: { appendChild: appendElement },
+    head: { appendChild: appendElement },
+    documentElement: { appendChild: appendElement },
+    getElementById(id) { return elementsById.get(id) || null; },
+    addEventListener(type, listener) {
+      const listeners = documentListeners.get(type) || [];
+      listeners.push(listener);
+      documentListeners.set(type, listeners);
+    },
+    dispatchEvent(event) {
+      documentEvents.push(event);
+      for (const listener of documentListeners.get(event.type) || []) listener(event);
+      return true;
+    },
     createElement(tag) {
-      assert.equal(tag, 'a');
+      const attributes = new Map();
       return {
+        tagName: String(tag).toUpperCase(),
+        id: '',
         style: {},
+        setAttribute(name, value) { attributes.set(String(name), String(value)); },
+        getAttribute(name) { return attributes.has(String(name)) ? attributes.get(String(name)) : null; },
+        dispatchEvent(event) { event.target = this; return document.dispatchEvent(event); },
         click() { this.clicked = true; },
-        remove() { this.removed = true; },
+        remove() { this.removed = true; this.isConnected = false; if (this.id) elementsById.delete(this.id); },
       };
     },
   };
@@ -84,6 +107,12 @@ async function testContentAdapter() {
   const source = `${preamble}\n` +
     `globalThis.__ziggyAdapterTest = { GM_info, GM_getValue, GM_setValue, GM_xmlhttpRequest, GM_openInTab, GM_download };\n` +
     `  /* END VERBATIM USERSCRIPT BODY */\n})().catch(error => { globalThis.__ziggyAdapterFailure = error; });\n`;
+  class TestEvent {
+    constructor(type) { this.type = type; this.target = null; }
+  }
+  class TestCustomEvent extends TestEvent {
+    constructor(type, init = {}) { super(type); this.detail = init.detail; }
+  }
   const context = vm.createContext({
     chrome,
     document,
@@ -96,9 +125,8 @@ async function testContentAdapter() {
     clearTimeout,
     URL: TestURL,
     location: { href: 'https://chaturbate.com/', origin: 'https://chaturbate.com' },
-    CustomEvent: class CustomEvent {
-      constructor(type, init = {}) { this.type = type; this.detail = init.detail; }
-    },
+    Event: TestEvent,
+    CustomEvent: TestCustomEvent,
   });
   vm.runInContext(source, context, { filename: 'content-adapter-test.js' });
   adapter = await eventually(() => context.__ziggyAdapterTest, 'Content adapter did not initialize');
@@ -140,6 +168,23 @@ async function testContentAdapter() {
   assert.equal(openMessage.insert, true);
   assert.equal(openMessage.setParent, true);
 
+  const bridgeRequest = document.createElement('meta');
+  bridgeRequest.setAttribute('data-ziggy-extension-tab-request', '1');
+  bridgeRequest.setAttribute('data-url', 'https://chaturbate.com/bridge_model/');
+  bridgeRequest.setAttribute('data-active', '1');
+  bridgeRequest.setAttribute('data-insert', '1');
+  bridgeRequest.setAttribute('data-set-parent', '1');
+  document.head.appendChild(bridgeRequest);
+  bridgeRequest.dispatchEvent(new TestEvent('ziggy-suite:extension-open-tab'));
+  assert.equal(bridgeRequest.getAttribute('data-ziggy-extension-tab-handled'), '1');
+  const bridgeMessage = await eventually(
+    () => messages.find(message => message.type === 'ziggy-open-tab' && message.url.endsWith('/bridge_model/')),
+    'The cross-world tab bridge did not send a request',
+  );
+  assert.equal(bridgeMessage.active, true);
+  assert.equal(bridgeMessage.insert, true);
+  assert.equal(bridgeMessage.setParent, true);
+
   navigator.userAgent = 'Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36';
   adapter.GM_openInTab('https://chaturbate.com/mobile_model/', {
     loadInBackground: true,
@@ -147,18 +192,12 @@ async function testContentAdapter() {
     setParent: true,
     preferNativeMobileGroup: true,
   });
-  const nativeOpenMessage = await eventually(
-    () => messages.find(message => message.type === 'ziggy-native-mobile-tab-opened'),
-    'Android room open did not use the native child-tab path',
+  const mobileOpenMessage = await eventually(
+    () => messages.find(message => message.type === 'ziggy-open-tab' && message.url.endsWith('/mobile_model/')),
+    'Android room open did not use the extension tab API',
   );
-  assert.equal(nativeOpenMessage.url, 'https://chaturbate.com/mobile_model/');
-  assert.equal(messages.filter(message => message.type === 'ziggy-open-tab').length, 1);
-  assert.equal(anchors.length, 1);
-  assert.equal(anchors[0].href, 'https://chaturbate.com/mobile_model/');
-  assert.equal(anchors[0].target, '_blank');
-  assert.equal(anchors[0].rel, 'opener');
-  assert.equal(anchors[0].clicked, true);
-  assert.equal(anchors[0].removed, true);
+  assert.equal(mobileOpenMessage.active, false);
+  assert.equal(mobileOpenMessage.setParent, true);
 
   await new Promise((resolve, reject) => {
     adapter.GM_download({
@@ -168,9 +207,9 @@ async function testContentAdapter() {
       onerror: reject,
     });
   });
-  assert.equal(anchors.length, 2);
-  assert.equal(anchors[1].download, 'model.jpg');
-  assert.equal(anchors[1].clicked, true);
+  assert.equal(anchors.length, 1);
+  assert.equal(anchors[0].download, 'model.jpg');
+  assert.equal(anchors[0].clicked, true);
 
   assert.equal(typeof contentMessageListener, 'function');
   let contextResponse;
@@ -281,13 +320,19 @@ async function testBackgroundAdapter() {
     openerTabId: 12,
   }));
   assert.equal(JSON.stringify(groupedTabs[0]), JSON.stringify({ groupId: 7, tabIds: [88] }));
-  assert.equal(JSON.stringify(updatedTabs[0]), JSON.stringify({ tabId: 12, value: { active: true } }));
+  assert.equal(
+    JSON.stringify(updatedTabs.slice(0, 3)),
+    JSON.stringify([0, 1, 2].map(() => ({ tabId: 12, value: { active: true } }))),
+  );
   await dispatch(
     { type: 'ziggy-open-tab', url: 'https://chaturbate.com/ungrouped_model/', active: false, insert: true, setParent: true },
     { tab: { id: 13, index: 5, windowId: 2, groupId: -1 } },
   );
   assert.equal(groupedTabs.length, 1);
-  assert.equal(JSON.stringify(updatedTabs[1]), JSON.stringify({ tabId: 13, value: { active: true } }));
+  assert.equal(
+    JSON.stringify(updatedTabs.slice(3, 6)),
+    JSON.stringify([0, 1, 2].map(() => ({ tabId: 13, value: { active: true } }))),
+  );
   assert.equal(JSON.stringify(createdTabs[1]), JSON.stringify({
     url: 'https://chaturbate.com/ungrouped_model/',
     active: false,
@@ -295,17 +340,14 @@ async function testBackgroundAdapter() {
     index: 6,
     openerTabId: 13,
   }));
-  const restoreStart = updatedTabs.length;
-  const restored = await dispatch(
-    { type: 'ziggy-native-mobile-tab-opened', url: 'https://chaturbate.com/native_model/' },
+  const foregroundRestoreCount = updatedTabs.length;
+  const foreground = await dispatch(
+    { type: 'ziggy-open-tab', url: 'https://chaturbate.com/foreground_model/', active: true, insert: true, setParent: true },
     { tab: { id: 14, index: 6, windowId: 2, groupId: -1 } },
   );
-  assert.equal(restored.ok, true);
-  assert.equal(updatedTabs.length, restoreStart + 3);
-  assert.equal(
-    JSON.stringify(updatedTabs.slice(restoreStart)),
-    JSON.stringify([0, 1, 2].map(() => ({ tabId: 14, value: { active: true } }))),
-  );
+  assert.equal(foreground.tabId, 88);
+  assert.equal(createdTabs.at(-1).active, true);
+  assert.equal(updatedTabs.length, foregroundRestoreCount);
   await dispatch({ type: 'ziggy-close-tab', tabId: 88 });
   await eventually(() => removedTabs.length, 'Tab close was not requested');
   assert.deepEqual(removedTabs, [88]);

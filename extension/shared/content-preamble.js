@@ -2,6 +2,8 @@
   'use strict';
 
   const __ziggyApi = typeof browser !== 'undefined' ? browser : chrome;
+  const __ziggyTabBridgeMarkerId = 'ziggy-extension-tab-bridge';
+  const __ziggyTabBridgeEvent = 'ziggy-suite:extension-open-tab';
   const __ziggyContextReservedPaths = new Set([
     'about', 'accounts', 'affiliate', 'affiliates', 'app', 'apps', 'auth', 'b',
     'billing', 'blog', 'broadcast', 'broadcasters', 'contest', 'contests',
@@ -74,6 +76,55 @@
     }
     return '';
   }
+
+  function __ziggySafeSameOriginTabUrl(rawUrl) {
+    try {
+      const target = new URL(String(rawUrl || ''), location.href);
+      const hostname = target.hostname.toLowerCase();
+      return target.protocol === 'https:'
+        && target.origin === location.origin
+        && (hostname === 'chaturbate.com' || hostname.endsWith('.chaturbate.com'))
+        ? target.href
+        : '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function __ziggyInstallTabBridge() {
+    if (!document?.addEventListener || !__ziggyApi?.runtime?.sendMessage) return;
+    if (document.getElementById?.(__ziggyTabBridgeMarkerId)) return;
+    const marker = document.createElement('meta');
+    marker.id = __ziggyTabBridgeMarkerId;
+    marker.setAttribute('data-ziggy-extension-tab-bridge', '1');
+    (document.head || document.documentElement)?.appendChild(marker);
+    let lastRequestAt = 0;
+    document.addEventListener(__ziggyTabBridgeEvent, event => {
+      const request = event.target;
+      if (!request?.getAttribute || request.getAttribute('data-ziggy-extension-tab-request') !== '1') return;
+      const url = __ziggySafeSameOriginTabUrl(request.getAttribute('data-url'));
+      if (!url) return;
+      request.setAttribute('data-ziggy-extension-tab-handled', '1');
+      const now = Date.now();
+      if (now - lastRequestAt < 150) {
+        request.setAttribute('data-ziggy-extension-tab-status', 'throttled');
+        return;
+      }
+      lastRequestAt = now;
+      Promise.resolve(__ziggyApi.runtime.sendMessage({
+        type: 'ziggy-open-tab',
+        url,
+        active: request.getAttribute('data-active') === '1',
+        insert: request.getAttribute('data-insert') === '1',
+        setParent: request.getAttribute('data-set-parent') === '1',
+      })).then(result => {
+        request.setAttribute('data-ziggy-extension-tab-status', result?.error ? 'error' : 'opened');
+        if (Number.isInteger(result?.tabId)) request.setAttribute('data-ziggy-extension-tab-id', String(result.tabId));
+      }).catch(() => request.setAttribute('data-ziggy-extension-tab-status', 'error'));
+    }, true);
+  }
+
+  __ziggyInstallTabBridge();
 
   function __ziggyContextCandidate(eventTarget) {
     const target = typeof Element !== 'undefined' && eventTarget instanceof Element
@@ -210,38 +261,6 @@
     };
   }
 
-  function __ziggyUseNativeAndroidChildTab(url, options) {
-    if (options?.preferNativeMobileGroup !== true || options?.setParent !== true) return false;
-    if (typeof navigator === 'undefined' || !/\bAndroid\b/i.test(String(navigator.userAgent || ''))) return false;
-    try {
-      const target = new URL(String(url || ''), location.href);
-      const hostname = target.hostname.toLowerCase();
-      return target.protocol === 'https:'
-        && (hostname === 'chaturbate.com' || hostname.endsWith('.chaturbate.com'))
-        && target.origin === location.origin;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  function __ziggyOpenNativeAndroidChildTab(url, handle) {
-    const anchor = document.createElement('a');
-    anchor.href = String(url || 'about:blank');
-    anchor.target = '_blank';
-    // Keep the browser-level opener relationship. Android browsers use their
-    // native link path (not WebExtension groupId) to inherit a mobile tab group.
-    anchor.rel = 'opener';
-    anchor.style.display = 'none';
-    (document.body || document.documentElement).appendChild(anchor);
-    Promise.resolve(__ziggyApi.runtime.sendMessage({
-      type: 'ziggy-native-mobile-tab-opened',
-      url: anchor.href,
-    })).catch(() => {});
-    anchor.click();
-    anchor.remove();
-    return handle;
-  }
-
   function GM_openInTab(url, options = {}) {
     let tabId = null;
     let closeRequested = false;
@@ -255,14 +274,6 @@
       onclose: null,
       closed: false,
     };
-    if (__ziggyUseNativeAndroidChildTab(url, options)) {
-      try {
-        return __ziggyOpenNativeAndroidChildTab(url, handle);
-      } catch (_) {
-        // Fall through to the ordinary extension tab API if the native link
-        // path is unavailable in this content context.
-      }
-    }
     Promise.resolve(__ziggyApi.runtime.sendMessage({
       type: 'ziggy-open-tab',
       url: String(url || 'about:blank'),

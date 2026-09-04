@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.4
+// @version           16.6.5
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.4');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.5');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -115,7 +115,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.4');
+  instanceMarker.setAttribute('data-suite-version', '16.6.5');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -532,13 +532,59 @@
     return w;
   }
 
+  const EXTENSION_TAB_BRIDGE_MARKER_ID = 'ziggy-extension-tab-bridge';
+  const EXTENSION_TAB_BRIDGE_EVENT = 'ziggy-suite:extension-open-tab';
+
+  function openWithExtensionTabBridge(url, options = {}) {
+    if (options.preferNativeMobileGroup !== true) return null;
+    const marker = document.getElementById(EXTENSION_TAB_BRIDGE_MARKER_ID);
+    if (!marker) return null;
+    let target;
+    try {
+      target = new URL(String(url || ''), location.href);
+      if (target.protocol !== 'https:' || target.origin !== location.origin || !safeChaturbateHost(target.hostname)) return null;
+    } catch (_) {
+      return null;
+    }
+    const request = document.createElement('meta');
+    request.setAttribute('data-ziggy-extension-tab-request', '1');
+    request.setAttribute('data-url', target.href);
+    request.setAttribute('data-active', options.active === true ? '1' : '0');
+    request.setAttribute('data-insert', '1');
+    request.setAttribute('data-set-parent', '1');
+    (document.head || document.documentElement).appendChild(request);
+    request.dispatchEvent(new Event(EXTENSION_TAB_BRIDGE_EVENT));
+    const handled = request.getAttribute('data-ziggy-extension-tab-handled') === '1';
+    setTimeout(() => request.remove(), handled ? 30000 : 0);
+    return handled ? { close() {}, onclose: null, closed: false } : null;
+  }
+
+  function openNativeMobileChildTab(url, options = {}) {
+    if (options.preferNativeMobileGroup !== true) return null;
+    if (typeof navigator === 'undefined' || !/\bAndroid\b/i.test(String(navigator.userAgent || ''))) return null;
+    try {
+      const target = new URL(String(url || ''), location.href);
+      if (target.protocol !== 'https:' || target.origin !== location.origin || !safeChaturbateHost(target.hostname)) return null;
+      // Quetta only inherits its native mobile tab group when the room is a
+      // real child browsing context. Tampermonkey cannot reselect the source
+      // tab afterward, so its documented fallback is grouped but foreground.
+      return window.open(target.href, '_blank');
+    } catch (_) {
+      return null;
+    }
+  }
+
   function openBackgroundTab(url, options = {}) {
     const targetUrl = String(url || 'about:blank');
+    const bridgedTab = openWithExtensionTabBridge(targetUrl, options);
+    if (bridgedTab) return bridgedTab;
+    const nativeMobileTab = openNativeMobileChildTab(targetUrl, options);
+    if (nativeMobileTab) return nativeMobileTab;
     try {
       if (typeof GM_openInTab === 'function') {
         return GM_openInTab(targetUrl, {
-          active: false,
-          loadInBackground: true,
+          active: options.active === true,
+          loadInBackground: options.active !== true,
           insert: true,
           setParent: true,
           preferNativeMobileGroup: options.preferNativeMobileGroup === true,
@@ -1306,7 +1352,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.4',
+    version: '16.6.5',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3509,9 +3555,12 @@
     if (url) openBackgroundTab(url);
   }
 
-  function openRoomPageInBackground(name) {
+  function openRoomPageInBackground(name, options = {}) {
     const url = roomPageUrl(name);
-    if (url) openBackgroundTab(url, { preferNativeMobileGroup: true });
+    if (url) openBackgroundTab(url, {
+      preferNativeMobileGroup: true,
+      active: options.active === true,
+    });
   }
 
   /* =============================================================
@@ -10529,6 +10578,25 @@
       // 状态文字（中央覆盖层）
       const statusEl = $('div', { class: 'status-layer' });
       const media = $('div', { class: 'cam-media' }, [badge, name, statusEl]);
+      if (phoneEnvironment && isLikelyUsername(room.id) && !room.sourceUrl) {
+        let lastMobileMediaOpenAt = 0;
+        media.addEventListener('click', event => {
+          if (event.target?.closest?.(dragBlockedSelector)) return;
+          const transform = getVideoTransform(room.id);
+          if (transform.zoom !== 1 || transform.x || transform.y) return;
+          const now = Date.now();
+          if (now - lastMobileMediaOpenAt < 800) return;
+          lastMobileMediaOpenAt = now;
+          event.preventDefault();
+          event.stopPropagation();
+          openRoomPageInBackground(room.id, { active: true });
+        });
+        media.addEventListener('dblclick', event => {
+          if (event.target?.closest?.(dragBlockedSelector)) return;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }, true);
+      }
       const infoNameTag = isLikelyUsername(room.id) ? 'a' : 'div';
       const infoName = $(infoNameTag, {
         class: 'cam-info-name',
@@ -10540,7 +10608,7 @@
           onclick: (event) => {
             event.preventDefault();
             event.stopPropagation();
-            openRoomPageInBackground(room.id);
+            openRoomPageInBackground(room.id, { active: phoneEnvironment });
           },
           onauxclick: (event) => {
             if (event.button !== 1) return;

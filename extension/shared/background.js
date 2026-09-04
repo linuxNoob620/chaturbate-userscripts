@@ -266,6 +266,13 @@ async function ziggyOpenTab(message, sender) {
       warnings.push(`Unable to inherit source tab group: ${String(error?.message || error)}`);
     }
   }
+  if (message.active === false && Number.isInteger(sender?.tab?.id) && typeof ziggyApi.tabs.update === 'function') {
+    try {
+      await ziggyApi.tabs.update(sender.tab.id, { active: true });
+    } catch (error) {
+      warnings.push(`Unable to restore the source tab: ${String(error?.message || error)}`);
+    }
+  }
   return { tabId, ...(warnings.length ? { warning: warnings.join(' · ') } : {}) };
 }
 

@@ -226,7 +226,7 @@
     Promise.resolve(__ziggyApi.runtime.sendMessage({
       type: 'ziggy-open-tab',
       url: String(url || 'about:blank'),
-      active: options.active !== false,
+      active: options.active === true ? true : options.loadInBackground === true ? false : options.active !== false,
       insert: options.insert === true,
       setParent: options.setParent === true,
     })).then(result => {

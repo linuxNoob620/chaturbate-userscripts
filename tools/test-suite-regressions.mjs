@@ -58,6 +58,7 @@ requireText('void syncOnlineFollowing(true, true);', 'Workshop mount does not re
 requireText("void refreshWorkshopRooms({ scope: 'all', automatic: true });", 'Workshop mount does not refresh saved-room status independently');
 requireText("card.addEventListener('auxclick', (event) => {", 'Workshop cards do not handle background middle-click opening');
 requireText('openRoomPageInBackground(room.id);', 'Workshop model links do not use the shared background-tab path');
+requireText('loadInBackground: true', 'Background room tabs do not include the Tampermonkey compatibility flag');
 requireText("class: 'rg-sidebar-dismiss-backdrop'", 'Phone Workshop sidebar is missing its outside-tap dismiss layer');
 
 if (failures.length) {

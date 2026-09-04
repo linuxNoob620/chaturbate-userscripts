@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.2
+// @version           16.6.3
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.2');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.3');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -115,7 +115,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.2');
+  instanceMarker.setAttribute('data-suite-version', '16.6.3');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -536,7 +536,7 @@
     const targetUrl = String(url || 'about:blank');
     try {
       if (typeof GM_openInTab === 'function') {
-        return GM_openInTab(targetUrl, { active: false, insert: true, setParent: true });
+        return GM_openInTab(targetUrl, { active: false, loadInBackground: true, insert: true, setParent: true });
       }
     } catch (_) {}
     return openNoopener(targetUrl);
@@ -1300,7 +1300,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.2',
+    version: '16.6.3',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',

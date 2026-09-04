@@ -125,7 +125,7 @@ async function testContentAdapter() {
   assert.equal(xhrMessage.request.data, '{"test":true}');
   assert.equal(xhrMessage.request.timeout, 30000);
 
-  adapter.GM_openInTab('https://chaturbate.com/model/', { active: false, insert: true, setParent: true });
+  adapter.GM_openInTab('https://chaturbate.com/model/', { loadInBackground: true, insert: true, setParent: true });
   const openMessage = await eventually(
     () => messages.find(message => message.type === 'ziggy-open-tab'),
     'GM_openInTab did not send a request',
@@ -171,6 +171,7 @@ async function testBackgroundAdapter() {
   const createdTabs = [];
   const removedTabs = [];
   const groupedTabs = [];
+  const updatedTabs = [];
   const sentTabMessages = [];
   const contextMenuItems = [];
   const fetchCalls = [];
@@ -186,8 +187,9 @@ async function testBackgroundAdapter() {
       onClicked: { addListener(value) { contextClickListener = value; } },
     },
     tabs: {
-      async create(value) { createdTabs.push(value); return { id: 88 }; },
+      async create(value) { createdTabs.push(value); return { id: 88, active: true }; },
       async group(value) { groupedTabs.push(value); return value.groupId; },
+      async update(tabId, value) { updatedTabs.push({ tabId, value }); return { id: tabId, ...value }; },
       async remove(value) { removedTabs.push(value); },
       async sendMessage(tabId, message, options) { sentTabMessages.push({ tabId, message, options }); return { ok: true }; },
       onRemoved: { addListener(value) { tabRemovedListener = value; } },
@@ -253,11 +255,13 @@ async function testBackgroundAdapter() {
     openerTabId: 12,
   }));
   assert.equal(JSON.stringify(groupedTabs[0]), JSON.stringify({ groupId: 7, tabIds: [88] }));
+  assert.equal(JSON.stringify(updatedTabs[0]), JSON.stringify({ tabId: 12, value: { active: true } }));
   await dispatch(
     { type: 'ziggy-open-tab', url: 'https://chaturbate.com/ungrouped_model/', active: false, insert: true, setParent: true },
     { tab: { id: 13, index: 5, windowId: 2, groupId: -1 } },
   );
   assert.equal(groupedTabs.length, 1);
+  assert.equal(JSON.stringify(updatedTabs[1]), JSON.stringify({ tabId: 13, value: { active: true } }));
   assert.equal(JSON.stringify(createdTabs[1]), JSON.stringify({
     url: 'https://chaturbate.com/ungrouped_model/',
     active: false,

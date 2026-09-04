@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.5
+// @version           16.6.6
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.5');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.6');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -115,7 +115,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.5');
+  instanceMarker.setAttribute('data-suite-version', '16.6.6');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1352,7 +1352,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.5',
+    version: '16.6.6',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -8417,6 +8417,11 @@
         .grid.view-split .split-pane .cam-media,
         body.rg-pure-mode .cam-media,
         .cam-card:fullscreen .cam-media { width:100%; height:100%; flex:1 1 100%; }
+        .cam-media:fullscreen { width:100vw!important; height:100vh!important; background:#000!important; }
+        .cam-media:fullscreen .cam-video { width:100%!important; height:100%!important; object-fit:contain!important; transform:none!important; }
+        .cam-media:fullscreen .pill,
+        .cam-media:fullscreen .name-label,
+        .cam-media:fullscreen .status-layer { display:none!important; }
         body.rg-pure-mode .rg-native-header { display:none!important; }
         body.rg-pure-mode .app-shell { height:100dvh!important; }
         body.rg-phone-mode .rg-native-header { display:grid!important; height:52px; min-height:52px; grid-template-columns:minmax(0,1fr) auto; gap:6px; padding:max(4px,env(safe-area-inset-top)) 6px 4px 52px!important; overflow:hidden!important; touch-action:auto!important; }
@@ -10477,6 +10482,24 @@
       }
     }
 
+    async function toggleWorkshopNativeFullscreen(card) {
+      const current = document.fullscreenElement || document.webkitFullscreenElement || null;
+      if (current) {
+        if (typeof document.exitFullscreen === 'function') await document.exitFullscreen();
+        else if (typeof document.webkitExitFullscreen === 'function') await document.webkitExitFullscreen();
+        return;
+      }
+      const target = card.querySelector('.cam-media') || card;
+      try {
+        // Use the browser's real fullscreen path on the existing media surface.
+        // Quetta/Firefox can then provide their native portrait zoom and pan;
+        // the Workshop does not create an overlay player or gesture UI.
+        if (typeof target.requestFullscreen === 'function') await target.requestFullscreen();
+        else if (typeof target.webkitRequestFullscreen === 'function') await target.webkitRequestFullscreen();
+        else if (target !== card && typeof card.requestFullscreen === 'function') await card.requestFullscreen();
+      } catch (_) {}
+    }
+
     function buildCard(room) {
       // v15.9.31: the card itself is the drag surface; controls remain normal click targets.
       const card = $('div', { class: 'cam-card rg-card-enter', dataset: { roomId: room.id }, draggable: !phoneEnvironment });
@@ -10546,7 +10569,7 @@
       const shotBtn = mkOp('camera', t('opScreenshot'), () => captureCardScreenshot(room.id), { extra: true });
       const recordBtn = mkOp('record', t('opRecordStart'), () => toggleCardRecording(room.id), { extra: true });
       const fullBtn = mkOp('expand', t('opFullscreen'), () => {
-        document.fullscreenElement ? document.exitFullscreen() : card.requestFullscreen().catch(() => {});
+        void toggleWorkshopNativeFullscreen(card);
       }, { extra: true });
       const moreOpsBtn = mkOp('more', t('moreOps'), (ev) => openCardOpsMenu(ev, room.id, card));
       const removeBtn = mkOp('close', t('opRemove'), () => {
@@ -10658,7 +10681,7 @@
           patchVideoTransform(room.id, { zoom: 1, x: 0, y: 0 });
           return;
         }
-        document.fullscreenElement ? document.exitFullscreen() : card.requestFullscreen().catch(() => {});
+        void toggleWorkshopNativeFullscreen(card);
       });
 
       card.addEventListener('contextmenu', (e) => {
@@ -18449,7 +18472,7 @@
 
     const main = makeElement('div', 'zmc-main');
     const actions = makeElement('div', 'zmc-actions');
-    const fullscreenButton = makeAction('⛶', 'Video-only fullscreen', 'Fill, pinch, zoom, and pan', 'primary', enterVideoOnlyFullscreen);
+    const fullscreenButton = makeAction('⛶', 'Native fullscreen', 'Use Chaturbate’s native player fullscreen', 'primary', enterVideoOnlyFullscreen);
     fullscreenButton.classList.add('zmc-fullscreen-action');
     const pipButton = makeAction('▣', 'Picture-in-Picture', 'Pop out the current video', '', togglePictureInPicture);
     pipButton.classList.add('zmc-pip-action');
@@ -19189,15 +19212,19 @@
   }
 
   async function enterVideoOnlyFullscreen() {
-    if (fullscreenSession) {
-      showFullscreenControls();
-      setPanelOpen(false);
-      return;
-    }
     const video = findPrimaryVideo();
     const host = findFullscreenHost(video);
     if (!video || !host) {
       showToast('The room video is not ready yet');
+      return;
+    }
+    const current = fullscreenElement();
+    if (current) {
+      try {
+        if (typeof document.exitFullscreen === 'function') await document.exitFullscreen();
+        else if (typeof document.webkitExitFullscreen === 'function') await document.webkitExitFullscreen();
+      } catch (_) {}
+      setPanelOpen(false);
       return;
     }
     try {
@@ -19206,62 +19233,20 @@
         else if (video.webkitPresentationMode === 'picture-in-picture') video.webkitSetPresentationMode('inline');
       }
     } catch (_) {}
-    const controls = createFullscreenControls();
-    const session = {
-      host,
-      video,
-      controls,
-      mode: orientationFullscreenMode(),
-      zoom: 1,
-      panX: 0,
-      panY: 0,
-      cropPanX: 0,
-      cropPanY: 0,
-      pointers: new Map(),
-      gesture: null,
-      lastTap: null,
-      controlsTimer: 0,
-      landscape: innerWidth > innerHeight,
-      fallback: false,
-      entering: true,
-      exiting: false,
-      scrollX: scrollX,
-      scrollY: scrollY,
-    };
-    fullscreenSession = session;
-    host.classList.add('zmc-video-only-host');
-    host.appendChild(controls);
-    bindFullscreenGestures(session);
-    markFullscreenVideo(session, video);
-    document.documentElement.classList.add('zmc-video-fullscreen');
-    document.body?.classList.add('zmc-fullscreen');
     setPanelOpen(false);
-    showFullscreenControls();
-
-    let requested = false;
     try {
       if (typeof host.requestFullscreen === 'function') {
-        requested = true;
-        try {
-          await host.requestFullscreen({ navigationUI: 'hide' });
-        } catch (_) {
-          await host.requestFullscreen();
-        }
+        // Chaturbate's native player uses the same browser API on #chat-player.
+        // Keep that surface and its browser-native gesture behavior intact.
+        await host.requestFullscreen();
       } else if (typeof host.webkitRequestFullscreen === 'function') {
-        requested = true;
         await host.webkitRequestFullscreen();
+      } else {
+        throw new Error('Fullscreen API unavailable');
       }
     } catch (_) {
-      requested = false;
+      showToast('Full screen is unavailable');
     }
-    if (fullscreenSession !== session) return;
-    session.entering = false;
-    const current = fullscreenElement();
-    if (!requested || !(current === host || host.contains(current))) {
-      session.fallback = true;
-      host.classList.add('zmc-video-only-fallback');
-    }
-    updateFullscreenTransform();
   }
 
   function handleVideoOnlyFullscreenChange() {
@@ -19452,10 +19437,10 @@
     else restoreAllHiddenNodes();
     if (fullscreenSession) syncVideoOnlyFullscreen();
     const anyFullscreen = room && pseudoFullscreenActive(videoTarget);
-    const nativeFullscreen = anyFullscreen && !fullscreenSession;
     body.classList.toggle('zmc-fullscreen', anyFullscreen);
-    body.classList.toggle('zmc-native-fullscreen', nativeFullscreen);
-    syncNativeFullscreenLayout(videoTarget, nativeFullscreen);
+    // Native fullscreen owns the player layout. Do not restyle or wrap it.
+    body.classList.remove('zmc-native-fullscreen');
+    clearNativeFullscreenMarks();
     updateShellState();
     syncPanelState();
   }

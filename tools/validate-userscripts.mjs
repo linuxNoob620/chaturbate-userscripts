@@ -123,8 +123,24 @@ for (const item of scripts) {
     const fullscreenDblClickSource = fullscreenDblClickStart >= 0 && fullscreenDblClickEnd > fullscreenDblClickStart
       ? source.slice(fullscreenDblClickStart, fullscreenDblClickEnd)
       : '';
-    for (const required of ['e.preventDefault()', 'e.stopPropagation()', 'e.stopImmediatePropagation()', 'card.requestFullscreen()']) {
+    for (const required of ['e.preventDefault()', 'e.stopPropagation()', 'e.stopImmediatePropagation()', 'toggleWorkshopNativeFullscreen(card)']) {
       if (!fullscreenDblClickSource.includes(required)) failures.push(`${item.file}: Workshop double-click fullscreen guard is missing ${required}`);
+    }
+    if (!source.includes('async function toggleWorkshopNativeFullscreen(card)')
+      || !source.includes("const target = card.querySelector('.cam-media') || card")
+      || !source.includes('await target.requestFullscreen()')) {
+      failures.push(`${item.file}: Workshop does not use native fullscreen on its existing media surface`);
+    }
+    const nativeRoomFullscreenStart = source.indexOf('  async function enterVideoOnlyFullscreen()');
+    const nativeRoomFullscreenEnd = source.indexOf('\n  function handleVideoOnlyFullscreenChange()', nativeRoomFullscreenStart);
+    const nativeRoomFullscreenSource = nativeRoomFullscreenStart >= 0 && nativeRoomFullscreenEnd > nativeRoomFullscreenStart
+      ? source.slice(nativeRoomFullscreenStart, nativeRoomFullscreenEnd)
+      : '';
+    for (const required of ['const host = findFullscreenHost(video)', 'await host.requestFullscreen()', "showToast('Full screen is unavailable')"]) {
+      if (!nativeRoomFullscreenSource.includes(required)) failures.push(`${item.file}: native room fullscreen is missing ${required}`);
+    }
+    for (const removed of ['createFullscreenControls()', "host.classList.add('zmc-video-only-host')", 'bindFullscreenGestures(session)']) {
+      if (nativeRoomFullscreenSource.includes(removed)) failures.push(`${item.file}: room fullscreen still creates the retired custom interface: ${removed}`);
     }
     if (!source.includes("if (document.fullscreenElement) return;\n      renderGrid();")) {
       failures.push(`${item.file}: Workshop resize handler can reparent the fullscreen card`);

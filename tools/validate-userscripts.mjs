@@ -128,7 +128,8 @@ for (const item of scripts) {
     }
     if (!source.includes('async function toggleWorkshopNativeFullscreen(card)')
       || !source.includes("const target = card.querySelector('.cam-media') || card")
-      || !source.includes('await target.requestFullscreen()')) {
+      || !source.includes('await target.requestFullscreen()')
+      || !source.includes('infoActions.appendChild(fullBtn)')) {
       failures.push(`${item.file}: Workshop does not use native fullscreen on its existing media surface`);
     }
     const nativeRoomFullscreenStart = source.indexOf('  async function enterVideoOnlyFullscreen()');
@@ -141,6 +142,9 @@ for (const item of scripts) {
     }
     for (const removed of ['createFullscreenControls()', "host.classList.add('zmc-video-only-host')", 'bindFullscreenGestures(session)']) {
       if (nativeRoomFullscreenSource.includes(removed)) failures.push(`${item.file}: room fullscreen still creates the retired custom interface: ${removed}`);
+    }
+    if (source.includes("settingRow('Portrait fullscreen'") || source.includes("settingRow('Landscape fullscreen'")) {
+      failures.push(`${item.file}: retired custom fullscreen fit/fill settings remain visible`);
     }
     if (!source.includes("if (document.fullscreenElement) return;\n      renderGrid();")) {
       failures.push(`${item.file}: Workshop resize handler can reparent the fullscreen card`);

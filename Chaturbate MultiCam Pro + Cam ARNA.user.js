@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.6
+// @version           16.6.7
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.6');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.7');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -115,7 +115,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.6');
+  instanceMarker.setAttribute('data-suite-version', '16.6.7');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1352,7 +1352,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.6',
+    version: '16.6.7',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -6822,7 +6822,7 @@
               toolButton(room ? (saved ? `Remove ${room}` : `Add ${room}`) : 'Add current model', 'ziggy-suite:toggle-current-room'),
               toolButton('Rooms', 'ziggy-suite:toggle-roomgrid', { tab: 'multicam' }),
               toolButton('Archive Search', 'ziggy-suite:toggle-roomgrid', { tab: 'arna' }),
-              toolButton('Video fullscreen', 'ziggy-mobile-clean-view:fullscreen'),
+              toolButton('Native fullscreen', 'ziggy-mobile-clean-view:fullscreen'),
               toolButton('Picture-in-Picture', 'ziggy-mobile-clean-view:pip'),
               toolButton('Mobile view settings', 'ziggy-mobile-clean-view:open-panel', { view: 'settings' }),
             ]),
@@ -10570,7 +10570,7 @@
       const recordBtn = mkOp('record', t('opRecordStart'), () => toggleCardRecording(room.id), { extra: true });
       const fullBtn = mkOp('expand', t('opFullscreen'), () => {
         void toggleWorkshopNativeFullscreen(card);
-      }, { extra: true });
+      });
       const moreOpsBtn = mkOp('more', t('moreOps'), (ev) => openCardOpsMenu(ev, room.id, card));
       const removeBtn = mkOp('close', t('opRemove'), () => {
         stopCardRecording(room.id, true);
@@ -10594,7 +10594,7 @@
       splitBtn?.classList.add('split-toggle');
       muteBtn.classList.add('quick-op', 'quick-mute');
       refreshBtn.classList.add('quick-op', 'quick-refresh', 'quick-optional');
-      fullBtn.classList.add('quick-op', 'quick-full', 'quick-optional');
+      fullBtn.classList.add('quick-op', 'quick-full');
       moreOpsBtn.classList.add('quick-op', 'quick-more');
       opsRow.append(muteBtn, refreshBtn, recordBtn, fullBtn);
 
@@ -10651,6 +10651,7 @@
       if (favoriteBtn) infoActions.appendChild(favoriteBtn);
       if (copyLinkBtn) infoActions.appendChild(copyLinkBtn);
       if (recuProfileBtn) infoActions.appendChild(recuProfileBtn);
+      infoActions.appendChild(fullBtn);
       infoActions.appendChild(moreOpsBtn);
       const info = $('div', { class: 'cam-info' }, [
         $('div', { class: 'cam-info-copy' }, [infoName, infoMeta]),
@@ -18547,8 +18548,6 @@
       settingRow('Hide promotional sections', 'Keep browsing focused on room cards', checkboxControl(settings.hidePromos, value => saveSettings({ hidePromos: value }))),
       settingRow('Portrait columns', 'Models shown across the screen', selectControl([['1', '1'], ['2', '2'], ['3', '3']], settings.portraitColumns, value => saveSettings({ portraitColumns: value }))),
       settingRow('Landscape columns', 'Models shown across the screen', selectControl([['2', '2'], ['3', '3'], ['4', '4'], ['5', '5']], settings.landscapeColumns, value => saveSettings({ landscapeColumns: value }))),
-      settingRow('Portrait fullscreen', 'How video first fills a tall screen', selectControl([['fill', 'Fill'], ['fit', 'Fit']], settings.portraitFullscreenMode, value => saveSettings({ portraitFullscreenMode: value }))),
-      settingRow('Landscape fullscreen', 'How video first fills a wide screen', selectControl([['fit', 'Fit'], ['fill', 'Fill']], settings.landscapeFullscreenMode, value => saveSettings({ landscapeFullscreenMode: value }))),
       settingRow('Dock auto-hide', 'Seconds before the dock becomes compact', selectControl([['0', 'Off'], ['3', '3 s'], ['5', '5 s'], ['8', '8 s'], ['12', '12 s']], settings.autoHideSeconds, value => saveSettings({ autoHideSeconds: value }))),
       settingRow('Dock side', 'Choose the easiest thumb position', selectControl([['right', 'Right'], ['left', 'Left']], settings.side, value => saveSettings({ side: value })))
     );

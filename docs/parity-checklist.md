@@ -10,7 +10,7 @@ Record **Pass**, **Fail** or **Blocked**, plus a screenshot/console/network note
 
 ## Installation and startup
 
-- [ ] Version/name shown as 16.6.3 / Ziggy Chaturbate Suite
+- [ ] Version/name shown as 16.6.4 / Ziggy Chaturbate Suite
 - [ ] Executes at document end on `chaturbate.com` and subdomains
 - [ ] Executes in frames exactly where the userscript does
 - [ ] Does not inject twice
@@ -151,6 +151,8 @@ Record **Pass**, **Fail** or **Blocked**, plus a screenshot/console/network note
 - [ ] Right-click on a card, link, room background and native video resolves the intended model in Chrome and Zen
 - [ ] Same-origin frame behavior works; cross-origin player/frame limitations are recorded without broader permissions
 - [ ] Touchstart/touchmove/touchend and pointer-type behavior match
+- [ ] Android extension room-name tap opens through the native child-link path, remains in the browser's current native group, and reselects Workshop
+- [ ] Android non-room and non-Chaturbate tab opens fall back safely to the ordinary extension tab API
 - [ ] Trusted user-activation-dependent fullscreen/PiP/download flows match
 - [ ] Mutation/resize/intersection observer timing and teardown match
 - [ ] Timers, debounce/throttle intervals, reconnect delays and auto-collapse delays match

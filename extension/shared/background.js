@@ -4,6 +4,7 @@ const ziggyApi = typeof browser !== 'undefined' ? browser : chrome;
 const ziggyRequests = new Map();
 const ziggyContextInvocations = new Map();
 const ZIGGY_CONTEXT_TTL_MS = 8000;
+const ZIGGY_NATIVE_SOURCE_RESTORE_AT_MS = Object.freeze([0, 200, 800]);
 const ZIGGY_CONTEXT_MENU_IDS = Object.freeze({
   root: 'ziggy-suite-root',
   rooms: 'ziggy-suite-rooms',
@@ -276,6 +277,31 @@ async function ziggyOpenTab(message, sender) {
   return { tabId, ...(warnings.length ? { warning: warnings.join(' · ') } : {}) };
 }
 
+async function ziggyRestoreNativeMobileSource(sender) {
+  const sourceTabId = sender?.tab?.id;
+  if (!Number.isInteger(sourceTabId) || typeof ziggyApi.tabs.update !== 'function') {
+    return { ok: false, warning: 'The source tab is unavailable' };
+  }
+  const warnings = [];
+  let previousAt = 0;
+  let restored = false;
+  for (const restoreAt of ZIGGY_NATIVE_SOURCE_RESTORE_AT_MS) {
+    const waitMs = Math.max(0, restoreAt - previousAt);
+    previousAt = restoreAt;
+    if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
+    try {
+      await ziggyApi.tabs.update(sourceTabId, { active: true });
+      restored = true;
+    } catch (error) {
+      warnings.push(String(error?.message || error));
+    }
+  }
+  return {
+    ok: restored,
+    ...(warnings.length ? { warning: warnings.join(' · ') } : {}),
+  };
+}
+
 ziggyApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message.type !== 'string') return false;
   if (message.type === 'ziggy-context-capture') {
@@ -294,6 +320,10 @@ ziggyApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.type === 'ziggy-open-tab') {
     ziggyOpenTab(message, sender).then(sendResponse, error => sendResponse({ error: String(error?.message || error) }));
+    return true;
+  }
+  if (message.type === 'ziggy-native-mobile-tab-opened') {
+    ziggyRestoreNativeMobileSource(sender).then(sendResponse, error => sendResponse({ ok: false, error: String(error?.message || error) }));
     return true;
   }
   if (message.type === 'ziggy-close-tab') {

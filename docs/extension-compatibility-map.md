@@ -1,6 +1,6 @@
 # Extension compatibility map
 
-This document records the compatibility audit for `Chaturbate MultiCam Pro + Cam ARNA.user.js` version 16.6.3. The userscript remains the reference implementation. Extension builds copy its complete post-metadata body verbatim between explicit parity markers.
+This document records the compatibility audit for `Chaturbate MultiCam Pro + Cam ARNA.user.js` version 16.6.4. The userscript remains the reference implementation. Extension builds copy its complete post-metadata body verbatim between explicit parity markers.
 
 ## Userscript metadata
 
@@ -27,9 +27,9 @@ The build fails if the HLS URL/version changes without an explicit audit, or if 
 | `GM_setValue` | Same settings domains | Updates the synchronous cache immediately and persists the unchanged value/type to `storage.local` |
 | `GM_xmlhttpRequest` | GitHub Contents API, Archive Search checks, translation, CamSoda, Stripchat, Streamate, BongaCams, CAM4 and MyFreeCams lookups | Narrow message bridge to an extension background fetch; preserves method, URL, headers, body, timeout, anonymous/credential mode, response status/text/headers/final URL and load/error/timeout/abort callbacks used by the script |
 | `GM_download` | Suite snapshot JPEG supplied as a `Blob` | Hidden same-document download anchor backed by an object URL, preserving the filename and load/error callbacks used by the script |
-| `GM_openInTab` | Model pages and Recorder Hub, including background-tab behavior | Background `tabs.create`; preserves `active`/`loadInBackground`, `insert` and `setParent`, restores the source tab when a mobile Chromium browser ignores inactive creation, and exposes a close handle |
+| `GM_openInTab` | Model pages and Recorder Hub, including background-tab behavior | Desktop and non-room calls use background `tabs.create`, preserving `active`/`loadInBackground`, `insert` and `setParent`. User-activated Android room opens use a same-origin native child link so the mobile browser can inherit its own group, then the adapter reselects Workshop. The returned close handle remains available for ordinary extension-created tabs. |
 
-Quetta Android does not expose Chromium's Tab Groups API to extensions. The Suite preserves the opener/parent relationship, but Quetta controls native group placement. Background opening is reinforced by restoring the Workshop source tab after creation.
+Firefox Android does not expose `tabs.group`, `tabs.create({ openerTabId })`, or a usable `Tab.groupId`; Quetta Android's extension layer does not reliably expose Chromium's Tab Groups API. A WebExtension-created tab therefore cannot be assigned to either browser's native mobile group. For user-activated room links, the extension adapter delegates creation to the browser's native link path and reselects Workshop at 0, 200 and 800 ms so native parent/group inheritance and background placement can coexist. The direct `tabs.create` path remains as a guarded fallback if native anchor creation fails or the target is not a same-origin Chaturbate HTTPS URL. Tampermonkey cannot reproduce this extension-only source-tab reselection because `GM_openInTab` exposes no focus/group primitive beyond the unsupported mobile options.
 | `window.focus` | Existing userscript behavior | Native content-script `window.focus`; no adapter |
 
 Not present and therefore not emulated: `GM_deleteValue`, `GM_listValues`, value-change listeners, resources, menu commands, notifications, clipboard helpers, `GM_addStyle`, `unsafeWindow`, modern `GM.*` calls, or legacy APIs beyond those listed above.

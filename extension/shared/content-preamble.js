@@ -210,6 +210,38 @@
     };
   }
 
+  function __ziggyUseNativeAndroidChildTab(url, options) {
+    if (options?.preferNativeMobileGroup !== true || options?.setParent !== true) return false;
+    if (typeof navigator === 'undefined' || !/\bAndroid\b/i.test(String(navigator.userAgent || ''))) return false;
+    try {
+      const target = new URL(String(url || ''), location.href);
+      const hostname = target.hostname.toLowerCase();
+      return target.protocol === 'https:'
+        && (hostname === 'chaturbate.com' || hostname.endsWith('.chaturbate.com'))
+        && target.origin === location.origin;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function __ziggyOpenNativeAndroidChildTab(url, handle) {
+    const anchor = document.createElement('a');
+    anchor.href = String(url || 'about:blank');
+    anchor.target = '_blank';
+    // Keep the browser-level opener relationship. Android browsers use their
+    // native link path (not WebExtension groupId) to inherit a mobile tab group.
+    anchor.rel = 'opener';
+    anchor.style.display = 'none';
+    (document.body || document.documentElement).appendChild(anchor);
+    Promise.resolve(__ziggyApi.runtime.sendMessage({
+      type: 'ziggy-native-mobile-tab-opened',
+      url: anchor.href,
+    })).catch(() => {});
+    anchor.click();
+    anchor.remove();
+    return handle;
+  }
+
   function GM_openInTab(url, options = {}) {
     let tabId = null;
     let closeRequested = false;
@@ -223,6 +255,14 @@
       onclose: null,
       closed: false,
     };
+    if (__ziggyUseNativeAndroidChildTab(url, options)) {
+      try {
+        return __ziggyOpenNativeAndroidChildTab(url, handle);
+      } catch (_) {
+        // Fall through to the ordinary extension tab API if the native link
+        // path is unavailable in this content context.
+      }
+    }
     Promise.resolve(__ziggyApi.runtime.sendMessage({
       type: 'ziggy-open-tab',
       url: String(url || 'about:blank'),

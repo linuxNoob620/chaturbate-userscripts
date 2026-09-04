@@ -59,6 +59,7 @@ requireText("void refreshWorkshopRooms({ scope: 'all', automatic: true });", 'Wo
 requireText("card.addEventListener('auxclick', (event) => {", 'Workshop cards do not handle background middle-click opening');
 requireText('openRoomPageInBackground(room.id);', 'Workshop model links do not use the shared background-tab path');
 requireText('loadInBackground: true', 'Background room tabs do not include the Tampermonkey compatibility flag');
+requireText('preferNativeMobileGroup: true', 'Android room tabs do not request the native mobile group path');
 requireText("class: 'rg-sidebar-dismiss-backdrop'", 'Phone Workshop sidebar is missing its outside-tap dismiss layer');
 
 if (failures.length) {

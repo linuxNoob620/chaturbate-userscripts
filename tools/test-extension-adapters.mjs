@@ -20,6 +20,10 @@ async function testContentAdapter() {
   const messages = [];
   const anchors = [];
   const documentEvents = [];
+  const navigator = {
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+    userActivation: { isActive: true },
+  };
   let contentMessageListener;
   const chrome = {
     storage: {
@@ -63,6 +67,10 @@ async function testContentAdapter() {
   };
   let adapter;
   let nextObjectUrl = 0;
+  class TestURL extends URL {
+    static createObjectURL() { nextObjectUrl += 1; return `blob:test-${nextObjectUrl}`; }
+    static revokeObjectURL() {}
+  }
   const testSetTimeout = (callback, delay, ...args) => {
     if (delay >= 60000) {
       queueMicrotask(() => callback(...args));
@@ -82,13 +90,11 @@ async function testContentAdapter() {
     Blob,
     crypto,
     console,
+    navigator,
     Promise,
     setTimeout: testSetTimeout,
     clearTimeout,
-    URL: {
-      createObjectURL() { nextObjectUrl += 1; return `blob:test-${nextObjectUrl}`; },
-      revokeObjectURL() {},
-    },
+    URL: TestURL,
     location: { href: 'https://chaturbate.com/', origin: 'https://chaturbate.com' },
     CustomEvent: class CustomEvent {
       constructor(type, init = {}) { this.type = type; this.detail = init.detail; }
@@ -134,6 +140,26 @@ async function testContentAdapter() {
   assert.equal(openMessage.insert, true);
   assert.equal(openMessage.setParent, true);
 
+  navigator.userAgent = 'Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36';
+  adapter.GM_openInTab('https://chaturbate.com/mobile_model/', {
+    loadInBackground: true,
+    insert: true,
+    setParent: true,
+    preferNativeMobileGroup: true,
+  });
+  const nativeOpenMessage = await eventually(
+    () => messages.find(message => message.type === 'ziggy-native-mobile-tab-opened'),
+    'Android room open did not use the native child-tab path',
+  );
+  assert.equal(nativeOpenMessage.url, 'https://chaturbate.com/mobile_model/');
+  assert.equal(messages.filter(message => message.type === 'ziggy-open-tab').length, 1);
+  assert.equal(anchors.length, 1);
+  assert.equal(anchors[0].href, 'https://chaturbate.com/mobile_model/');
+  assert.equal(anchors[0].target, '_blank');
+  assert.equal(anchors[0].rel, 'opener');
+  assert.equal(anchors[0].clicked, true);
+  assert.equal(anchors[0].removed, true);
+
   await new Promise((resolve, reject) => {
     adapter.GM_download({
       url: new Blob(['snapshot'], { type: 'image/jpeg' }),
@@ -142,9 +168,9 @@ async function testContentAdapter() {
       onerror: reject,
     });
   });
-  assert.equal(anchors.length, 1);
-  assert.equal(anchors[0].download, 'model.jpg');
-  assert.equal(anchors[0].clicked, true);
+  assert.equal(anchors.length, 2);
+  assert.equal(anchors[1].download, 'model.jpg');
+  assert.equal(anchors[1].clicked, true);
 
   assert.equal(typeof contentMessageListener, 'function');
   let contextResponse;
@@ -269,6 +295,17 @@ async function testBackgroundAdapter() {
     index: 6,
     openerTabId: 13,
   }));
+  const restoreStart = updatedTabs.length;
+  const restored = await dispatch(
+    { type: 'ziggy-native-mobile-tab-opened', url: 'https://chaturbate.com/native_model/' },
+    { tab: { id: 14, index: 6, windowId: 2, groupId: -1 } },
+  );
+  assert.equal(restored.ok, true);
+  assert.equal(updatedTabs.length, restoreStart + 3);
+  assert.equal(
+    JSON.stringify(updatedTabs.slice(restoreStart)),
+    JSON.stringify([0, 1, 2].map(() => ({ tabId: 14, value: { active: true } }))),
+  );
   await dispatch({ type: 'ziggy-close-tab', tabId: 88 });
   await eventually(() => removedTabs.length, 'Tab close was not requested');
   assert.deepEqual(removedTabs, [88]);

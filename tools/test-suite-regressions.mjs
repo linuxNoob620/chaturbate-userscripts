@@ -62,8 +62,10 @@ requireText('loadInBackground: options.active !== true', 'Room tabs do not pass 
 requireText('preferNativeMobileGroup: true', 'Android room tabs do not request the native mobile group path');
 requireText("const EXTENSION_TAB_BRIDGE_MARKER_ID = 'ziggy-extension-tab-bridge'", 'The userscript cannot use the extension tab-group bridge');
 requireText("return window.open(target.href, '_blank');", 'Tampermonkey lacks the native grouped-child fallback on Android');
-requireText("media.addEventListener('click', event => {", 'Phone Workshop cards do not open rooms from video taps');
-requireText('openRoomPageInBackground(room.id, { active: true });', 'Phone video taps do not request a foreground grouped room tab');
+rejectText("media.addEventListener('click', event => {", 'Phone Workshop video taps still open room tabs');
+rejectText("media.addEventListener('dblclick', event => {", 'Phone Workshop media still suppresses the shared double-click fullscreen path');
+requireText("card.addEventListener('dblclick', (e) => {", 'Workshop cards are missing the shared double-click fullscreen handler');
+requireText('void toggleWorkshopNativeFullscreen(card);', 'Workshop double-click does not request native fullscreen');
 requireText('openRoomPageInBackground(room.id, { active: phoneEnvironment });', 'Phone model-name taps do not request a foreground grouped room tab');
 requireText("class: 'rg-sidebar-dismiss-backdrop'", 'Phone Workshop sidebar is missing its outside-tap dismiss layer');
 

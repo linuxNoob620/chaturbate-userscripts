@@ -1,6 +1,7 @@
 # Publish only the two maintained userscripts and repository support files.
 *
 !.gitignore
+!AGENTS.md
 !README.md
 !LICENSE
 !package.json

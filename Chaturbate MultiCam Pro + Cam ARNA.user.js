@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.7
+// @version           16.6.8
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.7');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.8');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -115,7 +115,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.7');
+  instanceMarker.setAttribute('data-suite-version', '16.6.8');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1352,7 +1352,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.7',
+    version: '16.6.8',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -10601,25 +10601,6 @@
       // 状态文字（中央覆盖层）
       const statusEl = $('div', { class: 'status-layer' });
       const media = $('div', { class: 'cam-media' }, [badge, name, statusEl]);
-      if (phoneEnvironment && isLikelyUsername(room.id) && !room.sourceUrl) {
-        let lastMobileMediaOpenAt = 0;
-        media.addEventListener('click', event => {
-          if (event.target?.closest?.(dragBlockedSelector)) return;
-          const transform = getVideoTransform(room.id);
-          if (transform.zoom !== 1 || transform.x || transform.y) return;
-          const now = Date.now();
-          if (now - lastMobileMediaOpenAt < 800) return;
-          lastMobileMediaOpenAt = now;
-          event.preventDefault();
-          event.stopPropagation();
-          openRoomPageInBackground(room.id, { active: true });
-        });
-        media.addEventListener('dblclick', event => {
-          if (event.target?.closest?.(dragBlockedSelector)) return;
-          event.preventDefault();
-          event.stopImmediatePropagation();
-        }, true);
-      }
       const infoNameTag = isLikelyUsername(room.id) ? 'a' : 'div';
       const infoName = $(infoNameTag, {
         class: 'cam-info-name',

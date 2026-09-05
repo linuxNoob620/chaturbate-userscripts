@@ -3,9 +3,20 @@
 ## Deployment
 
 - Primary runtime: Tampermonkey userscript `Chaturbate MultiCam Pro + Cam ARNA.user.js`.
-- Current published userscript version: 16.6.8 (`main`, tag `v16.6.8`).
+- Current userscript release: 16.6.9 (`main`, tag `v16.6.9`), published at the user's explicit request despite the remaining acceptance failure below.
 - Extension builds remain at 16.6.7. They were not modified, rebuilt, packaged, or published for this userscript-only change.
 - Local rollback point: Git tag `backup/pre-16.6.8-workshop-doubletap-20260905` at the 16.6.7 baseline.
+- Version 16.6.9 is installed in the original Quetta Tampermonkey entry. Its fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist; publication is not a parity certification.
+- Candidate rollback point: `backup/pre-native-portrait-20260905`. Extension outputs are unchanged.
+
+## Fullscreen implementation and remaining gaps
+
+- Normal-room mobile sizing overrides are excluded from actual/native expanded fullscreen; chat hiding is suspended there, and the Suite action delegates to the site's native fullscreen control.
+- Workshop uses the existing fullscreen element with session-only portrait sizing and gesture adaptation, preserves preview double-tap, and defers grid reparenting until exit. No single-tap room opener or separate fullscreen UI was added.
+- Real-phone normal-room checks passed for portrait sizing, the compared pinch/pan sequence, and three native-control exit/re-entry cycles. Full control/gesture coverage and desktop Tampermonkey regression remain incomplete.
+- Real-phone Workshop checks passed for single-tap non-navigation, double-tap entry, unchanged tab count/URL, compared portrait pinch sizing, pan, rotation, and three exit/re-entry cycles.
+- **Failing criterion:** Workshop's browser video controls do not reliably become visible on tap, even with `controls` enabled. The cause of this remaining failure is not confirmed.
+- Focused source/build tests pass; they do not substitute for the outstanding behavior checks. Publication was explicitly authorized after the user was informed of the failing criterion and incomplete desktop regression.
 
 ## Workshop
 

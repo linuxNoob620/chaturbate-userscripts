@@ -32,6 +32,14 @@ Never merge multiple separated test periods into one indefinitely enabled sessio
 
 Do not update a native baseline from userscript behavior or source-code inference.
 
+Reveal the native control overlay before tapping fullscreen and remeasure the control after each state change. Test the native exit control separately from Android Back. A successful native baseline must have the Suite runtime absent after reload, not merely a recently clicked disable toggle.
+
+## Updating the actual phone userscript
+
+Edit the existing Suite entry in Tampermonkey. Target the visible CodeMirror editor and that entry's specific Save button; hidden new-script editors can coexist in the page. Do not use a generic first editor or generic save command. Confirm one Suite entry, its version, enabled state, and runtime after reload. Preserve the original entry and its settings.
+
+After restarting Quetta, a sleeping target may time out on its first DevTools initialization. Activate it and perform a read-only warm-up before sending changes; do not blindly retry a mutating operation whose execution is uncertain.
+
 ## Userscript mobile test
 
 1. Start a fresh real-phone pass.

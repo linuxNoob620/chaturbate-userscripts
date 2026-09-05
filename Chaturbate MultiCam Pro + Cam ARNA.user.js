@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.8
+// @version           16.6.9
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -94,7 +94,7 @@
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.8');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.9');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -115,7 +115,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.8');
+  instanceMarker.setAttribute('data-suite-version', '16.6.9');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1352,7 +1352,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.8',
+    version: '16.6.9',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -7779,8 +7779,8 @@
           background:transparent; z-index:1; pointer-events:none; }
         .cam-card.video-zoomed .cam-video { cursor:grab; }
         .cam-card.video-panning .cam-video { cursor:grabbing !important; }
-        .cam-video::-webkit-media-controls,
-        .cam-video::-webkit-media-controls-enclosure { display:none !important; opacity:0 !important; }
+        .cam-media:not(.rg-touch-fullscreen) .cam-video::-webkit-media-controls,
+        .cam-media:not(.rg-touch-fullscreen) .cam-video::-webkit-media-controls-enclosure { display:none !important; opacity:0 !important; }
         .cam-card.not-online { background:linear-gradient(135deg, rgba(255,255,255,.92), rgba(241,245,249,.96)); }
         .status-layer { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
           flex-direction:column; gap:6px; color:var(--text-muted); font-size:12px; text-align:center;
@@ -8419,6 +8419,8 @@
         .cam-card:fullscreen .cam-media { width:100%; height:100%; flex:1 1 100%; }
         .cam-media:fullscreen { width:100vw!important; height:100vh!important; background:#000!important; }
         .cam-media:fullscreen .cam-video { width:100%!important; height:100%!important; object-fit:contain!important; transform:none!important; }
+        .cam-media.rg-touch-fullscreen:fullscreen { overflow:hidden!important; touch-action:none; }
+        .cam-media.rg-touch-fullscreen:fullscreen .cam-video { position:absolute!important; inset:0!important; max-width:none!important; max-height:none!important; aspect-ratio:auto!important; height:var(--rg-fullscreen-height,100%)!important; object-fit:var(--rg-fullscreen-fit,contain)!important; object-position:var(--rg-fullscreen-x,0px) 0px!important; pointer-events:auto!important; }
         .cam-media:fullscreen .pill,
         .cam-media:fullscreen .name-label,
         .cam-media:fullscreen .status-layer { display:none!important; }
@@ -10482,6 +10484,100 @@
       }
     }
 
+    // Session-only geometry: never write mobile fullscreen gestures to saved
+    // preview transforms. Chaturbate scales portrait width between viewport
+    // width and height*aspect, pans horizontally and anchors the image at top.
+    function prepareWorkshopTouchFullscreen(media, video) {
+      const controller = new AbortController();
+      const options = { signal: controller.signal };
+      let wasControlled = video.controls;
+      let width = 0, scroll = 0, lastTouch = null, entered = false;
+      let lastViewport = '';
+      const current = () => document.fullscreenElement || document.webkitFullscreenElement;
+      const portrait = () => innerHeight > innerWidth;
+      const aspect = () => video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : 16 / 9;
+      const render = () => {
+        if (current() !== media) return;
+        const w = innerWidth, h = innerHeight;
+        const viewport = `${w}:${h}`;
+        if (viewport !== lastViewport) {
+          lastViewport = viewport;
+          width = Math.max(w, h * aspect());
+          scroll = (width - w) / 2;
+          lastTouch = null;
+        }
+        scroll = Math.max(0, Math.min(scroll, width - w));
+        media.style.setProperty('--rg-fullscreen-height', portrait() ? `${Math.round(width / aspect())}px` : '100%');
+        media.style.setProperty('--rg-fullscreen-fit', portrait() ? 'cover' : 'contain');
+        media.style.setProperty('--rg-fullscreen-x', portrait() ? `${-scroll}px` : '0px');
+      };
+      const scale = (factor, x) => {
+        const next = Math.round(Math.min(Math.max(width * factor, innerWidth), Math.max(innerWidth, innerHeight * aspect())));
+        scroll += (x + scroll) * (next / width - 1);
+        width = next;
+      };
+      const touch = event => {
+        if (current() !== media) return;
+        const points = [...event.touches];
+        if (!points.length) { lastTouch = null; return; }
+        const rect = media.getBoundingClientRect();
+        const x = points.reduce((sum, p) => sum + p.clientX, 0) / points.length - rect.left;
+        const y = points.reduce((sum, p) => sum + p.clientY, 0) / points.length - rect.top;
+        const distance = points.length === 2 ? Math.hypot(points[0].clientX - points[1].clientX, points[0].clientY - points[1].clientY) : 0;
+        // Leave the browser's actual video controls available to a single tap.
+        const controlsTop = Math.min(media.clientHeight, video.clientHeight) - 56;
+        if (event.type === 'touchstart') {
+          lastTouch = points.length === 1 && y >= controlsTop ? null : { x, y, distance: null, count: points.length };
+          return;
+        }
+        if (!lastTouch || lastTouch.count !== points.length) { lastTouch = null; return; }
+        if (event.cancelable) event.preventDefault();
+        if (portrait()) {
+          // Match the site's incremental pinch and vertical-drag factors.
+          if (points.length === 2 && lastTouch.distance !== null) scale(1 + 1.25 * (distance - lastTouch.distance) / innerWidth, x);
+          else if (points.length === 1) scale(1 + 1.6 * (y - lastTouch.y) / innerHeight, innerWidth / 2);
+          scroll += lastTouch.x - x;
+          render();
+        }
+        lastTouch = { x, y, distance, count: points.length };
+      };
+      const cleanup = () => {
+        replacements.disconnect();
+        controller.abort();
+        media.classList.remove('rg-touch-fullscreen');
+        for (const key of ['height', 'fit', 'x']) media.style.removeProperty(`--rg-fullscreen-${key}`);
+        video.controls = wasControlled;
+      };
+      const changed = () => {
+        if (current() === media) {
+          entered = true;
+          video.controls = false;
+          video.controls = true;
+          render();
+        }
+        else if (entered) cleanup();
+      };
+      const replacements = new MutationObserver(() => {
+        const next = media.querySelector('video');
+        if (!next || next === video) return;
+        video.controls = wasControlled;
+        video = next;
+        wasControlled = next.controls;
+        next.controls = true;
+        next.addEventListener('loadedmetadata', () => { lastViewport = ''; render(); }, options);
+        lastViewport = '';
+        render();
+      });
+      replacements.observe(media, { childList: true });
+      media.classList.add('rg-touch-fullscreen');
+      video.controls = true;
+      for (const name of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) media.addEventListener(name, touch, { ...options, passive: false });
+      for (const name of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(name, changed, options);
+      window.addEventListener('resize', render, options);
+      video.addEventListener('loadedmetadata', () => { lastViewport = ''; render(); }, options);
+      return cleanup;
+    }
+
     async function toggleWorkshopNativeFullscreen(card) {
       const current = document.fullscreenElement || document.webkitFullscreenElement || null;
       if (current) {
@@ -10490,14 +10586,16 @@
         return;
       }
       const target = card.querySelector('.cam-media') || card;
+      const video = target.querySelector('video');
+      const cleanup = phoneEnvironment && video ? prepareWorkshopTouchFullscreen(target, video) : null;
       try {
         // Use the browser's real fullscreen path on the existing media surface.
-        // Quetta/Firefox can then provide their native portrait zoom and pan;
-        // the Workshop does not create an overlay player or gesture UI.
+        // Portrait gestures are session-only; no overlay player is created.
         if (typeof target.requestFullscreen === 'function') await target.requestFullscreen();
         else if (typeof target.webkitRequestFullscreen === 'function') await target.webkitRequestFullscreen();
         else if (target !== card && typeof card.requestFullscreen === 'function') await card.requestFullscreen();
-      } catch (_) {}
+        else cleanup?.();
+      } catch (_) { cleanup?.(); }
     }
 
     function buildCard(room) {
@@ -10646,12 +10744,13 @@
           card.style.filter = 'none';
           card.style.opacity = '1';
           const v = card.querySelector('.cam-video');
-          if (v) { v.style.filter = 'none'; v.style.opacity = '1'; v.controls = false; v.removeAttribute('controls'); }
+          if (v) { v.style.filter = 'none'; v.style.opacity = '1'; if (!card.querySelector('.rg-touch-fullscreen')) { v.controls = false; v.removeAttribute('controls'); } }
         } catch (_) {}
       });
 
       card.addEventListener('dblclick', (e) => {
         if (e.target.closest('.icon-btn')) return;
+        if (phoneEnvironment && (!e.target.closest('.cam-media') || !media.querySelector('video'))) return;
         // Cancel the browser/video element's native double-click action. Without
         // this, the same gesture can request fullscreen here and immediately
         // toggle it off again when the native default action runs.
@@ -10659,7 +10758,7 @@
         e.stopPropagation();
         e.stopImmediatePropagation();
         const transform = getVideoTransform(room.id);
-        if (transform.zoom !== 1 || transform.x || transform.y) {
+        if (!phoneEnvironment && (transform.zoom !== 1 || transform.x || transform.y)) {
           patchVideoTransform(room.id, { zoom: 1, x: 0, y: 0 });
           return;
         }
@@ -12622,6 +12721,13 @@
     }
 
     function renderGrid() {
+      const fullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+      if (fullscreen && grid.contains(fullscreen)) {
+        // Reparenting a fullscreen card via the layout fragment exits fullscreen.
+        // Reconcile pending membership/layout only after the user exits.
+        gridRenderDeferred = true;
+        return;
+      }
       const mode = store.state.settings.viewMode;
       const splitActive = !!store.state.settings.splitViewActive
         && Array.isArray(store.state.settings.splitRoomIds)
@@ -12702,6 +12808,11 @@
     let gridRenderRaf = 0;
     let sidebarRenderDeferred = false;
     let gridRenderDeferred = false;
+    for (const name of ['fullscreenchange', 'webkitfullscreenchange']) {
+      document.addEventListener(name, () => {
+        if (!document.fullscreenElement && !document.webkitFullscreenElement && gridRenderDeferred) scheduleGridRender();
+      });
+    }
     function scheduleSidebarRender() {
       if (document.hidden) { sidebarRenderDeferred = true; return; }
       if (sidebarRenderRaf) return;
@@ -18017,13 +18128,13 @@
         -webkit-line-clamp:2 !important;
         overflow:hidden !important;
       }
-      html.zmc-active body.zmc-room .zmc-video-target,
-      html.zmc-active body.zmc-room .zmc-video-target [data-testid="video-container"] {
+      html.zmc-active:not(:has(:fullscreen)) body.zmc-room:not(.zmc-fullscreen) .zmc-video-target,
+      html.zmc-active:not(:has(:fullscreen)) body.zmc-room:not(.zmc-fullscreen) .zmc-video-target [data-testid="video-container"] {
         width:100% !important;
         max-width:none !important;
         margin-inline:0 !important;
       }
-      html.zmc-active body.zmc-room .zmc-video-target video {
+      html.zmc-active:not(:has(:fullscreen)) body.zmc-room:not(.zmc-fullscreen) .zmc-video-target video {
         width:100% !important;
         max-width:100% !important;
         object-fit:contain !important;
@@ -19192,6 +19303,18 @@
   }
 
   async function enterVideoOnlyFullscreen() {
+    // Native mobile controls also manage portrait scaling, controls and exit
+    // state. Requesting fullscreen on #chat-player bypasses that lifecycle.
+    const nativeControl = document.querySelector('[data-testid="mobile-fullscreen-button"]');
+    if (nativeControl) {
+      setPanelOpen(false);
+      const icon = nativeControl.querySelector('img');
+      const previousIcon = icon?.getAttribute('src');
+      nativeControl.click();
+      // A hidden native control's first click only reveals the controls.
+      if (icon && icon.getAttribute('src') === previousIcon) nativeControl.click();
+      return;
+    }
     const video = findPrimaryVideo();
     const host = findFullscreenHost(video);
     if (!video || !host) {
@@ -19216,8 +19339,7 @@
     setPanelOpen(false);
     try {
       if (typeof host.requestFullscreen === 'function') {
-        // Chaturbate's native player uses the same browser API on #chat-player.
-        // Keep that surface and its browser-native gesture behavior intact.
+        // Fallback for pages without Chaturbate's native mobile controls.
         await host.requestFullscreen();
       } else if (typeof host.webkitRequestFullscreen === 'function') {
         await host.webkitRequestFullscreen();
@@ -19280,7 +19402,10 @@
   }
 
   function pseudoFullscreenActive(videoTarget) {
-    if (document.fullscreenElement) return true;
+    if (fullscreenElement()) return true;
+    // The site's expanded player can outlive browser fullscreen (Android Back).
+    // Its own control icon is authoritative in portrait as well as landscape.
+    if (document.querySelector('[data-testid="mobile-fullscreen-button"] img')?.getAttribute('src')?.includes('contract-1.svg')) return true;
     const video = findPrimaryVideo();
     if (video?.webkitDisplayingFullscreen) return true;
     const classText = String(document.documentElement.className || '') + ' ' + String(document.body?.className || '');
@@ -19413,11 +19538,11 @@
     const video = room ? findPrimaryVideo() : null;
     markVideoTarget(videoTarget);
     bindVideo(video);
-    if (room) hideChat();
-    else restoreAllHiddenNodes();
     if (fullscreenSession) syncVideoOnlyFullscreen();
     const anyFullscreen = room && pseudoFullscreenActive(videoTarget);
     body.classList.toggle('zmc-fullscreen', anyFullscreen);
+    if (room && !anyFullscreen) hideChat();
+    else restoreAllHiddenNodes();
     // Native fullscreen owns the player layout. Do not restyle or wrap it.
     body.classList.remove('zmc-native-fullscreen');
     clearNativeFullscreenMarks();

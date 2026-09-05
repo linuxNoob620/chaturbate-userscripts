@@ -10,15 +10,19 @@ Reliable workaround: Set the flag to `Default`, remove the file, use Quetta's `R
 
 Last verified: 2026-09-05 on the connected OPPO phone.
 
-## Quetta native fullscreen is not a reliable debugging-pass oracle
+## Hidden native fullscreen controls require a reveal tap
 
-Symptom: Chaturbate's native fullscreen control can remain a no-op while Quetta is running with the temporary non-root command-line/debugging setup, even though the same live player exposes its normal resize and fullscreen overlay.
+Symptom: A tap aimed at the native fullscreen control can reveal the overlay without entering fullscreen.
 
-Cause: Not proven. Treat this as a harness/browser-state limitation, not as evidence that Chaturbate's production fullscreen behavior changed.
+Cause: Native Chaturbate handles hidden controls differently from visible controls. Successful script-disabled fullscreen was observed with debugging active; the earlier no-op did not prove a debug-mode limitation.
 
-Reliable workaround: Use the pass to compare entry, inline controls, orientation, navigation, and Suite event routing. Do not claim successful native fullscreen or zoom/pan parity unless it is directly observed in a clean, non-debug phone state.
+Reliable workaround: Reveal controls, measure their current position, then tap the visible control. Its position changes between inline, expanded, and browser-fullscreen states. Compare the resulting screen and player state, not only the API result.
 
 Last observed: 2026-09-05 on Quetta 2.0.2 / Chromium 148.0.7778.217.
+
+## Reparenting Workshop cards interrupts fullscreen
+
+Moving the fullscreen card into a detached `DocumentFragment` during grid rendering exits fullscreen. Defer card-layout rendering while the grid contains the fullscreen element and apply the pending render on exit. Status updates need not be stopped. Observed on the real Quetta phone, 2026-09-05.
 
 ## Chaturbate replaces live page and video DOM
 

@@ -27,6 +27,23 @@ A request that merely describes desired behavior is not automatic authorization 
 - If prior behavior matters, inspect relevant Git history and recover the known-good implementation where practical without reverting unrelated work.
 - Preserve unrelated user changes and keep credentials, cookies, tokens, and secrets out of logs, artifacts, prompts, and commits.
 
+## Native-behavior acceptance criteria
+
+Before editing for any behavior-restoration or parity task:
+
+1. Capture the live site behavior with the userscript disabled in the relevant browser/device.
+2. Record the observable behavior and define explicit acceptance criteria from that baseline, not from assumptions or the current implementation.
+3. Enable the actual userscript and repeat the same interaction sequence to identify differences before implementation.
+4. After authorized implementation, repeat that same sequence and compare each acceptance criterion against the baseline.
+
+Do not change the acceptance criteria after editing merely to accommodate different implementation behavior. A plausible cause, successful API call, fullscreen entry, or one passing interaction is not proof of native parity.
+
+For mobile fullscreen/video work, use the real phone, Quetta, and the actual userscript. Check, where applicable: room entry and automatic fullscreen behavior; fullscreen entry; portrait and landscape layout; sizing and aspect ratio; zoom, pan, pinch and other touch gestures; rotation; controls visibility and behavior; exit and return to page state; re-entry and repeated cycles; and whether script CSS/JS still interferes with fullscreen. Record any genuinely inapplicable item and why.
+
+Changes to fullscreen, video sizing, object-fit, dimensions, transforms, orientation, viewport units, gesture handlers, or mobile-player/fullscreen CSS require targeted normal-room regression testing and separate Workshop-preview testing when shared or related code is affected. Passing one does not establish parity for the other.
+
+If a criterion fails, report `not fixed`. If an important criterion remains untested, report `partially verified` and identify the gap. Do not describe the requested behavior as `fixed`, `restored`, `native parity`, or `verified` unless the relevant baseline comparison is complete and all acceptance criteria pass.
+
 ## Environment routing
 
 - Desktop behavior: Chrome on the PC with Tampermonkey and the actual userscript.

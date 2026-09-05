@@ -49,4 +49,5 @@ For browser/site/tool oddities, read `docs/codex/KNOWN_QUIRKS.md`.
 - The Tampermonkey userscript is the primary target. Publish successfully tested userscript edits.
 - Do not automatically modify, rebuild, synchronize, package, or publish extension versions.
 - Preserve native Chaturbate behavior unless the requested feature requires otherwise.
+- For parity/restoration work, define acceptance criteria from the live native baseline before editing, then verify the edited behavior against the same checklist.
 - UI behavior is not verified by source inspection, logs, DOM inspection, or synthetic events alone when real interaction testing is reasonably possible.

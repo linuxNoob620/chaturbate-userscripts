@@ -3,7 +3,7 @@
 ## Deployment
 
 - Primary runtime: Tampermonkey userscript `Chaturbate MultiCam Pro + Cam ARNA.user.js`.
-- Current userscript release: 16.6.9 (`main`, tag `v16.6.9`), published at the user's explicit request despite the remaining acceptance failure below.
+- Current userscript release: 16.6.10 (`main`, tag `v16.6.10`).
 - Extension builds remain at 16.6.7. They were not modified, rebuilt, packaged, or published for this userscript-only change.
 - Local rollback point: Git tag `backup/pre-16.6.8-workshop-doubletap-20260905` at the 16.6.7 baseline.
 - Version 16.6.9 is installed in the original Quetta Tampermonkey entry. Its fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist; publication is not a parity certification.
@@ -21,7 +21,8 @@
 ## Workshop
 
 - Grid and Phone viewing modes are implemented; Focus mode has been removed.
-- Online Following has independent pagination and mobile card-count behavior.
+- Online Following has been removed from Workshop, including its cache, fallback parser/iframe, paging and sorting state, split-view source, mount refresh, and five-minute refresh timer.
+- Chaturbate's native desktop Following dropdown provides the animated followed-room previews, ordered by latest broadcast start; its native Show All destination is preserved.
 - A playing Workshop preview no longer opens a room from a single tap.
 - Double-tapping the playing preview uses the shared Workshop native-fullscreen path.
 - Explicit model-name links remain the navigation action; preview taps themselves do not navigate or create tabs.
@@ -38,7 +39,7 @@
 - Real OPPO CPH2791 / Quetta / Tampermonkey pass: rapid double-tap entered native fullscreen, kept the Workshop URL, and kept the page count at three.
 - Android Back exited fullscreen.
 - Focused userscript build, syntax, and source-regression checks pass for 16.6.8.
-- Desktop Tampermonkey runtime verification is currently unavailable in the saved test profile: Chrome 152 can open the profile, but the Tampermonkey extension directory is absent and the userscript is therefore not injected. Do not treat a manually injected script as equivalent desktop evidence.
+- Desktop Chrome-for-Testing/Tampermonkey verification on 2026-09-06 confirmed the installed 16.6.10 runtime, the reduced Workshop group list, preserved saved-room library, and no Workshop Following requests, parser iframe, or pager on a fresh load.
 
 ## CommandLineOnNonRooted
 

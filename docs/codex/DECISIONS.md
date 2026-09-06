@@ -23,3 +23,9 @@ Decision: When the phone is available, final mobile verification uses the real c
 Status: Active
 
 Decision: Future requests default to inspection, diagnosis, and a concrete plan. Editing begins only after explicit authorization such as `implement`, `edit`, `change`, `fix`, `apply`, `modify`, or `proceed`.
+
+## D-005 — Following previews stay outside Workshop
+
+Status: Active
+
+Decision: Workshop does not expose or synchronize an Online Following group. Animated followed-room previews belong only to Chaturbate's native desktop Following dropdown, and its native Show All destination remains unchanged.

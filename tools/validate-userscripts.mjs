@@ -95,26 +95,14 @@ for (const item of scripts) {
     if (!source.includes("startupView: 'last'") || !source.includes('function openStartupSettings()')) failures.push(`${item.file}: Workshop startup view/group settings are missing`);
     if (!source.includes("startupGroup: 'last'") || !source.includes('__startupGroupDefaultMigratedV1657')) failures.push(`${item.file}: Workshop startup group does not default and migrate to Last used`);
     if (!source.includes('queueGithubSettingsAutoExport(`added room ${id}`)')) failures.push(`${item.file}: new Workshop rooms do not trigger the scoped GitHub backup`);
-    if (!source.includes("allow-scripts allow-same-origin allow-presentation")) failures.push(`${item.file}: Online Following synchronizer sandbox is missing presentation support`);
-    if (source.includes("searchParams.set('ziggy_following_sync'")) failures.push(`${item.file}: Online Following synchronizer must use Chaturbate's native URL without custom query parameters`);
     if (!source.includes("'aria-label': t('startupViewLabel')") || !source.includes("'aria-label': t('startupGroupLabel')")) failures.push(`${item.file}: startup settings controls are missing distinct accessible labels`);
-    if (source.includes('(await loadAllOnlineFollowing()).filter(item => !savedIds.has(item.id))')) failures.push(`${item.file}: saved followed rooms are incorrectly omitted from Online Following`);
-    if (!source.includes('async function unfollowOnlineFollowingRoom')) failures.push(`${item.file}: Online Following account unfollow action is missing`);
-    if (!source.includes("t('opUnfollowAccount')")) failures.push(`${item.file}: Online Following card menu does not expose account unfollow`);
-    if (!source.includes('onlineFollowingSuppressedUntil')) failures.push(`${item.file}: Online Following unfollow stale-sync suppression is missing`);
-    if (!source.includes('const ONLINE_FOLLOWING_PAGE_SIZE = 9')) failures.push(`${item.file}: Online Following desktop page size is not nine`);
-    if (!source.includes('const ONLINE_FOLLOWING_MOBILE_PAGE_SIZE = 4')) failures.push(`${item.file}: Online Following mobile page size is not four`);
-    if (!source.includes("return (phoneEnvironment || store.state.settings.viewMode === 'phone')")
-      || !source.includes('const { page, pageSize } = onlineFollowingPageInfo(list)')
-      || !source.includes('return list.slice(start, start + pageSize)')) {
-      failures.push(`${item.file}: Online Following pagination does not apply the responsive page size`);
+    for (const removedFollowingMarker of [
+      'ONLINE_FOLLOWING_GROUP_ID', 'syncOnlineFollowing', 'ziggy_online_following_cache',
+      'ziggy-following-sync-frame', 'rg-following-pager', 'splitOnlineFollowing',
+    ]) {
+      if (source.includes(removedFollowingMarker)) failures.push(`${item.file}: removed Workshop Online Following marker remains: ${removedFollowingMarker}`);
     }
-    if (!source.includes("body.rg-phone-mode.rg-online-following .grid.view-phone { grid-template-columns:repeat(2,minmax(0,1fr))!important; }")) {
-      failures.push(`${item.file}: Online Following mobile grid is not fixed to 2x2`);
-    }
-    if (!source.includes('function followingPageTokens(page, totalPages)') || !source.includes("...(active ? { 'aria-current': 'page' } : {})")) {
-      failures.push(`${item.file}: centered numbered Online Following pager is missing`);
-    }
+    if (!source.includes("g.id === 'online-following'")) failures.push(`${item.file}: legacy Online Following state is not scrubbed during sanitization`);
     if (source.includes('pendingScopes.add(nativeMobilePage ? scope : document)') || source.includes("if (!nativeMobilePage) {\n          scheduleScan(document);")) {
       failures.push(`${item.file}: desktop room-card mutations still trigger full-document rescans`);
     }
@@ -149,16 +137,7 @@ for (const item of scripts) {
     if (!source.includes("if (document.fullscreenElement) return;\n      renderGrid();")) {
       failures.push(`${item.file}: Workshop resize handler can reparent the fullscreen card`);
     }
-    if (!source.includes("splitOnlineFollowing: 'Online Following'")) failures.push(`${item.file}: Split picker lacks Online Following`);
-    if (!source.includes("let rooms = mode === 'onlineFollowing' ? [...onlineFollowingRooms()] : [...store.state.rooms]")) {
-      failures.push(`${item.file}: Split picker does not source Online Following rooms`);
-    }
-    if (!source.includes("if (!s.rooms.some(room => room.id === id) && !runtimeSplitRoomAvailable(id)) return false")) {
-      failures.push(`${item.file}: Split state still rejects runtime Online Following rooms`);
-    }
-    if (!source.includes('const rooms = ids.map(findRoomAny).filter(Boolean)')) {
-      failures.push(`${item.file}: Split renderer cannot resolve Online Following rooms`);
-    }
+    if (!source.includes("if (!s.rooms.some(room => room.id === id)) return false")) failures.push(`${item.file}: Split state accepts rooms outside the saved library`);
     const cardOpsStart = source.indexOf('function openCardOpsMenu(');
     const cardOpsEnd = source.indexOf('function openMoveMenu(', cardOpsStart);
     const cardOpsSource = cardOpsStart >= 0 && cardOpsEnd > cardOpsStart ? source.slice(cardOpsStart, cardOpsEnd) : '';

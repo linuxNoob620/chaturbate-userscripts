@@ -55,7 +55,7 @@ Do not leave this file or the flag enabled outside a bounded phone pass.
 
 ## Desktop
 
-- Browser: persistent Chrome-for-Testing profile at `C:\Users\Ziggy\AppData\Local\ZiggyChromePuppeteer\User Data`.
+- Browser: persistent Chrome-for-Testing profile at `C:\Users\Ziggy\AppData\Local\Packages\OpenAI.Codex_2p2nqsd0c76g0\LocalCache\Local\ZiggyChromePuppeteer\User Data`.
 - Remote-debugging port used by the established profile: `9223` when the profile is launched for automated inspection.
 - Runtime under test: Tampermonkey with `Chaturbate MultiCam Pro + Cam ARNA.user.js` installed.
 - Target: actual Chaturbate site.

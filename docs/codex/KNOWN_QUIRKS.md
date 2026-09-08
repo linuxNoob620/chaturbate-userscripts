@@ -33,3 +33,13 @@ Cause: Chaturbate uses dynamic page/player lifecycle behavior.
 Reliable workaround: Treat navigation, DOM replacement, and video replacement as explicit regression dimensions for relevant changes. Do not assume a handler attached once remains attached.
 
 Last verified: Existing Suite behavior and regression tooling as of 16.6.7; re-verify for changed paths.
+
+## Recu.me rejects background userscript requests
+
+Symptom: A direct `GM_xmlhttpRequest` for a Recu.me performer page returns HTTP 403 even though the same performer URL loads normally as a top-level browser page.
+
+Cause: Recu.me's Cloudflare handling distinguishes the background userscript request from a normal browser navigation. Chaturbate separately blocks a direct Recu.me iframe through its enforced `frame-src` Content Security Policy.
+
+Reliable workaround: Attempt the direct lazy request first. On HTTP 403, open the performer URL in an inactive Tampermonkey helper tab carrying a random one-use bridge token. The Recu.me-matched portion of the same script extracts only allowlisted performer fields and recording URLs, writes the sanitized payload through script storage, and closes. Revalidate the payload on the Chaturbate side and clear the transient bridge key. Do not weaken Chaturbate's CSP.
+
+Last verified: 2026-09-08 in the persistent Chrome-for-Testing profile with Tampermonkey and Suite 16.6.11.

@@ -29,3 +29,9 @@ Decision: Future requests default to inspection, diagnosis, and a concrete plan.
 Status: Active
 
 Decision: Workshop does not expose or synchronize an Online Following group. Animated followed-room previews belong only to Chaturbate's native desktop Following dropdown, and its native Show All destination remains unchanged.
+
+## D-006 — Recu.me replaces the native Share tab
+
+Status: Active
+
+Decision: On supported desktop model-room pages, the Suite replaces Chaturbate's native Share tab label and panel contents with a lazy, sanitized Recu.me performer preview. It reuses the native tab system, does not embed a CSP-blocked iframe, and leaves full Recu.me interaction on the external site.

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.10
+// @version           16.6.11
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -11,6 +11,7 @@
 // @license           MIT
 // @match             https://chaturbate.com/*
 // @match             https://*.chaturbate.com/*
+// @match             https://recu.me/*
 // @require           https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js
 // @resource          mediabunny https://unpkg.com/mediabunny@1.55.5/dist/bundles/mediabunny.min.cjs
 // @grant             GM_xmlhttpRequest
@@ -22,6 +23,7 @@
 // @grant             window.focus
 // @connect           archivebate.com
 // @connect           recu.me
+// @connect           mediafront.net
 // @connect           showcamrips.com
 // @connect           camshowrecordings.com
 // @connect           camwh.com

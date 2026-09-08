@@ -3,7 +3,7 @@
 ## Deployment
 
 - Primary runtime: Tampermonkey userscript `Chaturbate MultiCam Pro + Cam ARNA.user.js`.
-- Current userscript release: 16.6.10 (`main`, tag `v16.6.10`).
+- Current userscript release: 16.6.11 (`main`, tag `v16.6.11`).
 - Extension builds remain at 16.6.7. They were not modified, rebuilt, packaged, or published for this userscript-only change.
 - Local rollback point: Git tag `backup/pre-16.6.8-workshop-doubletap-20260905` at the 16.6.7 baseline.
 - Version 16.6.9 is installed in the original Quetta Tampermonkey entry. Its fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist; publication is not a parity certification.
@@ -33,6 +33,13 @@
 - The 16.6.8 Workshop fix did not change normal-room handlers.
 - The verified userscript-disabled phone baseline is recorded in `BEHAVIOR_BASELINES.md`.
 
+## Recu.me model-room tab
+
+- On desktop model-room pages, the Suite renames Chaturbate's native **Share** tab to **Recu.me** and reuses the native `#shareTab` content panel.
+- Profile data and recent recording cards load only after the Recu.me tab is selected. Rendered text and URLs are sanitized, external hosts are allowlisted, and recording thumbnails are converted to CSP-compatible data URLs.
+- Recu.me currently rejects direct background userscript requests with HTTP 403. The Suite then opens the performer page in an inactive helper tab, extracts only the sanitized performer payload through the same Tampermonkey script, and closes the helper tab. Ordinary Recu.me visits are inert and do not mount the Suite.
+- The full-profile and recording actions remain normal external Recu.me links. The Suite does not embed an iframe, weaken Chaturbate's CSP, or reproduce Recu.me account/navigation behavior.
+
 ## Verification — 2026-09-05
 
 - Real OPPO CPH2791 / Quetta / Tampermonkey pass: single-tapping a live Workshop preview kept the Workshop URL foregrounded and kept the page count at three.
@@ -40,6 +47,7 @@
 - Android Back exited fullscreen.
 - Focused userscript build, syntax, and source-regression checks pass for 16.6.8.
 - Desktop Chrome-for-Testing/Tampermonkey verification on 2026-09-06 confirmed the installed 16.6.10 runtime, the reduced Workshop group list, preserved saved-room library, and no Workshop Following requests, parser iframe, or pager on a fresh load.
+- Desktop Chrome-for-Testing/Tampermonkey verification on 2026-09-08 confirmed the installed 16.6.11 Recu.me tab on multiple live rooms, lazy idle state, room-to-room reset, eight sanitized recording cards with loaded thumbnails, repeated native-tab switching, automatic helper-tab closure, the full-profile link, inert ordinary Recu.me visits, and absence from Workshop. A live current performer without a Recu.me profile was not found, so the unavailable-profile branch remains source-verified rather than live-confirmed.
 
 ## CommandLineOnNonRooted
 

@@ -34,4 +34,4 @@ Decision: Workshop does not expose or synchronize an Online Following group. Ani
 
 Status: Active
 
-Decision: On supported desktop model-room pages, the Suite replaces Chaturbate's native Share tab label and panel contents with a lazy, sanitized Recu.me performer preview. It reuses the native tab system, does not embed a CSP-blocked iframe, and leaves full Recu.me interaction on the external site.
+Decision: On supported desktop model-room pages, the Suite replaces Chaturbate's native Share tab label and panel contents with a lazy, sanitized Recu.me performer preview. Mobile uses the native three-dot room menu with the same panel renderer and an explicit return control. It does not embed a CSP-blocked iframe and leaves full Recu.me interaction on the external site. Small tab-session caching, explicit refresh and on-demand pagination are allowed; hover previews use Recu.me's available sampled-frame sheets, not full-video extraction or account/access-control replication.

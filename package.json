@@ -1,6 +1,6 @@
 {
   "name": "ziggy-chaturbate-suite",
-  "version": "16.6.12",
+  "version": "16.6.13",
   "private": true,
   "description": "Builds the maintained Tampermonkey userscript and strict-parity Chrome and Firefox/Zen extensions.",
   "scripts": {
@@ -9,9 +9,10 @@
     "build:chrome": "node ./tools/build-extensions.mjs chrome && node ./tools/verify-extension-parity.mjs chrome",
     "build:firefox": "node ./tools/build-extensions.mjs firefox && node ./tools/verify-extension-parity.mjs firefox",
     "package": "npm run build",
-    "test": "node ./tools/validate-userscripts.mjs && node ./tools/test-suite-regressions.mjs && node ./tools/test-github-sync.mjs && node ./tools/test-extension-adapters.mjs && node ./tools/verify-extension-parity.mjs && npm run test:mobile-view",
+    "test": "node ./tools/validate-userscripts.mjs && node ./tools/test-suite-regressions.mjs && node ./tools/test-recu-panel.mjs && node ./tools/test-github-sync.mjs && node ./tools/test-extension-adapters.mjs && node ./tools/verify-extension-parity.mjs && npm run test:mobile-view",
     "test:mobile-view": "node ./tools/real-mobile-view/verify.mjs",
-    "test:workshop": "node ./tools/test-workshop-refresh.mjs"
+    "test:workshop": "node ./tools/test-workshop-refresh.mjs",
+    "test:recu": "node ./tools/test-recu-panel.mjs"
   },
   "dependencies": {
     "hls.js": "1.6.16",

@@ -4,7 +4,7 @@
 
 Before every distinct pass:
 
-1. Open `quetta://flags/#enable-command-line-on-non-rooted-devices` and visually check the value.
+1. Enter `chrome://flags` in Quetta's address bar (Quetta displays its own scheme), search `rooted`, and visually check the value. On the tested build, typing `quetta://flags` directly can become a web search.
 2. Set it to `Enabled`.
 3. Write the tested command line from `ENVIRONMENT.md` to `/data/local/tmp/chrome-command-line`.
 4. Use Quetta's `Restart` button.
@@ -40,6 +40,10 @@ Edit the existing Suite entry in Tampermonkey. Target the visible CodeMirror edi
 
 After restarting Quetta, a sleeping target may time out on its first DevTools initialization. Activate it and perform a read-only warm-up before sending changes; do not blindly retry a mutating operation whose execution is uncertain.
 
+For Quetta CDP, use the local DevTools HTTP `/json/activate/<target-id>` endpoint to foreground the selected target. `Page.bringToFront` stalled on this build. Bound read-only warm-ups with a timeout and reconnect if necessary.
+
+Re-enumerate targets after session restoration settles; IDs/URLs observed immediately after restart can change. If initialization is waiting for debugger attachment, `Runtime.runIfWaitingForDebugger` releases it before the read-only warm-up. Native `chrome-native://newtab/` surfaces have no normal page runtime: navigate their address bar rather than waiting indefinitely for `Runtime.evaluate` or `Page.navigate`.
+
 ## Userscript mobile test
 
 1. Start a fresh real-phone pass.
@@ -57,6 +61,8 @@ After restarting Quetta, a sleeping target may time out on its first DevTools in
 ## Repository checks
 
 After userscript source edits, run the focused regression check first, then the required project gates appropriate to the userscript-only scope. `npm run build:userscript` validates and regenerates userscript metadata without rebuilding extension outputs. Run `npm test` only with awareness that its current parity checks may require existing extension artifacts to match the userscript; do not silently rebuild extensions when extension work was not authorized.
+
+For Recu.me changes run `npm run test:recu`, then actual desktop and phone interactions. Verify idle/selected loading, helper closure, native tab/menu switching, cancelled-load re-entry, cache/reload, refresh retention, pagination deduplication, lazy/error images and hover exit. Wait for the new document after reload before asserting state; checking the old document immediately after `Page.reload` can falsely pass a wait condition.
 
 ## Verification standard
 

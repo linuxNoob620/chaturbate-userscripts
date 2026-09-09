@@ -3,10 +3,11 @@
 ## Deployment
 
 - Primary runtime: Tampermonkey userscript `Chaturbate MultiCam Pro + Cam ARNA.user.js`.
-- Current userscript release: 16.6.12 (`main`, tag `v16.6.12`).
+- Current userscript release: 16.6.13 (`main`, tag `v16.6.13`).
 - Extension builds remain at 16.6.7. They were not modified, rebuilt, packaged, or published for this userscript-only change.
 - Local rollback point: Git tag `backup/pre-16.6.8-workshop-doubletap-20260905` at the 16.6.7 baseline.
-- Version 16.6.9 is installed in the original Quetta Tampermonkey entry. Its fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist; publication is not a parity certification.
+- Version 16.6.13 is installed in the existing Chrome testing-profile and Quetta Tampermonkey entries. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist; this Recu.me release does not change fullscreen code or certify that separate feature.
+- Recu.me release rollback point: local tag `backup/pre-recu-16.6.13-20260909` at 16.6.12.
 - Candidate rollback point: `backup/pre-native-portrait-20260905`. Extension outputs are unchanged.
 
 ## Fullscreen implementation and remaining gaps
@@ -40,9 +41,22 @@
 ## Recu.me model-room tab
 
 - On desktop model-room pages, the Suite renames Chaturbate's native **Share** tab to **Recu.me** and reuses the native `#shareTab` content panel.
-- Profile data and recent recording cards load only after the Recu.me tab is selected. Rendered text and URLs are sanitized, external hosts are allowlisted, and recording thumbnails are converted to CSP-compatible data URLs.
+- Selected/remembered tabs load automatically without repeated label writes; attribute-only tab switches, page hiding and navigation cancel pending work and hover animations. Cancelled loads can be entered again.
+- On native mobile room pages, **Recu.me** is available inside the existing three-dot room menu. A stable **Back to Room Menu** control returns to the original menu; normal player/tabs/fullscreen are untouched.
+- Profile data is cached separately from settings in tab-session storage: twelve performers maximum, five-minute freshness, thirty-minute retention. Stale entries are labelled and reused until explicit Refresh. Refresh keeps previous results visible and reports failures without discarding them.
+- The panel emphasizes last/new broadcasts, collapsible profile details, recording date/duration and labelled views. It initially shows eight cards; **Load older recordings** reveals remaining fetched cards before requesting an observed native pagination URL. Duplicate recording IDs are excluded.
+- Exact performer identity and recording/page URLs are checked. External hosts are allowlisted. Images are fetched near the visible area, at most three requests at once, then converted to CSP-compatible data URLs. Failure placeholders wait for explicit refresh instead of retrying indefinitely.
+- Desktop mouse hover waits 300 ms, then cycles random nonrepeating samples from Recu.me's confirmed sixteen-frame sprite. Only one hover animation runs; touch does not trigger it, and reduced-motion disables cycling. These are sampled images, not continuous/full-video seeking. Asset caching is memory-only and bounded.
 - Recu.me currently rejects direct background userscript requests with HTTP 403. The Suite then opens the performer page in an inactive helper tab, extracts only the sanitized performer payload through the same Tampermonkey script, and closes the helper tab. Ordinary Recu.me visits are inert and do not mount the Suite.
+- Helper requests use expiring one-use pending tokens, reject mismatched/stale replies and delete their transient storage keys when finished or cancelled. Ordinary Recu.me visits remain inert.
 - The full-profile and recording actions remain normal external Recu.me links. The Suite does not embed an iframe, weaken Chaturbate's CSP, or reproduce Recu.me account/navigation behavior.
+
+## Recu.me verification — 2026-09-09
+
+- Actual Chrome-for-Testing/Tampermonkey: zero repeated native-label mutations; selected-tab loading; cache reuse after reload; actual mouse hover changing sampled frames; hover removal on pointer exit; lazy thumbnail requests; eight initial cards, fifteen locally available cards, then twenty-three unique cards through native pagination; refresh retains old card nodes until replacement; Bio/Recu switching.
+- Real OPPO/Quetta/Tampermonkey: native-menu entry, two-column layout without horizontal page overflow, collapsible details, lazy thumbnails, eight/fifteen/twenty-three-card progression, retained results during refresh, stable Back control, original native menu restoration and Bio/menu re-entry passed through touch input.
+- The first cold Quetta helper load timed out with an unrecognized-layout error. Opening the normal Recu.me profile once and retrying succeeded; later pagination and refresh succeeded. Cold-load reliability is not established across all Recu.me sessions. Login/verification and unavailable-profile messages are covered by fixture tests, not a live account-state matrix.
+- `npm run test:recu` exercises shipped parser/helper/panel code: exact identity, allowlists, stale/cancelled helper messages, terminal cleanup, cache bounds/expiry/reload, pagination/deduplication, cancellation races, lazy/error thumbnail states, attribute-only tab changes, route removal and stable mobile Back ownership. Existing Suite lifecycle, Workshop refresh and encrypted-sync tests pass.
 
 ## Verification — 2026-09-05
 
@@ -66,9 +80,9 @@
 
 Expected idle state: **OFF**.
 
-Final verified state after the real-phone pass on 2026-09-05:
+Final verified state after the real-phone passes on 2026-09-09:
 
 - Quetta flag visibly reads `Default` after restart.
 - `/data/local/tmp/chrome-command-line` is absent.
 - ADB forward and reverse lists contain no test routes.
-- Auto-rotation is restored (`accelerometer_rotation=1`, `user_rotation=0`).
+- Orientation settings were not changed during the Recu.me passes.

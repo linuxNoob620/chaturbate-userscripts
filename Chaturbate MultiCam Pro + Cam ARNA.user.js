@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.12
+// @version           16.6.13
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -17,6 +17,7 @@
 // @grant             GM_xmlhttpRequest
 // @grant             GM_getValue
 // @grant             GM_setValue
+// @grant             GM_deleteValue
 // @grant             GM_getResourceText
 // @grant             GM_download
 // @grant             GM_openInTab
@@ -86,39 +87,57 @@
   const RECU_BRIDGE_PARAM = 'ziggy_suite_bridge';
   const RECU_BRIDGE_KEY_PREFIX = 'ziggy_recu_bridge_v1_';
 
-  function extractRecuPerformerPayload(doc, room) {
+  function extractRecuPerformerPayload(doc, room, pageUrl = '') {
     const normalizedRoom = String(room || '').trim().toLowerCase();
-    const heading = doc.querySelector('.page-h1')?.textContent?.replace(/\s+/g, ' ').trim() || '';
-    const hasProfile = !!doc.querySelector('.performer-attrs,.performer-overview')
-      && !!normalizedRoom && heading.toLowerCase().includes(normalizedRoom);
-    if (!hasProfile) return null;
+    if (!/^[a-z0-9_-]+$/.test(normalizedRoom)) return null;
+    const profilePath = `/performer/${normalizedRoom}`;
+    const sourceUrl = pageUrl || `https://recu.me${profilePath}`;
+    const recuUrl = raw => {
+      if (!String(raw || '').trim()) return null;
+      try {
+        const url = new URL(raw, sourceUrl);
+        return url.origin === 'https://recu.me' && !url.username && !url.password ? url : null;
+      } catch (_) { return null; }
+    };
+    const identity = recuUrl(doc.querySelector('.page-h1 .performer-link')?.getAttribute('href'));
+    if (identity?.pathname.replace(/\/$/, '').toLowerCase() !== profilePath
+        || !doc.querySelector('.performer-attrs,.performer-overview,.performer-page-videos')) return null;
     const details = [...doc.querySelectorAll('.performer-attrs .performer-attr')]
-      .map(node => node.textContent.replace(/\s+/g, ' ').trim())
-      .filter(Boolean)
+      .map(node => node.textContent.replace(/\bSee statistics\b/gi, '').replace(/\s+/g, ' ').trim())
+      .filter(text => text && !/^[\w\s]+:$/.test(text))
       .slice(0, 12);
     const recordings = [];
     const seen = new Set();
-    for (const card of doc.querySelectorAll('.performer-overview .video-thumb[data-id]')) {
+    for (const card of doc.querySelectorAll('.performer-overview .video-thumb[data-id],.performer-page-videos .video-thumb[data-id]')) {
       const id = String(card.dataset.id || '').trim();
-      if (!id || seen.has(id)) continue;
+      if (!/^\d{1,24}$/.test(id) || seen.has(id)) continue;
       const anchor = card.querySelector('a[href]');
-      let url = '';
-      try { url = new URL(anchor?.getAttribute('href') || '', 'https://recu.me/').href; } catch (_) {}
+      const url = recuUrl(anchor?.getAttribute('href'))?.href || '';
       if (!url) continue;
       const splash = card.querySelector('.video-splash');
       recordings.push({
         id,
         url,
-        image: splash?.dataset.bg || splash?.dataset.src || '',
+        image: splash?.dataset.bg || '',
+        previewImage: card.querySelector('.video-splash.animate-on-hover')?.dataset.src || '',
         duration: card.querySelector('.video-time')?.textContent?.replace(/\s+/g, ' ').trim() || '',
         date: card.querySelector('.video-date')?.textContent?.replace(/\s+/g, ' ').trim()
           || [...card.querySelectorAll('.video-info-sub span')].map(node => node.textContent.trim()).find(text => /^\d{4}-\d{2}-\d{2}/.test(text)) || '',
         views: card.querySelector('.video-views')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       });
       seen.add(id);
-      if (recordings.length >= 8) break;
+      if (recordings.length >= 72) break;
     }
-    return { room: normalizedRoom, details, recordings };
+    const isLatest = recuUrl(sourceUrl)?.pathname.toLowerCase().startsWith(`${profilePath}/latest`);
+    const nextLink = isLatest
+      ? doc.querySelector('.pagination a[aria-label="Next"]')
+      : [...doc.querySelectorAll('.performer-overview a[href]')].find(node => /^show all$/i.test(node.textContent.trim()));
+    const next = recuUrl(nextLink?.getAttribute('href'));
+    const nextPath = next?.pathname.replace(/\/$/, '').toLowerCase() || '';
+    const nextUrl = next && (isLatest
+      ? nextPath.startsWith(`${profilePath}/latest/page/`) && /^[1-9]\d*$/.test(nextPath.slice(`${profilePath}/latest/page/`.length))
+      : nextPath === `${profilePath}/latest`) ? next.href : '';
+    return { room: normalizedRoom, details, recordings, nextUrl };
   }
 
   // Recu.me rejects background HTTP requests behind Cloudflare. A specially
@@ -127,19 +146,45 @@
   if (location.hostname === 'recu.me') {
     const token = new URLSearchParams(location.search).get(RECU_BRIDGE_PARAM) || '';
     if (/^[a-f0-9-]{20,80}$/i.test(token)) {
-      const roomMatch = location.pathname.match(/^\/performer\/([A-Za-z0-9_-]+)\/?$/);
-      const room = roomMatch?.[1] || '';
+      const roomMatch = location.pathname.match(/^\/performer\/([A-Za-z0-9_-]+)(?:\/latest(?:\/page\/[1-9]\d*)?)?\/?$/);
+      const room = (roomMatch?.[1] || '').toLowerCase();
       const key = `${RECU_BRIDGE_KEY_PREFIX}${token}`;
-      let attempts = 0;
+      const startedAt = Date.now();
+      const closeHelper = () => { try { window.close(); } catch (_) {} };
+      const requestIsPending = () => {
+        try {
+          const pending = JSON.parse(GM_getValue(key, ''));
+          const age = Date.now() - pending.at;
+          return !!room && pending.token === token && pending.room === room && pending.pending === true
+            && Number.isFinite(pending.at) && age >= 0 && age < 30000;
+        } catch (_) { return false; }
+      };
       const finish = (payload, error = '') => {
-        try { GM_setValue(key, JSON.stringify({ token, room, payload, error, at: Date.now() })); } catch (_) {}
-        setTimeout(() => { try { window.close(); } catch (_) {} }, 80);
+        if (requestIsPending()) {
+          try { GM_setValue(key, JSON.stringify({ token, room, payload, error, at: Date.now() })); } catch (_) {}
+        }
+        setTimeout(closeHelper, 80);
       };
       const inspect = () => {
-        attempts++;
-        const payload = extractRecuPerformerPayload(document, room);
-        if (payload) { finish(payload); return; }
-        if (attempts >= 40) { finish(null, 'No Recu.me performer profile was found for this model.'); return; }
+        if (!requestIsPending()) { closeHelper(); return; }
+        const payload = extractRecuPerformerPayload(document, room, location.href);
+        const region = document.querySelector(location.pathname.toLowerCase().startsWith(`/performer/${room}/latest`) ? '.performer-page-videos' : '.performer-overview');
+        if (payload && region && document.readyState !== 'loading') { finish(payload); return; }
+        const heading = (document.querySelector('.page-h1,h1')?.textContent || '').replace(/\s+/g, ' ').trim();
+        const pageText = `${document.title || ''} ${heading}`;
+        if (!payload && !document.querySelector('.page-h1 .performer-link')
+            && /\b(?:404|(?:profile|performer|page) (?:was )?not found|(?:profile|performer) does not exist)\b/i.test(pageText)) {
+          finish(null, 'No Recu.me performer profile was found for this model.'); return;
+        }
+        if (Date.now() - startedAt >= 10000) {
+          const verification = !!document.querySelector('#challenge-running,#cf-chl-widget,iframe[src*="challenges.cloudflare.com"]')
+            || /just a moment|verify (?:you are|that you are)|verification|checking your browser/i.test(pageText);
+          const login = !!document.querySelector('input[type="password"]') && !payload;
+          finish(null, verification ? 'Recu.me requires browser verification. Open the full profile and try again afterward.'
+            : login ? 'Recu.me requires sign-in. Open the full profile to continue.'
+              : 'Recu.me did not finish loading a recognized performer layout. Try again or open the full profile.');
+          return;
+        }
         setTimeout(inspect, 250);
       };
       inspect();
@@ -159,7 +204,7 @@
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.12');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.13');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -175,7 +220,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.12');
+  instanceMarker.setAttribute('data-suite-version', '16.6.13');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1392,7 +1437,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.12',
+    version: '16.6.13',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -5399,9 +5444,45 @@
     let recuProfileRequest = null;
     let recuBridgeCancel = null;
     let recuRequestGeneration = 0;
+    const RECU_CACHE_TTL = 5 * 60e3;
+    const RECU_CACHE_RETENTION = 30 * 60e3;
+    const RECU_CACHE_MAX = 12;
+    const recuCache = new Map();
+    let recuCacheLoaded = false;
+    const recuPanelData = new WeakMap();
+    let recuActivePanel = null;
+    let recuLazyObserver = null;
+    const recuLazyImages = new Map();
+    const recuAssetCache = new Map();
+    const recuAssetQueue = [];
+    let recuAssetBytes = 0;
+    let recuHoverStop = null;
+    let recuMobilePanel = null;
+    let recuMobileContainer = null;
+    let recuMobileOpen = false;
+    const recuObservedTabs = new WeakSet();
+    const recuSelectionObserver = new MutationObserver(() => ensureRecuRoomTab());
+
+    function observeRecuSelection(tab) {
+      if (!tab || recuObservedTabs.has(tab)) return;
+      recuObservedTabs.add(tab);
+      recuSelectionObserver.observe(tab, { attributes: true, attributeFilter: ['class', 'aria-selected', 'style'] });
+    }
 
     const recuTabStyle = $('style', { html: trustedHtml(`
-      #shareTab > .ziggy-recu-panel { box-sizing:border-box; min-height:220px; padding:18px; color:#f1f1f1; background:#17202a; font-family:UbuntuRegular,Helvetica,Arial,sans-serif; }
+      .ziggy-recu-panel { box-sizing:border-box; min-height:220px; padding:18px; color:#f1f1f1; background:#17202a; font-family:UbuntuRegular,Helvetica,Arial,sans-serif; }
+      .ziggy-recu-actions { display:flex; flex-wrap:wrap; gap:8px; }
+      .ziggy-recu-button:disabled { opacity:.55; cursor:wait; }
+      .ziggy-recu-status { min-height:18px; margin:10px 0; color:#b3b3b3; font-size:12px; }
+      .ziggy-recu-summary { margin:12px 0; color:#d7d7d7; font-size:13px; }
+      .ziggy-recu-profile-details { margin-bottom:18px; }
+      .ziggy-recu-profile-details summary { cursor:pointer; color:#68b5f0; font-size:13px; }
+      .ziggy-recu-more { margin-top:14px; }
+      .ziggy-recu-preview { position:absolute; inset:0; background-size:400% 400%; pointer-events:none; }
+      .ziggy-recu-mobile-hidden { display:none !important; }
+      #ziggy-recu-mobile-panel { width:100%; min-width:0; box-sizing:border-box; }
+      #ziggy-recu-mobile-panel[hidden] { display:none !important; }
+      .ziggy-recu-mobile-back { margin:8px 12px; }
       .ziggy-recu-head { display:flex; align-items:center; justify-content:space-between; gap:14px; padding-bottom:14px; border-bottom:1px solid #2d3e50; }
       .ziggy-recu-title { margin:0; color:#f1f1f1; font:700 20px/1.25 UbuntuMedium,UbuntuRegular,Helvetica,Arial,sans-serif; }
       .ziggy-recu-subtitle { margin:4px 0 0; color:#b3b3b3; font-size:12px; }
@@ -5417,28 +5498,42 @@
       .ziggy-recu-recording { overflow:hidden; border:1px solid #2d3e50; border-radius:4px; background:#202c39; color:#f1f1f1 !important; text-decoration:none !important; }
       .ziggy-recu-recording:hover,.ziggy-recu-recording:focus-visible { border-color:#68b5f0; outline:none; }
       .ziggy-recu-thumb { position:relative; aspect-ratio:16/9; overflow:hidden; display:grid; place-items:center; background:linear-gradient(135deg,#253648,#101820); color:#94a3b8; }
-      .ziggy-recu-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+      .ziggy-recu-thumb img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; }
+      .ziggy-recu-thumb img:not([src]) { visibility:hidden; }
+      .ziggy-recu-placeholder { padding:10px; font-size:11px; text-align:center; }
       .ziggy-recu-duration { position:absolute; right:6px; bottom:6px; padding:2px 5px; border-radius:3px; background:rgba(0,0,0,.78); color:#fff; font-size:10px; }
       .ziggy-recu-recording-meta { display:grid; gap:3px; padding:8px; color:#b3b3b3; font-size:11px; }
       .ziggy-recu-recording-name { overflow:hidden; color:#68b5f0; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
       .ziggy-recu-foot { margin-top:14px; color:#94a3b8; font-size:10px; }
       @media (max-width:900px) { .ziggy-recu-recordings { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-      @media (max-width:520px) { #shareTab > .ziggy-recu-panel { padding:12px; } .ziggy-recu-head { align-items:flex-start; flex-direction:column; } .ziggy-recu-recordings { grid-template-columns:1fr 1fr; gap:7px; } }
+      @media (max-width:520px) { .ziggy-recu-panel { padding:12px; } .ziggy-recu-head { align-items:flex-start; flex-direction:column; } .ziggy-recu-recordings { grid-template-columns:1fr 1fr; gap:7px; } }
       @media (prefers-reduced-motion:reduce) { .ziggy-recu-spinner { animation:none; } }
     `) });
     if (!contextOnly) document.head.appendChild(recuTabStyle);
 
     function safeRecuLink(raw, fallback = '') {
+      if (!String(raw || fallback || '').trim()) return '';
       try {
         const url = new URL(raw || fallback, 'https://recu.me/');
-        return url.protocol === 'https:' && (url.hostname === 'recu.me' || url.hostname.endsWith('.recu.me')) ? url.href : '';
+        return url.origin === 'https://recu.me' && !url.username && !url.password ? url.href : '';
       } catch (_) { return ''; }
+    }
+
+    function safeRecuPageUrl(raw, room) {
+      const link = safeRecuLink(raw);
+      if (!link || !/^[a-z0-9_-]+$/i.test(room)) return '';
+      const url = new URL(link);
+      const path = `/performer/${room.toLowerCase()}`;
+      const tail = url.pathname.replace(/\/$/, '').toLowerCase().slice(path.length);
+      if (!url.pathname.toLowerCase().startsWith(path) || !/^(?:\/latest(?:\/page\/[1-9]\d*)?)?$/.test(tail)) return '';
+      return `${url.origin}${url.pathname}`;
     }
 
     function safeRecuImage(raw) {
       try {
         const url = new URL(raw || '');
-        return url.protocol === 'https:' && (url.hostname === 'mediafront.net' || url.hostname.endsWith('.mediafront.net')) ? url.href : '';
+        return url.protocol === 'https:' && !url.username && !url.password && !url.port
+          && (url.hostname === 'mediafront.net' || url.hostname.endsWith('.mediafront.net')) ? url.href : '';
       } catch (_) { return ''; }
     }
 
@@ -5452,23 +5547,83 @@
         try { request.abort?.(); } catch (_) {}
       }
       recuImageRequests.clear();
+      recuAssetQueue.splice(0).forEach(job => job.resolve(''));
+      recuLazyObserver?.disconnect();
+      recuLazyImages.clear();
+      recuHoverStop?.();
+      if (recuActivePanel?.dataset.ziggyRecuState === 'loading') {
+        recuActivePanel.dataset.ziggyRecuState = recuPanelData.has(recuActivePanel) ? 'loaded' : 'idle';
+        setRecuStatus(recuActivePanel, recuPanelData.has(recuActivePanel) ? 'Update cancelled. Showing previous results.' : '', false);
+      }
     }
 
-    function recuPanelShell(room, stateText = '') {
+    // Page-session cache, deliberately outside the saved Rooms/settings format.
+    function readRecuCache(room) {
+      if (!recuCacheLoaded) {
+        recuCacheLoaded = true;
+        try {
+          const saved = JSON.parse(sessionStorage.getItem('ziggy_recu_cache_v1') || '[]');
+          for (const [key, entry] of (Array.isArray(saved) ? saved : []).slice(-RECU_CACHE_MAX)) {
+            if (!/^[a-z0-9_-]+$/.test(key) || !Number.isFinite(entry?.fetchedAt)) continue;
+            try { recuCache.set(key, { profile: sanitizeRecuProfilePayload({ ...entry.profile, room: key }, key), fetchedAt: entry.fetchedAt }); } catch (_) {}
+          }
+        } catch (_) {}
+      }
+      const entry = recuCache.get(room);
+      if (!entry) return null;
+      const age = Date.now() - entry.fetchedAt;
+      if (age < 0 || age > RECU_CACHE_RETENTION) { recuCache.delete(room); return null; }
+      recuCache.delete(room);
+      recuCache.set(room, entry);
+      return { ...entry, stale: age > RECU_CACHE_TTL };
+    }
+
+    function writeRecuCache(room, profile, fetchedAt = Date.now()) {
+      readRecuCache(room);
+      recuCache.delete(room);
+      recuCache.set(room, { profile: sanitizeRecuProfilePayload({ ...profile, room }, room), fetchedAt });
+      while (recuCache.size > RECU_CACHE_MAX) recuCache.delete(recuCache.keys().next().value);
+      try { sessionStorage.setItem('ziggy_recu_cache_v1', JSON.stringify([...recuCache])); } catch (_) {}
+    }
+
+    function isRecuPanelActive(panel) {
+      if (!panel?.isConnected || document.hidden) return false;
+      if (panel === recuMobilePanel) return recuMobileOpen && !!document.querySelector('#portrait-contents li.roomMenu.activeTab');
+      return !!document.querySelector('a.tabLink[data-testid="room-tab-Share"].tabOpen');
+    }
+
+    function setRecuStatus(panel, text, busy = false) {
+      const status = panel?.querySelector('.ziggy-recu-status');
+      if (status && status.textContent !== text) status.textContent = text;
+      for (const button of panel?.querySelectorAll('button[data-recu-action]') || []) button.disabled = busy;
+    }
+
+    function recuUpdatedText(at) {
+      const mins = Math.max(0, Math.floor((Date.now() - at) / 60000));
+      return `Updated ${mins ? `${mins} min ago` : 'just now'}${Date.now() - at > RECU_CACHE_TTL ? ' · Cached results; refresh for updates' : ''}`;
+    }
+
+    function recuPanelShell(room, stateText = '', host = null) {
       const profileUrl = recuProfileUrl(room);
       const content = $('div', { class: 'ziggy-recu-content' });
       const panel = $('section', { class: 'ziggy-recu-panel', dataset: { room } }, [
         $('header', { class: 'ziggy-recu-head' }, [
           $('div', {}, [
-            $('h2', { class: 'ziggy-recu-title' }, `Recu.me profile: ${room}`),
+            $('h2', { class: 'ziggy-recu-title' }, `Recu.me · ${room}`),
             $('p', { class: 'ziggy-recu-subtitle' }, 'Recent performer information and recordings'),
           ]),
-          $('a', {
+          $('div', { class: 'ziggy-recu-actions' }, [$('a', {
             class: 'ziggy-recu-button', href: profileUrl, target: '_blank', rel: 'noopener noreferrer',
-          }, 'Open full Recu.me profile'),
+          }, 'Open full Recu.me profile')]),
         ]),
+        $('p', { class: 'ziggy-recu-status', role: 'status', 'aria-live': 'polite' }),
         content,
       ]);
+      if (host) {
+        const refresh = $('button', { class: 'ziggy-recu-button', type: 'button', dataset: { recuAction: 'refresh' } }, 'Refresh');
+        refresh.addEventListener('click', () => { void loadRecuRoomPanel(host, room, true); });
+        panel.querySelector('.ziggy-recu-actions').appendChild(refresh);
+      }
       if (stateText) content.appendChild($('div', { class: 'ziggy-recu-state', role: 'status', 'aria-live': 'polite' }, stateText));
       return { panel, content };
     }
@@ -5481,7 +5636,7 @@
     }
 
     function renderRecuLoading(panel, room) {
-      const shell = recuPanelShell(room);
+      const shell = recuPanelShell(room, '', panel);
       shell.content.appendChild($('div', { class: 'ziggy-recu-state', role: 'status', 'aria-live': 'polite' }, [
         $('span', { class: 'ziggy-recu-spinner', 'aria-hidden': 'true' }),
         $('span', {}, `Loading ${room} from Recu.me…`),
@@ -5492,7 +5647,7 @@
     }
 
     function renderRecuError(panel, room, message) {
-      const shell = recuPanelShell(room);
+      const shell = recuPanelShell(room, '', panel);
       const retry = $('button', { class: 'ziggy-recu-button', type: 'button' }, 'Try again');
       retry.addEventListener('click', () => loadRecuRoomPanel(panel, room, true));
       shell.content.appendChild($('div', { class: 'ziggy-recu-state', role: 'alert' }, [
@@ -5504,10 +5659,10 @@
       panel.dataset.ziggyRecuRoom = room;
     }
 
-    function parseRecuProfile(html, room) {
+    function parseRecuProfile(html, room, pageUrl = '') {
       const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
-      const extracted = extractRecuPerformerPayload(doc, room);
-      if (!extracted) throw new Error('No Recu.me performer profile was found for this model.');
+      const extracted = extractRecuPerformerPayload(doc, room, pageUrl);
+      if (!extracted) throw new Error('Recu.me returned an unrecognized performer page. Try again or open the full profile.');
       return sanitizeRecuProfilePayload(extracted, room);
     }
 
@@ -5516,110 +5671,274 @@
         throw new Error('Recu.me returned profile data for a different model.');
       }
       const details = (Array.isArray(payload.details) ? payload.details : [])
-        .map(value => String(value || '').replace(/\s+/g, ' ').trim())
+        .map(value => String(value || '').replace(/\bSee statistics\b/gi, '').replace(/\s+/g, ' ').trim().slice(0, 300))
         .filter(Boolean)
         .slice(0, 12);
-      const recordings = (Array.isArray(payload.recordings) ? payload.recordings : []).slice(0, 8).map(item => ({
-        id: String(item?.id || '').replace(/[^0-9]/g, '').slice(0, 24),
+      const seen = new Set();
+      const recordings = (Array.isArray(payload.recordings) ? payload.recordings : []).slice(0, 72).map(item => ({
+        id: /^\d{1,24}$/.test(String(item?.id || '')) ? String(item.id) : '',
         url: safeRecuLink(item?.url),
         image: safeRecuImage(item?.image),
+        previewImage: safeRecuImage(item?.previewImage),
         duration: String(item?.duration || '').replace(/\s+/g, ' ').trim().slice(0, 40),
         date: String(item?.date || '').replace(/\s+/g, ' ').trim().slice(0, 80),
         views: String(item?.views || '').replace(/\s+/g, ' ').trim().slice(0, 80),
-      })).filter(item => item.id && item.url);
-      return { details, recordings };
+      })).filter(item => {
+        if (!item.id || !item.url || seen.has(item.id)) return false;
+        const path = new URL(item.url).pathname;
+        if (path !== `/${room.toLowerCase()}/video/${item.id}/play` && path !== `/video/${item.id}/play`) return false;
+        seen.add(item.id);
+        return true;
+      });
+      return { room: room.toLowerCase(), details, recordings, nextUrl: safeRecuPageUrl(payload.nextUrl, room) };
+    }
+
+    // A bounded queue, not <img loading=lazy> alone: the actual GM fetch is lazy.
+    function requestRecuAsset(url, generation) {
+      if (!safeRecuImage(url) || generation !== recuRequestGeneration) return Promise.resolve('');
+      const cached = recuAssetCache.get(url);
+      if (cached) {
+        recuAssetCache.delete(url); recuAssetCache.set(url, cached);
+        return Promise.resolve(cached);
+      }
+      return new Promise(resolve => {
+        recuAssetQueue.push({ url, generation, resolve });
+        pumpRecuAssets();
+      });
+    }
+
+    function pumpRecuAssets() {
+      while (recuImageRequests.size < 3 && recuAssetQueue.length) {
+        const job = recuAssetQueue.shift();
+        if (job.generation !== recuRequestGeneration) { job.resolve(''); continue; }
+        let request, finished = false;
+        const finish = data => {
+          if (finished) return;
+          finished = true;
+          recuImageRequests.delete(request);
+          if (job.generation !== recuRequestGeneration) data = '';
+          if (data) {
+            recuAssetBytes -= recuAssetCache.get(job.url)?.length || 0;
+            recuAssetCache.set(job.url, data); recuAssetBytes += data.length;
+            while (recuAssetBytes > 12 * 1024 * 1024 || recuAssetCache.size > 48) {
+              const key = recuAssetCache.keys().next().value;
+              recuAssetBytes -= recuAssetCache.get(key).length; recuAssetCache.delete(key);
+            }
+          }
+          job.resolve(data);
+          pumpRecuAssets();
+        };
+        try {
+          request = GM_xmlhttpRequest({
+            method: 'GET', url: job.url, responseType: 'blob', timeout: 12000,
+            onload: response => {
+              const blob = response.response;
+              if (job.generation !== recuRequestGeneration || response.status < 200 || response.status >= 300
+                  || !(blob instanceof Blob) || !/^image\/(jpeg|png|webp|avif|gif)$/.test(blob.type)
+                  || !blob.size || blob.size > 2 * 1024 * 1024) { finish(''); return; }
+              const reader = new FileReader();
+              reader.onload = () => finish(typeof reader.result === 'string' ? reader.result : '');
+              reader.onerror = () => finish('');
+              reader.readAsDataURL(blob);
+            },
+            onerror: () => finish(''), ontimeout: () => finish(''), onabort: () => finish(''),
+          });
+          recuImageRequests.add(request);
+        } catch (_) { finish(''); }
+      }
     }
 
     function loadRecuThumbnail(image, sourceUrl, generation) {
-      if (!sourceUrl || typeof GM_xmlhttpRequest !== 'function') return;
-      let request;
+      if (!image.isConnected || image.getAttribute('src') || image.dataset.recuFetching === '1' || image.dataset.recuFailed === '1') return;
+      image.dataset.recuFetching = '1';
+      void requestRecuAsset(sourceUrl, generation).then(data => {
+        delete image.dataset.recuFetching;
+        if (generation !== recuRequestGeneration || !image.isConnected) return;
+        if (data) image.src = data;
+        else image.dataset.recuFailed = '1';
+        const placeholder = image.parentElement?.querySelector('.ziggy-recu-placeholder');
+        const text = data ? '' : 'Preview unavailable · Refresh to retry';
+        if (placeholder && placeholder.textContent !== text) placeholder.textContent = text;
+      });
+    }
+
+    function observeRecuThumbnails(panel) {
+      if (!isRecuPanelActive(panel)) return;
+      if (!recuLazyObserver && typeof IntersectionObserver === 'function') {
+        recuLazyObserver = new IntersectionObserver(entries => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting || !isRecuPanelActive(recuActivePanel)) continue;
+            const url = recuLazyImages.get(entry.target);
+            if (!url) continue;
+            recuLazyObserver.unobserve(entry.target); recuLazyImages.delete(entry.target);
+            loadRecuThumbnail(entry.target, url, recuRequestGeneration);
+          }
+        }, { rootMargin: '100px' });
+      }
+      for (const image of panel.querySelectorAll('img[data-recu-image]')) {
+        if (image.getAttribute('src') || image.dataset.recuFetching === '1' || image.dataset.recuFailed === '1') continue;
+        if (!image.dataset.recuImage) { loadRecuThumbnail(image, '', recuRequestGeneration); continue; }
+        recuLazyImages.set(image, image.dataset.recuImage);
+        if (recuLazyObserver) recuLazyObserver.observe(image);
+        else loadRecuThumbnail(image, image.dataset.recuImage, recuRequestGeneration);
+      }
+    }
+
+    function bindRecuHover(card, thumb, recording, panel) {
+      if (!recording.previewImage) return;
+      card.addEventListener('pointerenter', event => {
+        if (event.pointerType !== 'mouse' || !matchMedia('(hover:hover) and (pointer:fine)').matches
+            || !isRecuPanelActive(panel)) return;
+        recuHoverStop?.();
+        let cancelled = false, timer = 0, overlay = null;
+        const stop = () => {
+          cancelled = true; clearTimeout(timer); overlay?.remove();
+          if (recuHoverStop === stop) recuHoverStop = null;
+        };
+        recuHoverStop = stop;
+        card.addEventListener('pointerleave', stop, { once: true });
+        timer = setTimeout(async () => {
+          const data = await requestRecuAsset(recording.previewImage, recuRequestGeneration);
+          if (!data || cancelled || !card.isConnected || !isRecuPanelActive(panel)) return;
+          overlay = $('span', { class: 'ziggy-recu-preview', 'aria-hidden': 'true' });
+          overlay.style.backgroundImage = `url("${data}")`;
+          thumb.insertBefore(overlay, thumb.querySelector('.ziggy-recu-duration'));
+          let remaining = [], previous = -1;
+          const sample = () => {
+            if (cancelled || !isRecuPanelActive(panel) || !card.isConnected) { stop(); return; }
+            if (!remaining.length) remaining = Array.from({ length: 16 }, (_, i) => i).filter(i => i !== previous);
+            const frame = remaining.splice(Math.floor(Math.random() * remaining.length), 1)[0];
+            previous = frame;
+            overlay.style.backgroundPosition = `${(frame % 4) * 100 / 3}% ${Math.floor(frame / 4) * 100 / 3}%`;
+            overlay.dataset.frame = String(frame);
+            if (!matchMedia('(prefers-reduced-motion:reduce)').matches) timer = setTimeout(sample, 500);
+          };
+          sample();
+        }, 300);
+      });
+    }
+
+    function appendRecuCards(panel, room) {
+      const state = recuPanelData.get(panel);
+      const grid = panel.querySelector('.ziggy-recu-recordings');
+      if (!state || !grid) return;
+      const end = Math.min(state.visibleCount + 8, state.profile.recordings.length);
+      for (const recording of state.profile.recordings.slice(state.visibleCount, end)) {
+        const image = $('img', { alt: `${room} recording preview`, loading: 'lazy', dataset: { recuImage: recording.image } });
+        const thumb = $('div', { class: 'ziggy-recu-thumb' }, [
+          $('span', { class: 'ziggy-recu-placeholder' }, 'Loading preview…'), image,
+        ]);
+        if (recording.duration) thumb.appendChild($('span', { class: 'ziggy-recu-duration' }, recording.duration));
+        const card = $('a', {
+          class: 'ziggy-recu-recording', href: recording.url, target: '_blank', rel: 'noopener noreferrer',
+          'aria-label': `${room} · ${recording.date || `Recording ${recording.id}`} · ${recording.duration}`,
+        }, [thumb, $('div', { class: 'ziggy-recu-recording-meta' }, [
+          $('span', { class: 'ziggy-recu-recording-name' }, recording.date || `Recording ${recording.id}`),
+          $('span', {}, recording.views ? `${recording.views.replace(/\s*views?$/i, '')} views` : recording.duration),
+        ])]);
+        bindRecuHover(card, thumb, recording, panel);
+        grid.appendChild(card);
+      }
+      state.visibleCount = end;
+      const more = panel.querySelector('.ziggy-recu-more');
+      if (more) more.hidden = end >= state.profile.recordings.length && !state.profile.nextUrl;
+      observeRecuThumbnails(panel);
+    }
+
+    async function loadMoreRecuRecordings(panel, room) {
+      const state = recuPanelData.get(panel);
+      if (!state || panel.dataset.ziggyRecuState === 'loading') return;
+      if (state.visibleCount < state.profile.recordings.length) { appendRecuCards(panel, room); return; }
+      const url = state.profile.nextUrl;
+      if (!url) return;
+      const generation = recuRequestGeneration;
+      panel.dataset.ziggyRecuState = 'loading'; setRecuStatus(panel, 'Loading older recordings…', true);
       try {
-        request = GM_xmlhttpRequest({
-          method: 'GET', url: sourceUrl, responseType: 'blob', timeout: 12000,
-          onload: response => {
-            recuImageRequests.delete(request);
-            if (generation !== recuRequestGeneration || !image.isConnected || !(response.response instanceof Blob)) return;
-            const reader = new FileReader();
-            reader.onload = () => {
-              if (generation === recuRequestGeneration && image.isConnected && typeof reader.result === 'string') image.src = reader.result;
-            };
-            reader.readAsDataURL(response.response);
-          },
-          onerror: () => recuImageRequests.delete(request),
-          ontimeout: () => recuImageRequests.delete(request),
-          onabort: () => recuImageRequests.delete(request),
-        });
-        recuImageRequests.add(request);
-      } catch (_) {}
+        const page = await requestRecuProfile(room, generation, url);
+        if (generation !== recuRequestGeneration || !panel.isConnected || currentRoom !== room) return;
+        const seen = new Set(state.profile.recordings.map(item => item.id));
+        const additions = page.recordings.filter(item => !seen.has(item.id));
+        state.profile.recordings.push(...additions);
+        state.profile.nextUrl = page.nextUrl === url ? '' : page.nextUrl;
+        appendRecuCards(panel, room);
+        setRecuStatus(panel, additions.length ? recuUpdatedText(state.fetchedAt) : 'No additional recordings on this page. Load older recordings to continue.');
+      } catch (error) {
+        if (generation === recuRequestGeneration) setRecuStatus(panel, `Could not load older recordings. ${error.message}`);
+      } finally {
+        if (generation === recuRequestGeneration) panel.dataset.ziggyRecuState = 'loaded';
+      }
     }
 
-    function renderRecuProfile(panel, room, profile, generation) {
-      const shell = recuPanelShell(room);
-      if (profile.details.length) {
-        shell.content.appendChild($('div', { class: 'ziggy-recu-details' }, profile.details.map(text =>
-          $('div', { class: 'ziggy-recu-detail' }, text)
-        )));
-      }
+    function renderRecuProfile(panel, room, profile, generation, fetchedAt = Date.now()) {
+      const shell = recuPanelShell(room, '', panel);
+      const summary = profile.details.filter(text => /^(last broadcast|new broadcasts):/i.test(text));
+      if (summary.length) shell.content.appendChild($('p', { class: 'ziggy-recu-summary' }, summary.join(' · ')));
+      if (profile.details.length) shell.content.appendChild($('details', { class: 'ziggy-recu-profile-details' }, [
+        $('summary', {}, 'Profile details'),
+        $('div', { class: 'ziggy-recu-details' }, profile.details.map(text => $('div', { class: 'ziggy-recu-detail' }, text))),
+      ]));
       shell.content.appendChild($('h3', { class: 'ziggy-recu-recordings-title' }, 'Recent recordings'));
-      if (!profile.recordings.length) {
-        shell.content.appendChild($('div', { class: 'ziggy-recu-state' }, 'No recent recordings were listed.'));
-      } else {
-        const grid = $('div', { class: 'ziggy-recu-recordings' });
-        for (const recording of profile.recordings) {
-          const image = $('img', { alt: `${room} recording preview`, loading: 'lazy' });
-          const thumb = $('div', { class: 'ziggy-recu-thumb' }, [image]);
-          if (recording.duration) thumb.appendChild($('span', { class: 'ziggy-recu-duration' }, recording.duration));
-          const meta = $('div', { class: 'ziggy-recu-recording-meta' }, [
-            $('span', { class: 'ziggy-recu-recording-name' }, room),
-            $('span', {}, [recording.date, recording.views].filter(Boolean).join(' · ') || `Recording ${recording.id}`),
-          ]);
-          grid.appendChild($('a', {
-            class: 'ziggy-recu-recording', href: recording.url, target: '_blank', rel: 'noopener noreferrer',
-          }, [thumb, meta]));
-          loadRecuThumbnail(image, recording.image, generation);
-        }
-        shell.content.appendChild(grid);
-      }
-      shell.content.appendChild($('p', { class: 'ziggy-recu-foot' }, 'Profile information and recording links are provided by Recu.me.'));
+      shell.content.appendChild($('div', { class: 'ziggy-recu-recordings' }));
+      if (!profile.recordings.length) shell.content.appendChild($('p', {}, 'No recent recordings were listed.'));
+      const more = $('button', { class: 'ziggy-recu-button ziggy-recu-more', type: 'button', dataset: { recuAction: 'more' } }, 'Load older recordings');
+      more.addEventListener('click', () => { void loadMoreRecuRecordings(panel, room); });
+      shell.content.appendChild(more);
+      shell.content.appendChild($('p', { class: 'ziggy-recu-foot' }, 'Provided by Recu.me. Hover previews show sampled frames, not continuous video.'));
       panel.replaceChildren(shell.panel);
-      panel.dataset.ziggyRecuState = 'loaded';
-      panel.dataset.ziggyRecuRoom = room;
+      recuPanelData.set(panel, { profile: { ...profile, recordings: [...profile.recordings] }, fetchedAt, visibleCount: 0 });
+      panel.dataset.ziggyRecuState = 'loaded'; panel.dataset.ziggyRecuRoom = room;
+      setRecuStatus(panel, recuUpdatedText(fetchedAt));
+      appendRecuCards(panel, room);
     }
 
-    function requestRecuProfile(room, generation) {
+    function requestRecuProfile(room, generation, pageUrl = recuProfileUrl(room)) {
       return new Promise((resolve, reject) => {
         if (typeof GM_xmlhttpRequest !== 'function') {
           reject(new Error('Tampermonkey network access is unavailable.'));
           return;
         }
+        const url = safeRecuPageUrl(pageUrl, room);
+        if (!url) { reject(new Error('Invalid Recu.me performer page.')); return; }
+        let request, settled = false;
+        const finish = (error, value) => {
+          if (settled) return;
+          settled = true;
+          if (recuProfileRequest === handle) recuProfileRequest = null;
+          if (error) reject(error); else resolve(value);
+        };
+        const handle = { abort: () => {
+          finish(new Error('Recu.me profile loading was cancelled.'));
+          try { request?.abort?.(); } catch (_) {}
+        } };
+        recuProfileRequest = handle;
         try {
-          recuProfileRequest = GM_xmlhttpRequest({
-            method: 'GET', url: recuProfileUrl(room), timeout: 15000,
+          request = GM_xmlhttpRequest({
+            method: 'GET', url, timeout: 15000,
             headers: { Accept: 'text/html,application/xhtml+xml' },
             onload: response => {
-              recuProfileRequest = null;
-              if (generation !== recuRequestGeneration) return;
+              if (settled) return;
+              if (generation !== recuRequestGeneration) { handle.abort(); return; }
               const status = Number(response.status || 0);
               if (status < 200 || status >= 300) {
                 if (status === 403) {
-                  requestRecuProfileThroughTab(room, generation).then(resolve, reject);
+                  requestRecuProfileThroughTab(room, generation, url).then(value => finish(null, value), finish);
                   return;
                 }
-                reject(new Error(status === 404 ? 'No Recu.me performer profile was found for this model.' : `Recu.me returned HTTP ${status || 'error'}.`));
+                finish(new Error(status === 404 ? 'No Recu.me performer profile was found for this model.' : `Recu.me returned HTTP ${status || 'error'}.`));
                 return;
               }
-              try { resolve(parseRecuProfile(response.responseText, room)); }
-              catch (error) { reject(error); }
+              try { finish(null, parseRecuProfile(response.responseText, room, url)); }
+              catch (error) { finish(error); }
             },
-            onerror: () => { recuProfileRequest = null; reject(new Error('Unable to reach Recu.me.')); },
-            ontimeout: () => { recuProfileRequest = null; reject(new Error('Recu.me took too long to respond.')); },
-            onabort: () => { recuProfileRequest = null; },
+            onerror: () => finish(new Error('Unable to reach Recu.me.')),
+            ontimeout: () => finish(new Error('Recu.me took too long to respond.')),
+            onabort: () => finish(new Error('Recu.me profile loading was cancelled.')),
           });
-        } catch (_) { reject(new Error('Unable to start the Recu.me request.')); }
+        } catch (_) { finish(new Error('Unable to start the Recu.me request.')); }
       });
     }
 
-    function requestRecuProfileThroughTab(room, generation) {
+    function requestRecuProfileThroughTab(room, generation, pageUrl = recuProfileUrl(room)) {
       return new Promise((resolve, reject) => {
         if (typeof GM_openInTab !== 'function' || typeof GM_getValue !== 'function' || typeof GM_setValue !== 'function') {
           reject(new Error('Tampermonkey cannot open the Recu.me helper tab.'));
@@ -5629,7 +5948,9 @@
           ? crypto.randomUUID()
           : `${Date.now().toString(16)}-${crypto.getRandomValues(new Uint32Array(4)).join('-')}`;
         const key = `${RECU_BRIDGE_KEY_PREFIX}${token}`;
-        const url = new URL(recuProfileUrl(room));
+        const validUrl = safeRecuPageUrl(pageUrl, room);
+        if (!validUrl) { reject(new Error('Invalid Recu.me performer page.')); return; }
+        const url = new URL(validUrl);
         url.searchParams.set(RECU_BRIDGE_PARAM, token);
         let helperTab = null;
         let timer = 0;
@@ -5637,7 +5958,7 @@
         const cleanup = () => {
           clearInterval(timer);
           try { helperTab?.close?.(); } catch (_) {}
-          try { GM_setValue(key, ''); } catch (_) {}
+          try { GM_deleteValue(key); } catch (_) { try { GM_setValue(key, ''); } catch (_) {} }
           if (recuBridgeCancel === cancel) recuBridgeCancel = null;
         };
         const cancel = () => {
@@ -5648,7 +5969,7 @@
         };
         recuBridgeCancel = cancel;
         try {
-          GM_setValue(key, '');
+          GM_setValue(key, JSON.stringify({ token, room: room.toLowerCase(), pending: true, at: Date.now() }));
           helperTab = GM_openInTab(url.href, { active: false, insert: true, setParent: true });
         } catch (_) {
           finished = true;
@@ -5671,7 +5992,8 @@
           if (!raw) return;
           let result;
           try { result = JSON.parse(raw); } catch (_) { return; }
-          if (result?.token !== token || String(result?.room || '').toLowerCase() !== room.toLowerCase()) return;
+          if (result?.token !== token || String(result?.room || '').toLowerCase() !== room.toLowerCase() || result.pending) return;
+          if (!Number.isFinite(result.at) || result.at < startedAt || Date.now() - result.at > 30000) return;
           finished = true;
           cleanup();
           if (result.error) { reject(new Error(String(result.error))); return; }
@@ -5686,27 +6008,91 @@
       if (!force && panel.dataset.ziggyRecuRoom === room && ['loading', 'loaded'].includes(panel.dataset.ziggyRecuState)) return;
       cancelRecuRequests();
       const generation = recuRequestGeneration;
-      renderRecuLoading(panel, room);
+      recuActivePanel = panel;
+      const cached = !force && readRecuCache(room);
+      if (cached) { renderRecuProfile(panel, room, cached.profile, generation, cached.fetchedAt); return; }
+      const previous = recuPanelData.get(panel);
+      if (previous && panel.dataset.ziggyRecuRoom === room) {
+        panel.dataset.ziggyRecuState = 'loading';
+        setRecuStatus(panel, 'Refreshing Recu.me…', true);
+      } else renderRecuLoading(panel, room);
       try {
         const profile = await requestRecuProfile(room, generation);
         if (generation !== recuRequestGeneration || currentRoom !== room || !panel.isConnected) return;
+        writeRecuCache(room, profile);
         renderRecuProfile(panel, room, profile, generation);
       } catch (error) {
         if (generation !== recuRequestGeneration || currentRoom !== room || !panel.isConnected) return;
-        renderRecuError(panel, room, error?.message || 'Unable to load this Recu.me profile.');
+        if (previous) {
+          panel.dataset.ziggyRecuState = 'loaded';
+          setRecuStatus(panel, `Refresh failed. Showing previous results. ${error?.message || ''}`);
+          observeRecuThumbnails(panel);
+        } else renderRecuError(panel, room, error?.message || 'Unable to load this Recu.me profile.');
+      }
+    }
+
+    function setRecuMobileOpen(open) {
+      recuMobileOpen = open;
+      const host = recuMobileContainer?.parentElement;
+      if (!host) return;
+      for (const node of host.children) {
+        if (node !== recuMobileContainer) node.classList.toggle('ziggy-recu-mobile-hidden', open);
+      }
+      recuMobileContainer.hidden = !open;
+      if (open) { void loadRecuRoomPanel(recuMobilePanel, currentRoom); observeRecuThumbnails(recuMobilePanel); }
+      else cancelRecuRequests();
+    }
+
+    function ensureRecuMobileMenu() {
+      const host = document.querySelector('#portrait-contents [data-testid="additional-options-container"]');
+      if (!host) return;
+      observeRecuSelection(document.querySelector('#portrait-contents li.roomMenu'));
+      if (recuMobileContainer?.parentElement !== host || recuPanelRooms.get(recuMobilePanel) !== currentRoom) {
+        if (recuMobilePanel) { setRecuMobileOpen(false); recuMobileContainer.remove(); }
+        host.querySelector('.ziggy-recu-mobile-item')?.remove();
+        const item = $('div', { class: 'ziggy-recu-mobile-item', role: 'button', tabindex: '0', 'aria-controls': 'ziggy-recu-mobile-panel' }, [
+          $('div', { class: 'MenuLabel-container' }, [$('div', { class: 'MenuLabel chevron' }, [$('span', { class: 'MenuLabel-span' }, 'Recu.me')])]),
+        ]);
+        item.addEventListener('click', () => setRecuMobileOpen(true));
+        item.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setRecuMobileOpen(true); } });
+        host.prepend(item);
+        recuMobilePanel = $('div');
+        const back = $('button', { class: 'ziggy-recu-button ziggy-recu-mobile-back', type: 'button' }, 'Back to Room Menu');
+        back.addEventListener('click', () => setRecuMobileOpen(false));
+        recuMobileContainer = $('div', { id: 'ziggy-recu-mobile-panel', hidden: true }, [back, recuMobilePanel]);
+        host.appendChild(recuMobileContainer);
+        recuPanelRooms.set(recuMobilePanel, currentRoom);
+        renderRecuIdle(recuMobilePanel, currentRoom);
       }
     }
 
     function ensureRecuRoomTab() {
-      if (contextOnly || nativeMobilePage || !currentRoom || isWorkshopRoute() || isRecorderHubRoute()) return;
+      if (contextOnly || !currentRoom || isWorkshopRoute() || isRecorderHubRoute()) {
+        if (recuActivePanel) { cancelRecuRequests(); recuActivePanel = null; }
+        return;
+      }
+      if (nativeMobilePage) {
+        ensureRecuMobileMenu();
+        if (isRecuPanelActive(recuMobilePanel)) {
+          if (recuMobilePanel.dataset.ziggyRecuState === 'idle') void loadRecuRoomPanel(recuMobilePanel, currentRoom);
+          observeRecuThumbnails(recuMobilePanel);
+        } else if (recuActivePanel && (recuProfileRequest || recuBridgeCancel || recuImageRequests.size || recuHoverStop)) cancelRecuRequests();
+        return;
+      }
       const tab = document.querySelector('a.tabLink[data-testid="room-tab-Share"]');
       const panel = document.querySelector('#roomTabs > #shareTab,#shareTab');
-      if (!tab || !panel) return;
-      tab.textContent = RECU_TAB_LABEL;
-      tab.setAttribute('aria-label', 'Open Recu.me profile');
-      tab.setAttribute('title', `Open ${currentRoom} on Recu.me`);
+      if (!tab || !panel) {
+        if (recuActivePanel) { cancelRecuRequests(); recuActivePanel = null; }
+        return;
+      }
+      observeRecuSelection(tab);
+      if (tab.textContent !== RECU_TAB_LABEL) tab.textContent = RECU_TAB_LABEL;
+      if (tab.getAttribute('aria-label') !== 'Open Recu.me profile') tab.setAttribute('aria-label', 'Open Recu.me profile');
+      const title = `Open ${currentRoom} on Recu.me`;
+      if (tab.getAttribute('title') !== title) tab.setAttribute('title', title);
       if (recuPanelRooms.get(panel) !== currentRoom || !panel.querySelector(':scope > .ziggy-recu-panel')) {
         cancelRecuRequests();
+        recuPanelData.delete(panel);
         recuPanelRooms.set(panel, currentRoom);
         renderRecuIdle(panel, currentRoom);
       }
@@ -5716,11 +6102,20 @@
           const room = currentRoom;
           setTimeout(() => {
             const activePanel = document.querySelector('#roomTabs > #shareTab,#shareTab');
-            if (room && activePanel) void loadRecuRoomPanel(activePanel, room);
+            if (room && isRecuPanelActive(activePanel)) void loadRecuRoomPanel(activePanel, room);
           }, 0);
         });
       }
+      if (isRecuPanelActive(panel)) {
+        if (panel.dataset.ziggyRecuState === 'idle') void loadRecuRoomPanel(panel, currentRoom);
+        observeRecuThumbnails(panel);
+      } else if (recuActivePanel && (recuProfileRequest || recuBridgeCancel || recuImageRequests.size || recuHoverStop)) cancelRecuRequests();
     }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) cancelRecuRequests();
+      else ensureRecuRoomTab();
+    });
 
     // ---- Suite room dock ----
     const dockStyle = $('style', { html: trustedHtml(`

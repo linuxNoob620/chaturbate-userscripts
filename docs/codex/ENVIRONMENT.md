@@ -28,7 +28,7 @@ Required lifecycle for every distinct phone test:
 
 Verified procedure on OPPO CPH2791 with Quetta 2.0.2 / Chromium 148.0.7778.217:
 
-1. Open `quetta://flags/#enable-command-line-on-non-rooted-devices`.
+1. Enter `chrome://flags` in the address bar; Quetta displays its internal flags page. Directly typing `quetta://flags` was interpreted as a web search on the tested build.
 2. Search for `rooted` and visually confirm the `Enable command line on non-rooted devices` value.
 3. To enable a pass, set it to `Enabled`, write `/data/local/tmp/chrome-command-line`, and use Quetta's `Restart` button.
 4. Forward the DevTools socket only for the active pass:

@@ -3,7 +3,7 @@
 ## Deployment
 
 - Primary runtime: Tampermonkey userscript `Chaturbate MultiCam Pro + Cam ARNA.user.js`.
-- Current userscript release: 16.6.11 (`main`, tag `v16.6.11`).
+- Current userscript release: 16.6.12 (`main`, tag `v16.6.12`).
 - Extension builds remain at 16.6.7. They were not modified, rebuilt, packaged, or published for this userscript-only change.
 - Local rollback point: Git tag `backup/pre-16.6.8-workshop-doubletap-20260905` at the 16.6.7 baseline.
 - Version 16.6.9 is installed in the original Quetta Tampermonkey entry. Its fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist; publication is not a parity certification.
@@ -20,6 +20,10 @@
 
 ## Workshop
 
+- Refresh uses four concurrent status probes without a fixed delay, per-room in-flight sharing, visible-card priority, and the existing shared throttle cooldown with reduced batch concurrency after throttling.
+- Startup refresh coordinates preview probes; progress and counts update directly with frame-coalesced count work instead of rebuilding the sidebar for every result.
+- Healthy stream playback is preserved when a status response changes only the stream URL token; a changed stream path or failed playback still follows reconnection logic.
+- The card More menu resolves the current room locally and no longer references the removed Following source.
 - Grid and Phone viewing modes are implemented; Focus mode has been removed.
 - Online Following has been removed from Workshop, including its cache, fallback parser/iframe, paging and sorting state, split-view source, mount refresh, and five-minute refresh timer.
 - Chaturbate's native desktop Following dropdown provides the animated followed-room previews, ordered by latest broadcast start; its native Show All destination is preserved.
@@ -48,6 +52,15 @@
 - Focused userscript build, syntax, and source-regression checks pass for 16.6.8.
 - Desktop Chrome-for-Testing/Tampermonkey verification on 2026-09-06 confirmed the installed 16.6.10 runtime, the reduced Workshop group list, preserved saved-room library, and no Workshop Following requests, parser iframe, or pager on a fresh load.
 - Desktop Chrome-for-Testing/Tampermonkey verification on 2026-09-08 confirmed the installed 16.6.11 Recu.me tab on multiple live rooms, lazy idle state, room-to-room reset, eight sanitized recording cards with loaded thumbnails, repeated native-tab switching, automatic helper-tab closure, the full-profile link, inert ordinary Recu.me visits, and absence from Workshop. A live current performer without a Recu.me profile was not found, so the unavailable-profile branch remains source-verified rather than live-confirmed.
+
+## Workshop performance verification — 2026-09-09
+
+- Persistent Chrome-for-Testing / actual Tampermonkey: 65-room baseline 20.501 seconds; three candidate passes 5.271, 5.522, and 5.206 seconds (mean 5.333 seconds, approximately 74% less elapsed time). All 195 candidate status requests returned HTTP 200.
+- Fresh startup made 65 requests for 65 rooms with no duplicates. Measured card positions remained stable, video elements were retained, and progress advanced monotonically to 100%.
+- Main-thread work was 2.06–2.26 seconds with eight previews playing, compared with 4.18 seconds in the baseline. This did not reach the preferred 1.5-second target; live stream content/load varied between passes.
+- Group switching, saved-room preservation, Online/Online Favorites counts, the More menu, active recording across refresh, stop/finalization, normal-room playback, and Rooms dock opening passed desktop checks.
+- Scheduler behavior tests cover request sharing, fresh subsequent checks, forced replacement, stop/restart, concurrency, cooldown, progress totals, and token-only versus actual stream changes.
+- No phone was connected. Quetta was not tested or modified during this release; earlier fullscreen limitations remain as documented above.
 
 ## CommandLineOnNonRooted
 

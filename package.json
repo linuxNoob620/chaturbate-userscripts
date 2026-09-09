@@ -1,6 +1,6 @@
 {
   "name": "ziggy-chaturbate-suite",
-  "version": "16.6.11",
+  "version": "16.6.12",
   "private": true,
   "description": "Builds the maintained Tampermonkey userscript and strict-parity Chrome and Firefox/Zen extensions.",
   "scripts": {
@@ -10,7 +10,8 @@
     "build:firefox": "node ./tools/build-extensions.mjs firefox && node ./tools/verify-extension-parity.mjs firefox",
     "package": "npm run build",
     "test": "node ./tools/validate-userscripts.mjs && node ./tools/test-suite-regressions.mjs && node ./tools/test-github-sync.mjs && node ./tools/test-extension-adapters.mjs && node ./tools/verify-extension-parity.mjs && npm run test:mobile-view",
-    "test:mobile-view": "node ./tools/real-mobile-view/verify.mjs"
+    "test:mobile-view": "node ./tools/real-mobile-view/verify.mjs",
+    "test:workshop": "node ./tools/test-workshop-refresh.mjs"
   },
   "dependencies": {
     "hls.js": "1.6.16",

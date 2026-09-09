@@ -4,7 +4,7 @@ import path from 'node:path';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const file = path.join(root, 'Chaturbate MultiCam Pro + Cam ARNA.user.js');
-const source = await readFile(file, 'utf8');
+const source = (await readFile(file, 'utf8')).replace(/\r\n/g, '\n');
 const failures = [];
 
 function requireText(text, message) {
@@ -52,6 +52,10 @@ rejectText('rg-following-pager', 'Workshop still contains the removed Online Fol
 rejectText('splitOnlineFollowing', 'Split View still exposes the removed Online Following source');
 requireText("g.id === 'online-following'", 'Legacy Online Following groups are not removed during state sanitization');
 requireText("void refreshWorkshopRooms({ scope: 'all', automatic: true });", 'Workshop mount does not refresh saved-room status independently');
+requireText('const visible = new Set(ids.filter(id => mediaViewportIds.has(id) || isCardNearViewport(id)))', 'Workshop refresh does not prioritize visible cards');
+requireText('scheduleWorkshopSidebarCounts();', 'Workshop refresh still rebuilds the sidebar for every status response');
+requireText('function openCardOpsMenu(e, roomId, card) {\n      const currentRoom = findRoomAny(roomId);', 'Workshop card menu does not resolve the selected saved room');
+rejectText('currentRoom || followingRoom', 'Workshop card menu references the removed Following source');
 requireText("card.addEventListener('auxclick', (event) => {", 'Workshop cards do not handle background middle-click opening');
 requireText('openRoomPageInBackground(room.id);', 'Workshop model links do not use the shared background-tab path');
 requireText('loadInBackground: options.active !== true', 'Room tabs do not pass the intended foreground/background state to Tampermonkey');

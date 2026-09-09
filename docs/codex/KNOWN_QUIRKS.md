@@ -43,3 +43,7 @@ Cause: Recu.me's Cloudflare handling distinguishes the background userscript req
 Reliable workaround: Attempt the direct lazy request first. On HTTP 403, open the performer URL in an inactive Tampermonkey helper tab carrying a random one-use bridge token. The Recu.me-matched portion of the same script extracts only allowlisted performer fields and recording URLs, writes the sanitized payload through script storage, and closes. Revalidate the payload on the Chaturbate side and clear the transient bridge key. Do not weaken Chaturbate's CSP.
 
 Last verified: 2026-09-08 in the persistent Chrome-for-Testing profile with Tampermonkey and Suite 16.6.11.
+
+## Room-status responses renew live-stream tokens
+
+Chaturbate can return the same HLS origin and path with a changed `token` query parameter on successive status probes. Comparing the entire URL caused a healthy Workshop stream to be reattached during refresh. For a healthy loaded video, compare URLs with only `token` removed; preserve all other URL differences and the existing explicit-refresh/error recovery paths. Confirmed through live debugger inspection and video-element retention checks on 2026-09-09.

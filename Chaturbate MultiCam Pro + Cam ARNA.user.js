@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.11
+// @version           16.6.12
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -159,7 +159,7 @@
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.11');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.12');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -175,7 +175,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.11');
+  instanceMarker.setAttribute('data-suite-version', '16.6.12');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1392,7 +1392,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.11',
+    version: '16.6.12',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3068,6 +3068,7 @@
    * ============================================================= */
   function createRoomService(store, { recordHistory = true } = {}) {
     const sessions = new Map();   // id -> { hls, video, status, retryCount, pollTimer, userPaused, background }
+    const inFlight = new Map();   // id -> shared status request promise
     const qualityCaps = new Map(); // id -> maximum stream height for a specific virtual view/consumer
     const domain = safeChaturbateHost(window.location.hostname) ? window.location.hostname : 'chaturbate.com';
     let rateLimitUntil = 0;
@@ -3320,7 +3321,7 @@
       refreshQuality();
     }
 
-    async function connect(id) {
+    async function connectRequest(id) {
       id = normalizeUsername(id);
       let s = sessions.get(id);
       if (!s) { s = { retryCount: 0 }; sessions.set(id, s); }
@@ -3405,7 +3406,15 @@
       if (!sessions.has(id) || sessions.get(id) !== s) return { id, status: 'aborted' };
       const prevSource = s.hlsSource;
       const hasLiveVideo = !!s.video && !s.video.ended && (s.hls || s.video.src || s.video.srcObject);
-      const sameActiveStream = s.status === 'online' && hasLiveVideo && prevSource === data.hls_source;
+      let sameSource = prevSource === data.hls_source;
+      if (!sameSource && prevSource && hasLiveVideo && s.video.readyState >= 2 && !s.video.error) {
+        // Status probes renew the token even while the same stream is healthy.
+        const previousUrl = new URL(prevSource), nextUrl = new URL(data.hls_source);
+        previousUrl.searchParams.delete('token');
+        nextUrl.searchParams.delete('token');
+        sameSource = previousUrl.href === nextUrl.href;
+      }
+      const sameActiveStream = s.status === 'online' && hasLiveVideo && sameSource;
       s.hlsSource = data.hls_source;
       const viewerCount = numeric(data.num_users ?? data.viewer_count ?? data.users_in_room, 0);
       setStatus(id, 'online', viewerCount > 0 ? { viewerCount } : {});
@@ -3413,6 +3422,22 @@
       if (!sameActiveStream) EventBus.emit('room:online', { id, hlsSource: data.hls_source });
       if (sessions.has(id) && sessions.get(id) === s) schedulePoll(id, cfg.online || onlinePollMs());
       return { id, status: 'online' };
+    }
+
+    function connect(id, options = {}) {
+      id = normalizeUsername(id);
+      const force = options.force === true;
+      const existing = inFlight.get(id);
+      if (existing && !force) return existing;
+      if (existing && force) {
+        try { sessions.get(id)?.abortController?.abort(); } catch (_) {}
+        inFlight.delete(id);
+      }
+      const request = connectRequest(id);
+      inFlight.set(id, request);
+      return request.finally(() => {
+        if (inFlight.get(id) === request) inFlight.delete(id);
+      });
     }
 
     function startHls(id, hlsSource) {
@@ -3479,7 +3504,7 @@
         s.hlsSource = null;
       }
       if (!sessions.has(id)) sessions.set(id, { retryCount: 0 });
-      return connect(id);
+      return connect(id, { force: true });
     }
     function probe(id) {
       id = normalizeUsername(id);
@@ -3488,13 +3513,15 @@
     }
     async function refreshMany(ids, options = {}) {
       const unique = [...new Set((Array.isArray(ids) ? ids : []).map(normalizeUsername).filter(isLikelyUsername))];
-      const concurrency = clampInt(options.concurrency, 1, 4, 2);
-      const spacingMs = clampInt(options.spacingMs, 0, 2000, 300);
+      const concurrency = clampInt(options.concurrency, 1, 4, 4);
+      const spacingMs = clampInt(options.spacingMs, 0, 2000, 0);
       const results = new Array(unique.length);
       let cursor = 0;
       let completed = 0;
-      const worker = async () => {
+      let adaptiveConcurrency = concurrency;
+      const worker = async (slot) => {
         while (cursor < unique.length) {
+          if (slot >= adaptiveConcurrency) return;
           const index = cursor++;
           const id = unique[index];
           let result;
@@ -3502,11 +3529,12 @@
           catch (error) { result = { id, status: 'error', error: String(error?.message || error) }; }
           results[index] = result || { id, status: 'unknown' };
           completed++;
+          if (results[index].status === 'throttled') adaptiveConcurrency = Math.max(1, adaptiveConcurrency - 1);
           try { options.onProgress?.({ completed, total: unique.length, id, result: results[index] }); } catch (_) {}
           if (spacingMs && cursor < unique.length) await new Promise(resolve => setTimeout(resolve, spacingMs));
         }
       };
-      await Promise.all(Array.from({ length: Math.min(concurrency, Math.max(1, unique.length)) }, worker));
+      await Promise.all(Array.from({ length: Math.min(concurrency, Math.max(1, unique.length)) }, (_, slot) => worker(slot)));
       return results;
     }
     function refreshAll() { return refreshMany([...sessions.keys()]); }
@@ -3526,11 +3554,11 @@
       const s = sessions.get(id);
       if (s) s.background = false;
     }
-    function stop(id) { id = normalizeUsername(id); destroyPlayer(id); sessions.delete(id); }
+    function stop(id) { id = normalizeUsername(id); destroyPlayer(id); sessions.delete(id); inFlight.delete(id); }
     function stopAll() { for (const id of [...sessions.keys()]) stop(id); stopAllPageMedia(); }
     function has(id) { id = normalizeUsername(id); return sessions.has(id); }
 
-    return { start, startBackground, promote, stop, stopAll, refresh, refreshAll, refreshMany, attachVideo, detachVideo, startHls, has, pause, resume, togglePause, isPaused, pauseAll, resumeAll, refreshQuality, setQualityCap, clearQualityCaps };
+    return { start, startBackground, promote, stop, stopAll, refresh, probe, refreshAll, refreshMany, attachVideo, detachVideo, startHls, has, pause, resume, togglePause, isPaused, pauseAll, resumeAll, refreshQuality, setQualityCap, clearQualityCaps };
   }
 
   /* =============================================================
@@ -9694,8 +9722,61 @@
       clearTimer: 0,
     };
     let workshopRefreshPromise = null;
+    let workshopRefreshRoomIds = new Set();
+    let workshopRefreshUi = { status: null, label: null, fill: null, track: null, button: null, summary: null };
+    let workshopSidebarCountEls = new Map();
+    let workshopCountRaf = 0;
+
+    function workshopRefreshProgressText() {
+      if (workshopRefreshState.busy) {
+        return LANG === 'zh'
+          ? `正在刷新 ${workshopRefreshState.completed}/${workshopRefreshState.total}`
+          : `Refreshing ${workshopRefreshState.completed}/${workshopRefreshState.total}`;
+      }
+      return workshopRefreshState.message;
+    }
+
+    function updateWorkshopRefreshUi() {
+      const ui = workshopRefreshUi;
+      const percent = workshopRefreshState.total
+        ? Math.round(workshopRefreshState.completed / workshopRefreshState.total * 100)
+        : 0;
+      const text = workshopRefreshProgressText();
+      if (ui.status?.isConnected) ui.status.hidden = !text;
+      if (ui.label?.isConnected) ui.label.textContent = text;
+      if (ui.fill?.isConnected) ui.fill.style.width = `${percent}%`;
+      if (ui.track?.isConnected) ui.track.setAttribute('aria-valuenow', String(percent));
+      if (ui.summary?.isConnected) {
+        const rooms = regularRoomsForView();
+        const online = rooms.filter(room => room.lastStatus === 'online').length;
+        ui.summary.textContent = LANG === 'zh'
+          ? `${rooms.length} 位主播 · ${online} 位在线`
+          : `${rooms.length} models · ${online} online`;
+      }
+      if (ui.button?.isConnected) {
+        ui.button.disabled = workshopRefreshState.busy;
+        ui.button.textContent = workshopRefreshState.busy
+          ? (LANG === 'zh' ? '刷新中…' : 'Refreshing…')
+          : (LANG === 'zh' ? '刷新工作台' : 'Refresh Workshop');
+      }
+    }
+
+    function scheduleWorkshopSidebarCounts() {
+      if (workshopCountRaf || !workshopSidebarCountEls.size) return;
+      workshopCountRaf = requestAnimationFrame(() => {
+        workshopCountRaf = 0;
+        const counts = countByGroup();
+        workshopSidebarCountEls.forEach((element, id) => {
+          const value = String(counts[id] || 0);
+          if (element?.isConnected && element.textContent !== value) element.textContent = value;
+        });
+        updateWorkshopRefreshUi();
+      });
+    }
 
     function renderSidebar() {
+      workshopSidebarCountEls = new Map();
+      workshopRefreshUi = { status: null, label: null, fill: null, track: null, button: null, summary: null };
       const shellHidesSidebar = !!store.state.settings.pureMode
         || !!store.state.settings.splitViewActive;
       if (shellHidesSidebar) {
@@ -9789,10 +9870,10 @@
             const id = e.dataTransfer.getData('text/room-id');
             if (id) store.moveToGroup(id, g.id);
           },
-        }, [
-          $('span', { class: 'group-name' }, groupDisplayName(g)),
-          $('span', { class: 'group-count' }, String(counts[g.id] || 0)),
-        ]);
+        });
+        const countEl = $('span', { class: 'group-count' }, String(counts[g.id] || 0));
+        tab.append($('span', { class: 'group-name' }, groupDisplayName(g)), countEl);
+        workshopSidebarCountEls.set(g.id, countEl);
 
         const row = $('div', { class: 'sidebar-group-row' }, [tab]);
         if (!g.system) {
@@ -9826,9 +9907,10 @@
         },
       }, t('newGroup')));
 
-      sidebar.appendChild($('div', { class: 'sidebar-summary' }, LANG === 'zh'
+      const sidebarSummary = $('div', { class: 'sidebar-summary' }, LANG === 'zh'
         ? `${total} 位主播 · ${online} 位在线`
-        : `${total} models · ${online} online`));
+        : `${total} models · ${online} online`);
+      sidebar.appendChild(sidebarSummary);
 
       const refreshLabel = workshopRefreshState.busy
         ? (LANG === 'zh' ? '刷新中…' : 'Refreshing…')
@@ -9843,26 +9925,26 @@
       const percent = workshopRefreshState.total
         ? Math.round(workshopRefreshState.completed / workshopRefreshState.total * 100)
         : 0;
-      const progressText = workshopRefreshState.busy
-        ? (LANG === 'zh'
-          ? `正在刷新 ${workshopRefreshState.completed}/${workshopRefreshState.total}`
-          : `Refreshing ${workshopRefreshState.completed}/${workshopRefreshState.total}`)
-        : workshopRefreshState.message;
+      const progressText = workshopRefreshProgressText();
+      const refreshLabelEl = $('span', {}, progressText);
+      const refreshFillEl = $('i', { class: 'workshop-refresh-fill', style: { width: `${percent}%` } });
+      const refreshTrackEl = $('div', {
+        class: 'workshop-refresh-track',
+        role: 'progressbar',
+        'aria-valuemin': '0',
+        'aria-valuemax': '100',
+        'aria-valuenow': String(percent),
+      }, [refreshFillEl]);
       const refreshStatus = $('div', {
         class: 'workshop-refresh-status',
         hidden: !progressText,
         role: 'status',
         'aria-live': 'polite',
       }, [
-        $('span', {}, progressText),
-        $('div', {
-          class: 'workshop-refresh-track',
-          role: 'progressbar',
-          'aria-valuemin': '0',
-          'aria-valuemax': '100',
-          'aria-valuenow': String(percent),
-        }, [$('i', { class: 'workshop-refresh-fill', style: { width: `${percent}%` } })]),
+        refreshLabelEl,
+        refreshTrackEl,
       ]);
+      workshopRefreshUi = { status: refreshStatus, label: refreshLabelEl, fill: refreshFillEl, track: refreshTrackEl, button: sidebarRefresh, summary: sidebarSummary };
       sidebar.append(refreshStatus, $('div', { class: 'sidebar-footer' }, [sidebarRefresh, sidebarMenu]));
     }
 
@@ -9938,6 +10020,8 @@
         attachTemporarySource(room);
         return;
       }
+      // The refresh owns these probes; its online event attaches visible media.
+      if (workshopRefreshRoomIds.has(roomId)) return;
       if (mediaAttachPendingIds.has(roomId)) return;
       mediaAttachPendingIds.add(roomId);
       if (!service.has(roomId)) {
@@ -9947,11 +10031,11 @@
       }
       service.promote(roomId);
       if (room.lastStatus !== 'online') {
-        service.refresh(roomId);
+        service.probe(roomId);
         setTimeout(() => mediaAttachPendingIds.delete(roomId), 6000);
         return;
       }
-      service.refresh(roomId);
+      service.probe(roomId);
       setTimeout(() => mediaAttachPendingIds.delete(roomId), 5000);
     }
 
@@ -10006,7 +10090,7 @@
       while (backgroundServiceQueue.length) {
         const roomId = backgroundServiceQueue.shift();
         backgroundServiceQueuedIds.delete(roomId);
-        if (!findRoomAny(roomId) || service.has(roomId)) continue;
+        if (!findRoomAny(roomId) || service.has(roomId) || workshopRefreshRoomIds.has(roomId)) continue;
         service.startBackground(roomId);
         break;
       }
@@ -10141,9 +10225,13 @@
     }
 
     function roomIdsForWorkshopRefresh(scope = 'all') {
-      if (scope === 'all' || scope === LIBRARY_GROUP_ID || scope === ONLINE_GROUP_ID) return store.state.rooms.map(room => room.id);
-      if (scope === ONLINE_FAVORITES_GROUP_ID) return store.state.rooms.filter(room => roomInGroup(room, FAVORITE_GROUP_ID)).map(room => room.id);
-      return store.state.rooms.filter(room => roomInGroup(room, scope)).map(room => room.id);
+      let rooms;
+      if (scope === 'all' || scope === LIBRARY_GROUP_ID || scope === ONLINE_GROUP_ID) rooms = store.state.rooms;
+      else if (scope === ONLINE_FAVORITES_GROUP_ID) rooms = store.state.rooms.filter(room => roomInGroup(room, FAVORITE_GROUP_ID));
+      else rooms = store.state.rooms.filter(room => roomInGroup(room, scope));
+      const ids = rooms.map(room => room.id);
+      const visible = new Set(ids.filter(id => mediaViewportIds.has(id) || isCardNearViewport(id)));
+      return ids.sort((a, b) => Number(!visible.has(a)) - Number(!visible.has(b)));
     }
 
     async function refreshWorkshopRooms(options = {}) {
@@ -10157,20 +10245,23 @@
       Object.assign(workshopRefreshState, { busy: true, completed: 0, total: ids.length, failed: 0, throttled: 0, message: '' });
       refreshAllBtn.disabled = true;
       scheduleSidebarRender();
+      updateWorkshopRefreshUi();
       if (!ids.length) {
         Object.assign(workshopRefreshState, { busy: false, message: LANG === 'zh' ? '没有可刷新的房间' : 'No rooms to refresh' });
         refreshAllBtn.disabled = false;
         scheduleSidebarRender();
+        updateWorkshopRefreshUi();
         return [];
       }
+      workshopRefreshRoomIds = new Set(ids);
       workshopRefreshPromise = service.refreshMany(ids, {
-        concurrency: 2,
-        spacingMs: 300,
+        concurrency: 4,
+        spacingMs: 0,
         onProgress: ({ completed, result }) => {
           workshopRefreshState.completed = completed;
           if (result?.status === 'throttled') workshopRefreshState.throttled++;
           else if (result?.status === 'error') workshopRefreshState.failed++;
-          scheduleSidebarRender();
+          scheduleWorkshopSidebarCounts();
         },
       });
       try {
@@ -10187,8 +10278,14 @@
       } finally {
         workshopRefreshState.busy = false;
         workshopRefreshPromise = null;
+        workshopRefreshRoomIds.clear();
+        // A group change during refresh can reveal a room checked while offscreen.
+        cardMap.forEach((card, id) => {
+          if (!card.video && findRoomAny(id)?.lastStatus === 'online') requestRoomMediaIfNeeded(id);
+        });
         refreshAllBtn.disabled = false;
         scheduleSidebarRender();
+        updateWorkshopRefreshUi();
         workshopRefreshState.clearTimer = setTimeout(() => {
           workshopRefreshState.message = '';
           scheduleSidebarRender();
@@ -11479,6 +11576,7 @@
     }
 
     function openCardOpsMenu(e, roomId, card) {
+      const currentRoom = findRoomAny(roomId);
       // 关闭已有的卡片菜单
       const existing = document.querySelector('.card-ops-menu-pop');
       if (existing) { closeCardOpsMenu(); return; }
@@ -11510,7 +11608,7 @@
       if (currentRoom) {
         menu.appendChild(item(inFav ? '' : '', inFav ? t('opFavoriteRemove') : t('opFavoriteAdd'), () => store.toggleRoomInGroup(roomId, FAVORITE_GROUP_ID)));
       }
-      if (currentRoom || followingRoom) {
+      if (currentRoom) {
         menu.appendChild(item('', t('opAddSplit'), () => handleAddRoomToSplit(roomId)));
       }
       menu.appendChild(item('', t('opScreenshot'), () => captureCardScreenshot(roomId)));
@@ -12624,7 +12722,8 @@
         const id = path.slice(5);
         const r = state.rooms.find(x => x.id === id);
         if (r) renderCardState(r);
-        scheduleSidebarRender();
+        if (workshopRefreshState.busy) scheduleWorkshopSidebarCounts();
+        else scheduleSidebarRender();
         // 状态排序时，单卡状态变化也要重排
         if (state.settings.splitViewActive || state.settings.activeGroup === ONLINE_GROUP_ID || state.settings.activeGroup === ONLINE_FAVORITES_GROUP_ID || state.settings.sortBy === 'status' || state.settings.filter?.hideOffline || state.settings.filter?.hidePrivate || state.settings.filter?.onlyOnline) scheduleGridRender();
       }
@@ -12740,9 +12839,7 @@
     renderSidebar();
     renderGrid();
     applyPureModeState();
-    setTimeout(() => {
-      void refreshWorkshopRooms({ scope: 'all', automatic: true });
-    }, 1200);
+    void refreshWorkshopRooms({ scope: 'all', automatic: true });
     UnifiedRecorder.subscribe(() => {
       cardMap.forEach((_, id) => updateCardButtons(id));
       if (store.state.settings.showRecordingOnly) scheduleGridRender();

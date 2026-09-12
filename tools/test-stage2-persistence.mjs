@@ -229,6 +229,79 @@ test('manual import rejects a local edit while download is pending', async () =>
   assert.equal(h.controls.applied, 0);
 });
 
+for (const persisted of [false, true]) {
+  test(`manual import allows ${persisted ? 'persisted' : 'pending'} status-only updates during download`, async () => {
+    const h = harness();
+    const state = initialState(); state.rooms = [{ id: 'model_one', lastStatus: 'unknown' }];
+    h.values.set('config', JSON.stringify(state));
+    const store = h.api.createStore();
+    const payload = h.api.buildSuiteSettingsPayload();
+    h.run(`downloadSuiteSettingsFromGithub = () => new Promise(resolve => { globalThis.resolveDownload=resolve; });
+      applySuiteSettingsPayload = () => { controls.applied++; return {}; };`);
+    const pending = h.api.importSuiteSettingsFromGithub();
+    store.update(s => { s.rooms[0].lastStatus = 'online'; s.rooms[0].lastSeenOnline = 1234; });
+    if (persisted) assert.equal(store.flush(), true);
+    h.context.resolveDownload({ payload, sha: 'remote', envelope: {} });
+    assert.notEqual(await pending, null);
+    assert.equal(h.controls.applied, 1);
+    assert.deepEqual(h.controls.alerts, []);
+  });
+}
+
+test('manual import flushes edits made before download, but aborts if they cannot persist', async () => {
+  for (const failWrites of [false, true]) {
+    const h = harness(); const store = h.api.createStore();
+    store.update(s => { s.settings.layoutSize = 4; });
+    h.controls.failWrites = failWrites;
+    h.run(`downloadSuiteSettingsFromGithub = async () => {
+      controls.downloads = (controls.downloads || 0) + 1;
+      controls.downloadLayout = Storage.load().settings.layoutSize;
+      return {payload:buildSuiteSettingsPayload(),sha:'remote',envelope:{}};
+    }; applySuiteSettingsPayload = () => { controls.applied++; return {}; };`);
+    const result = await h.api.importSuiteSettingsFromGithub();
+    assert.equal(h.controls.applied, failWrites ? 0 : 1);
+    assert.equal(h.controls.downloads || 0, failWrites ? 0 : 1);
+    if (failWrites) assert.equal(result, null);
+    else assert.equal(h.controls.downloadLayout, 4);
+  }
+});
+
+for (const persisted of [false, true]) test(`manual import protects ${persisted ? 'persisted' : 'pending'} custom card sizes`, async () => {
+  const h = harness(); const before = initialState(); before.rooms = [{id:'model_one'}];
+  h.values.set('config', JSON.stringify(before));
+  const store = h.api.createStore();
+  h.run(`downloadSuiteSettingsFromGithub = () => new Promise(resolve => { globalThis.resolveDownload=resolve; });
+    applySuiteSettingsPayload = () => { controls.applied++; return {}; };`);
+  const pending = h.api.importSuiteSettingsFromGithub();
+  store.update(s => { s.rooms[0].cardSizeByGroup = {default:{cols:4,rows:4}}; });
+  if (persisted) store.flush();
+  h.context.resolveDownload({payload:h.api.buildSuiteSettingsPayload(),sha:'remote',envelope:{}});
+  assert.equal(await pending, null);
+  assert.equal(h.controls.applied, 0);
+});
+
+test('manual import can repair corrupt storage while preserving its recoverable original', async () => {
+  const h = harness(); const payload = h.api.buildSuiteSettingsPayload();
+  delete payload.components.reloaded; delete payload.components.mobileCleanView;
+  h.values.set('config', '{broken original');
+  h.context.remotePayload = payload;
+  h.run(`downloadSuiteSettingsFromGithub = async () => ({payload:remotePayload,sha:'remote',envelope:{}});`);
+  assert.equal((await h.api.importSuiteSettingsFromGithub()).multicam, true);
+  assert.equal(h.values.get('backup-1000'), '{broken original');
+});
+
+test('manual import does not overwrite damaged storage that changed during download', async () => {
+  const h = harness(); const payload = h.api.buildSuiteSettingsPayload();
+  h.values.set('config', '{broken original');
+  h.run(`downloadSuiteSettingsFromGithub=()=>new Promise(resolve=>{globalThis.resolveDownload=resolve;});
+    applySuiteSettingsPayload=()=>{controls.applied++;return {};};`);
+  const pending = h.api.importSuiteSettingsFromGithub();
+  h.values.set('config', '{changed original');
+  h.context.resolveDownload({payload,sha:'remote',envelope:{}});
+  assert.equal(await pending, null);
+  assert.equal(h.controls.applied, 0);
+});
+
 test('baseline rejects a change that arrives during fingerprint hashing', async () => {
   const h = harness();
   const store = h.api.createStore();
@@ -491,7 +564,7 @@ test('ordinary same-page persistence does not authorize a full Workshop replacem
   assert.equal(h.events.find(event => event.type === 'ryujo_multicam_storage').detail.authoritative, false);
 });
 
-test('status activity can cancel import reload without reverting imported Workshop settings', async () => {
+test('status activity does not cancel import reload or revert imported Workshop settings', async () => {
   const h = harness();
   const before = initialState(); before.rooms = [{ id: 'model_one', lastStatus: 'offline' }];
   h.values.set('config', JSON.stringify(before));
@@ -505,7 +578,7 @@ test('status activity can cancel import reload without reverting imported Worksh
   assert.equal((await h.api.importSuiteSettingsFromGithub()).multicam, true);
   store.patchRoom('model_one', { lastStatus: 'online' });
   h.drain();
-  assert.equal(h.controls.reloads, 0, 'new pending status activity still cancels the scheduled reload');
+  assert.equal(h.controls.reloads, 1, 'status-only activity must not prevent import completion');
   assert.equal(h.api.Storage.load().settings.layoutSize, 4);
   assert.equal(store.state.settings.layoutSize, 4);
 });

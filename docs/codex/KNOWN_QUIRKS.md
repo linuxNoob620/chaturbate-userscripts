@@ -48,6 +48,10 @@ Last verified: 2026-09-08 in the persistent Chrome-for-Testing profile with Tamp
 
 Chaturbate can return the same HLS origin and path with a changed `token` query parameter on successive status probes. Comparing the entire URL caused a healthy Workshop stream to be reattached during refresh. For a healthy loaded video, compare URLs with only `token` removed; preserve all other URL differences and the existing explicit-refresh/error recovery paths. Confirmed through live debugger inspection and video-element retention checks on 2026-09-09.
 
+## Room-status persistence is not a settings edit
+
+The Workshop Store's debounced writer handles both configuration edits and runtime status/last-seen updates. Counting every write or treating every pending writer as an edit can falsely reject a manual import and suppress its completion reload. The 16.6.15 guard compares saved/pending semantic settings instead, including custom card sizes but excluding status fields. Confirmed by extracted-source pending/saved-status reproductions; real settings changes must still block stale replacement.
+
 ## Historical recorder quirk: valid MP4 conversion can discard an unsupported video track
 
 The current userscript no longer records or converts media. Retain this observation for interpreting older recordings/recovery data and frozen extension builds, not as a current userscript execution path.

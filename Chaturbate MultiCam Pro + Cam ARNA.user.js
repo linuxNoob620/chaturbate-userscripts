@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.14
+// @version           16.6.15
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -203,7 +203,7 @@
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.14');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.15');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -219,7 +219,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.14');
+  instanceMarker.setAttribute('data-suite-version', '16.6.15');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1413,7 +1413,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.14',
+    version: '16.6.15',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -1913,19 +1913,16 @@
     return all && typeof all === 'object' && !Array.isArray(all) ? all : {};
   }
 
-  let suiteSettingsRevision = 0;
   let pendingStoreWriter = null;
 
   function writeStoreRaw(json) {
     try {
       localStorage.setItem(STORE_KEY, json);
-      suiteSettingsRevision++;
       pruneConfigBackups(MAX_CONFIG_BACKUPS);
       return true;
     } catch (e) {
       pruneConfigBackups(1);
       localStorage.setItem(STORE_KEY, json);
-      suiteSettingsRevision++;
       return true;
     }
   }
@@ -1979,7 +1976,6 @@
     clearAll() {
       try {
         localStorage.removeItem(STORE_KEY);
-        suiteSettingsRevision++;
         try { window.dispatchEvent(new CustomEvent('ryujo_multicam_storage', { detail: { state: null } })); } catch (_) {}
         try { window.dispatchEvent(new CustomEvent('ryujo_multicam_persistence', { detail: { status: 'saved' } })); } catch (_) {}
         return true;
@@ -2084,6 +2080,7 @@
           order: room.order,
           muted: room.muted,
           notes: room.notes || '',
+          cardSizeByGroup: room.cardSizeByGroup || {},
         })),
         groups: Array.isArray(multicam.groups) ? multicam.groups : [],
       },
@@ -2102,17 +2099,27 @@
     return githubPayloadFingerprint(buildSuiteSettingsPayload(multicamState));
   }
 
-  function githubLocalSettingsSnapshot() {
-    return `${suiteSettingsRevision}:${JSON.stringify(githubPayloadFingerprintSource(buildSuiteSettingsPayload()))}`;
+  function githubLocalSettingsSnapshot(state) {
+    if (!state) {
+      try { state = Storage.load({ strict: true }); }
+      // Explicit import may repair damaged storage, but must detect if it changes meanwhile.
+      catch (_) { return JSON.stringify({ unreadable: localStorage.getItem(STORE_KEY) }); }
+    }
+    return JSON.stringify(githubPayloadFingerprintSource(buildSuiteSettingsPayload(state)));
   }
 
-  function flushPendingSuiteSettings() {
-    if (pendingStoreWriter && !pendingStoreWriter()) throw new Error('Local settings could not be saved. Free storage space and retry the export.');
-    Storage.load({ strict: true });
+  function hasPendingSuiteSettings() {
+    // Status probes share the Store's debounced writer, but are not settings edits.
+    return !!pendingStoreWriter && pendingStoreWriter.settingsSnapshot() !== githubLocalSettingsSnapshot();
+  }
+
+  function flushPendingSuiteSettings({ forImport = false } = {}) {
+    if (pendingStoreWriter && !pendingStoreWriter()) throw new Error('Local settings could not be saved. Free storage space and retry.');
+    if (!forImport) Storage.load({ strict: true });
   }
 
   function requireUnchangedGithubImport(snapshot) {
-    if (pendingStoreWriter || snapshot !== githubLocalSettingsSnapshot()) {
+    if (hasPendingSuiteSettings() || snapshot !== githubLocalSettingsSnapshot()) {
       throw new Error('Local settings changed while the backup was loading. Review your changes and retry the import.');
     }
   }
@@ -2120,7 +2127,7 @@
   function scheduleSettingsImportReload(delay) {
     const snapshot = githubLocalSettingsSnapshot();
     setTimeout(() => {
-      if (!pendingStoreWriter && snapshot === githubLocalSettingsSnapshot()) location.reload();
+      if (!hasPendingSuiteSettings() && snapshot === githubLocalSettingsSnapshot()) location.reload();
     }, delay);
   }
 
@@ -2134,7 +2141,7 @@
     const snapshot = githubLocalSettingsSnapshot();
     const fingerprint = await githubSettingsFingerprint();
     const remoteFingerprint = await githubPayloadFingerprint(appliedPayload);
-    const unchanged = !pendingStoreWriter && snapshot === githubLocalSettingsSnapshot() && fingerprint === remoteFingerprint;
+    const unchanged = !hasPendingSuiteSettings() && snapshot === githubLocalSettingsSnapshot() && fingerprint === remoteFingerprint;
     const latestState = loadGithubSyncState();
     const remoteAt = githubRemoteTimestamp(downloaded);
     saveGithubSyncState({
@@ -2350,7 +2357,7 @@
 
   let githubAutoExportQueue = Promise.resolve();
   let githubAutoExportBatch = null;
-  let githubExportNoticeTimer = null;
+  const suiteToastTimers = new WeakMap();
 
   function workshopMembershipSignature(state) {
     return JSON.stringify((Array.isArray(state?.rooms) ? state.rooms : []).filter(room => typeof room?.id === 'string').map(room => [room.id,
@@ -2358,25 +2365,61 @@
     ]).sort((a, b) => a[0].localeCompare(b[0])));
   }
 
-  function showGithubExportNotice(message, persistent = false) {
+  function showSuiteToast(message, { id = '', duration = 1800, persistent = false } = {}) {
     if (!document.body) return;
-    let notice = document.getElementById('ziggy-export-notice');
-    if (!notice) {
-      notice = $('div', { id: 'ziggy-export-notice', role: 'status', 'aria-live': 'polite', style: {
-        position: 'fixed', right: '12px', bottom: '12px', zIndex: '2147483300',
-        maxWidth: 'min(360px, calc(100vw - 24px))', padding: '12px', borderRadius: '6px',
-        background: '#202c39', color: '#f1f1f1', border: '1px solid #39627a',
-        font: '14px Arial,sans-serif', boxShadow: '0 3px 14px #0008',
+    const workshop = isWorkshopRoute();
+    let host = document.getElementById('ziggy-suite-toasts');
+    if (!host) {
+      host = $('div', { id: 'ziggy-suite-toasts', style: {
+        position: 'fixed', zIndex: '2147483647', display: 'flex', flexDirection: 'column',
+        gap: '8px', pointerEvents: 'none', maxWidth: 'calc(100vw - 32px)',
+        ...(workshop ? { right: '16px', top: '16px' }
+          : { left: '50%', top: '20%', transform: 'translateX(-50%)', alignItems: 'center' }),
       } });
-      notice.append($('span'), $('button', { type: 'button', 'aria-label': 'Dismiss export notification',
-        style: { marginLeft: '12px', minWidth: '32px', minHeight: '32px', cursor: 'pointer' },
-        onclick: () => notice.remove(),
-      }, '×'));
-      document.body.appendChild(notice);
+      document.body.appendChild(host);
     }
-    notice.firstElementChild.textContent = message;
-    clearTimeout(githubExportNoticeTimer);
-    if (!persistent) githubExportNoticeTimer = setTimeout(() => notice.remove(), 5000);
+    let notice = id ? document.getElementById(id) : null;
+    if (!notice) {
+      notice = $('div', { ...(id ? { id } : {}), role: 'status', 'aria-live': 'polite', style: {
+        maxWidth: 'min(360px, calc(100vw - 32px))', boxSizing: 'border-box', overflowWrap: 'anywhere', color: '#fff',
+        ...(workshop ? { background: 'rgba(17,24,39,.88)', padding: '9px 12px', borderRadius: '8px',
+          boxShadow: 'var(--shadow-md)', fontSize: '12px', lineHeight: '1.35' }
+          : { background: 'rgba(20,20,24,.95)', padding: '12px 20px', borderRadius: '10px',
+            fontSize: '14px', fontFamily: 'system-ui', boxShadow: '0 8px 24px rgba(0,0,0,.5)', backdropFilter: 'blur(10px)' }),
+      } });
+      notice.appendChild($('span'));
+      if (id) notice.appendChild($('button', { type: 'button', 'aria-label': 'Dismiss export notification',
+        style: { marginLeft: '8px', minWidth: '32px', minHeight: '32px', padding: '0', border: '0',
+          background: 'transparent', color: 'inherit', font: 'inherit', cursor: 'pointer', pointerEvents: 'auto' },
+        onclick: () => removeSuiteToast(notice),
+      }, '×'));
+      host.appendChild(notice);
+    }
+    for (const timer of suiteToastTimers.get(notice) || []) clearTimeout(timer);
+    notice.firstElementChild.textContent = String(message || '');
+    notice.style.opacity = '1';
+    notice.style.transform = '';
+    const timers = [];
+    if (!persistent) {
+      if (workshop) timers.push(setTimeout(() => {
+        notice.style.opacity = '0'; notice.style.transform = 'translateY(-4px)';
+        notice.style.transition = 'opacity .18s, transform .18s';
+      }, Math.max(0, duration - 400)));
+      timers.push(setTimeout(() => removeSuiteToast(notice), duration));
+    }
+    suiteToastTimers.set(notice, timers);
+  }
+
+  function removeSuiteToast(notice) {
+    for (const timer of suiteToastTimers.get(notice) || []) clearTimeout(timer);
+    suiteToastTimers.delete(notice);
+    const host = notice.parentElement;
+    notice.remove();
+    if (host && !host.childElementCount) host.remove();
+  }
+
+  function showGithubExportNotice(message, persistent = false) {
+    showSuiteToast(message, { id: 'ziggy-export-notice', duration: 5000, persistent });
   }
 
   function queueGithubSettingsAutoExport(reason = 'settings changed') {
@@ -2544,6 +2587,7 @@
     importButton.addEventListener('click', () => withBusy(importButton, async () => {
       const saved = readAndSave();
       if (!saved.token || String(saved.passphrase || '').length < 8) throw new Error('Save a token and passphrase first.');
+      flushPendingSuiteSettings({ forImport: true });
       const snapshot = githubLocalSettingsSnapshot();
       const downloaded = await downloadSuiteSettingsFromGithub(saved, saved.passphrase);
       const roomCount = downloaded.payload?.components?.multicamPro?.rooms?.length;
@@ -2607,6 +2651,7 @@
     const credentials = githubSyncCredentials(options);
     if (!credentials) return null;
     try {
+      flushPendingSuiteSettings({ forImport: true });
       const snapshot = githubLocalSettingsSnapshot();
       const downloaded = await downloadSuiteSettingsFromGithub(credentials.config, credentials.passphrase);
       const roomCount = downloaded.payload?.components?.multicamPro?.rooms?.length;
@@ -2708,6 +2753,7 @@
         const file = event.target.files?.[0];
         if (!file) { try { inp.remove(); } catch (_) {} return; }
         try {
+          flushPendingSuiteSettings({ forImport: true });
           const snapshot = githubLocalSettingsSnapshot();
           if (file.size > MAX_CONFIG_BYTES) throw new Error('file too large');
           const parsed = JSON.parse(await file.text());
@@ -2764,6 +2810,7 @@
       if (saved && pendingStoreWriter === flush) pendingStoreWriter = null;
       return saved;
     };
+    flush.settingsSnapshot = () => githubLocalSettingsSnapshot(state);
 
     const notify = (path) => { for (const fn of subs) fn(state, path); };
 
@@ -2775,7 +2822,6 @@
         if (result === false) return;
       }
       catch (err) { console.warn('[Ziggy Suite] store update failed', err); return; }
-      suiteSettingsRevision++;
       persistence = 'pending';
       pendingStoreWriter = flush;
       clearTimeout(persistTimer);
@@ -2794,7 +2840,6 @@
         persistTimer = null;
         if (pendingStoreWriter === flush) pendingStoreWriter = null;
         persistence = 'saved';
-        suiteSettingsRevision++;
         state = sanitizeState(nextState || defaultState());
         notify(path);
       },
@@ -6395,16 +6440,7 @@
 
     // —— Toast ——
     function toast(text, ms = 1800) {
-      const toastEl = $('div', {
-        style: {
-          position: 'fixed', left: '50%', top: '20%', transform: 'translateX(-50%)',
-          background: 'rgba(20,20,24,.95)', color: '#fff', padding: '12px 20px',
-          borderRadius: '10px', zIndex: 999999, fontSize: '14px', fontFamily: 'system-ui',
-          boxShadow: '0 8px 24px rgba(0,0,0,.5)', backdropFilter: 'blur(10px)',
-        },
-      }, String(text || ''));
-      document.body.appendChild(toastEl);
-      setTimeout(() => toastEl.remove(), ms);
+      showSuiteToast(text, { duration: ms });
     }
 
     let persistenceWarningAt = 0;
@@ -8284,13 +8320,8 @@
       role: 'status', 'aria-live': 'polite' }, [progressLabel, progressTrack]);
     grid.before(refreshProgress);
 
-    const toastHost = $('div', { style: { position: 'fixed', right: '16px', top: '16px', zIndex: '1000000', display: 'flex', flexDirection: 'column', gap: '8px', pointerEvents: 'none' } });
-    document.body.appendChild(toastHost);
     function toast(msg) {
-      const el = $('div', { style: { maxWidth: '360px', background: 'rgba(17,24,39,.88)', color: '#fff', padding: '9px 12px', borderRadius: '8px', boxShadow: 'var(--shadow-md)', fontSize: '12px', lineHeight: '1.35' } }, String(msg || ''));
-      toastHost.appendChild(el);
-      setTimeout(() => { try { el.style.opacity = '0'; el.style.transform = 'translateY(-4px)'; el.style.transition = 'opacity .18s, transform .18s'; } catch (_) {} }, 2200);
-      setTimeout(() => { try { el.remove(); } catch (_) {} }, 2600);
+      showSuiteToast(msg, { duration: 2600 });
     }
 
     let persistenceWarningAt = 0;

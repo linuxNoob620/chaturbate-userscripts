@@ -3,12 +3,22 @@
 ## Deployment
 
 - Primary runtime: Tampermonkey userscript `Chaturbate MultiCam Pro + Cam ARNA.user.js`.
-- Current userscript release: 16.6.14 (`main`, tag `v16.6.14`), published at the user's explicit request with the documented native-fullscreen limitations still open.
+- Current userscript release: 16.6.15 (`main`, tag `v16.6.15`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
 - Extension builds remain at 16.6.7. They were not modified, rebuilt, packaged, or published for this userscript-only change.
 - Local rollback point: Git tag `backup/pre-16.6.8-workshop-doubletap-20260905` at the 16.6.7 baseline.
-- The functionally identical pre-release candidate labelled 16.6.13 is installed in the existing Chrome testing-profile and Quetta Tampermonkey entries. Release 16.6.14 changes only its version labels, not runtime behavior; Tampermonkey can obtain it through the existing update URL. No phone or browser settings were changed during publication. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
+- Version 16.6.15 is installed in the existing Chrome testing-profile and Quetta Tampermonkey entries. Both editor readbacks matched the source after reload, and both live runtimes reported 16.6.15. No reinstall or settings reset was performed. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
 - Recu.me release rollback point: local tag `backup/pre-recu-16.6.13-20260909` at 16.6.12.
 - Candidate rollback point: `backup/pre-native-portrait-20260905`. Extension outputs are unchanged.
+
+## GitHub import and export feedback — 16.6.15
+
+- Rollback: local tag `backup/pre-github-import-toast-16.6.14-20260912` at `9296e6306a7b29e501a511b48e59e33c70b47aa5`.
+- Import/synchronization guards compare actual settings content, including custom per-group card sizes, rather than counting every Store write. Pending and persisted room-status updates no longer invalidate an import or its completion reload; genuine edits during asynchronous work still reject stale replacement/acknowledgement.
+- All manual import entry points flush pre-existing pending edits before reading the backup. Failed persistence aborts. Explicit import can still repair unchanged damaged storage while retaining its recoverable original; export remains strict about readable persisted settings.
+- Model-added and automatic-export messages now use one toast renderer, retaining the existing normal-page/mobile and Workshop styles. Export has its own keyed, dismissible message, persistent progress/error feedback, a five-second result, and precise timer/empty-host cleanup. No automatic import was added.
+- Local extracted-source checks pass: persistence 44, UI/request 22, existing legacy 53, Suite/Workshop/Recu.me/GitHub sync and Stage 3 follow-ups. Regression coverage includes pending/saved status races, real edits/card sizes, persistence failure, corrupt-store repair, shared toast styling and timer ownership.
+- Actual persistent Chrome/Tampermonkey and OPPO/Quetta/Tampermonkey checks reached a decrypted-backup replacement confirmation, cancelled without applying it. Chrome's content guard was also exercised before confirmation. The shipped renderer displayed separately labelled notification previews; real mouse/touch dismissal passed, as did phone viewport fit. These previews made no upload. Full live replacement and account cloud writes remain untested; controlled fixtures cover application and automatic-upload outcomes.
+- Scope: userscript only. No recording, fullscreen, extension, account follow/unfollow, or saved-library changes were made by these tests.
 
 ## Stage 2 engineering changes incorporated in 16.6.14
 
@@ -127,7 +137,7 @@
 
 Expected idle state: **OFF**.
 
-Latest verification, September 12 after the native-style Workshop/mobile-tab pass: flag visibly `Default` after restart, command-line file absent, ADB forward/reverse lists empty, no unsupported-feature warning. OFF was restored between each separated test pass. No orientation or unrelated phone setting was changed in this pass. Existing tabs and saved media/recovery data were preserved; no temporary test tab remains. The Suite remains enabled with the redesigned candidate. Phone testing is finished and the user was told they may disconnect.
+Latest verification, September 12 after the 16.6.15 import/toast pass: flag visibly `Default` after restart, command-line file absent, ADB forward/reverse lists empty, no unsupported-feature warning. It began OFF and was enabled only for the phone pass. No orientation or unrelated phone setting was changed. Existing tabs and saved media/recovery data were preserved; no temporary test tab remains, and the temporary UI dump was removed. The Suite remains enabled at 16.6.15. Phone testing is finished and the user was told they may disconnect.
 
 Final verified state after the real-phone passes on 2026-09-09:
 

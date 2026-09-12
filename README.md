@@ -1,6 +1,6 @@
 # Ziggy Chaturbate Suite
 
-This repository publishes one maintained Tampermonkey userscript for both desktop and mobile Chaturbate. The current release is **16.6.14**, with the known limitations below:
+This repository publishes one maintained Tampermonkey userscript for both desktop and mobile Chaturbate. The current release is **16.6.15**, with the known limitations below:
 
 - **Ziggy Chaturbate Suite** — one native-style Workshop and Rooms tool with Archive Search, playback and chat controls, room-tab naming, split view, encrypted settings backup, and desktop/mobile integration. Suite recording and Recorder Hub have been removed; existing saved media/recovery files are not deleted.
 - On Chaturbate's **native mobile site only**, the Suite exposes direct Rooms/Recu.me tabs, a two-column Workshop Grid, chat-hiding settings and Picture-in-Picture. Existing fullscreen adaptations remain, but complete native fullscreen parity is not established.
@@ -12,7 +12,13 @@ This repository publishes one maintained Tampermonkey userscript for both deskto
 
 Install the Suite from the same link on every device. Tampermonkey will use its embedded `@updateURL` and `@downloadURL` values for later update checks.
 
-### 16.6.14 highlights and limitations
+### 16.6.15 — GitHub import and export feedback
+
+- Manual imports distinguish real settings edits from background room-status updates. Pending edits are persisted before download; failed saves or edits made during download still prevent replacement.
+- Automatic export uses the same toast renderer/style as adding a model, on desktop and mobile. Progress and failures remain dismissible; a confirmed upload result stays visible for five seconds. The export notice does not replace the model-added message.
+- Focused Chrome/Tampermonkey and real Quetta/Tampermonkey checks passed for download/decryption through the replacement confirmation and notification display/dismissal. Replacement was cancelled to preserve existing data. Import application, races and upload outcomes were tested with controlled storage/network fixtures, not destructive live cloud tests.
+
+### Included 16.6.14 features and limitations
 
 - Native-style Workshop categories/cards, outside-dismissible Groups drawer, refresh progress and one organized menu.
 - Recently Followed · 24h tracks newly observed successful follows, without restoring the removed Online Following scan.

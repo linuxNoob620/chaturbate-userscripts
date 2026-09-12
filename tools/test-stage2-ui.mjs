@@ -109,6 +109,8 @@ class Node {
   appendChild(n) { this.append(n); return n; }
   remove() { if (this.parentElement) { this.parentElement.children = this.parentElement.children.filter(x => x !== this); this.parentElement = null; } }
   get isConnected() { return !!this.parentElement || this.tagName === 'BODY'; }
+  get firstElementChild() { return this.children.find(n => typeof n === 'object') || null; }
+  get childElementCount() { return this.children.filter(n => typeof n === 'object').length; }
   get textContent() { return this.children.map(n => typeof n === 'object' ? n.textContent : String(n)).join(''); }
   set textContent(value) { this.children = [String(value)]; }
   contains(n) { return n === this || this.children.some(x => typeof x === 'object' && x.contains(n)); }
@@ -120,6 +122,37 @@ class Node {
   setAttribute(name, value) { this[name] = String(value); }
   focus() {}
 }
+
+for (const workshop of [false, true]) test(`${workshop ? 'Workshop' : 'room/mobile'} export feedback shares model-added toast style and owns its timers`, () => {
+  const body = new Node('body'), timers = new Map(); let timerId = 0;
+  const find = (node, id) => node.id === id ? node : node.children.filter(n => typeof n === 'object').map(n => find(n, id)).find(Boolean);
+  const document = { body, getElementById: id => find(body, id) || null };
+  const ctx = vm.createContext({ document, isWorkshopRoute: () => workshop, $: (...args) => new Node(...args),
+    setTimeout(fn, ms) { timers.set(++timerId, { fn, ms }); return timerId; }, clearTimeout(id) { timers.delete(id); },
+  });
+  vm.runInContext('const suiteToastTimers = new WeakMap();' + block('  function showSuiteToast(', '  function queueGithubSettingsAutoExport('), ctx);
+  ctx.showSuiteToast('test_room added');
+  const added = document.getElementById('ziggy-suite-toasts').firstElementChild;
+  ctx.showGithubExportNotice('Exporting settings…', true);
+  const notice = document.getElementById('ziggy-export-notice');
+  assert.equal(notice.parentElement.childElementCount, 2, 'export must not obscure or replace the added message');
+  for (const key of ['background', 'padding', 'borderRadius', 'fontSize', 'color']) assert.equal(notice.style[key], added.style[key], key);
+  const addedTimers = timers.size;
+  for (let i = 0; i < 10; i++) ctx.showGithubExportNotice('Exporting settings…', true);
+  assert.equal(document.getElementById('ziggy-export-notice'), notice, 'one keyed export notice');
+  assert.equal(timers.size, addedTimers, 'persistent progress does not accumulate expiry timers');
+  ctx.showGithubExportNotice('Settings exported to GitHub.');
+  assert.equal(notice.firstElementChild.textContent, 'Settings exported to GitHub.');
+  assert.ok([...timers.values()].some(timer => timer.ms === 5000));
+  ctx.showGithubExportNotice('Auto export failed. Local settings are kept.', true);
+  assert.equal(timers.size, addedTimers, 'old success expiry cannot remove a newer progress/failure notice');
+  notice.children.find(n => n.tagName === 'BUTTON').onclick();
+  assert.equal(document.getElementById('ziggy-export-notice'), null);
+  assert.equal(added.isConnected, true);
+  for (const { fn } of [...timers.values()]) fn();
+  assert.equal(body.childElementCount, 0, 'last toast removes its empty host');
+  assert.equal(timers.size, 0, 'dismissal and expiry release timers');
+});
 
 test('replacing a tool panel disposes it exactly once', () => {
   const document = new Node('body'); document.body = document; document.activeElement = null;

@@ -94,7 +94,8 @@ for (const item of scripts) {
     }
     if (!source.includes("startupView: 'last'") || !source.includes('function openStartupSettings()')) failures.push(`${item.file}: Workshop startup view/group settings are missing`);
     if (!source.includes("startupGroup: 'last'") || !source.includes('__startupGroupDefaultMigratedV1657')) failures.push(`${item.file}: Workshop startup group does not default and migrate to Last used`);
-    if (!source.includes('queueGithubSettingsAutoExport(`added room ${id}`)')) failures.push(`${item.file}: new Workshop rooms do not trigger the scoped GitHub backup`);
+    if (!source.includes("queueGithubSettingsAutoExport('Workshop membership changed')")) failures.push(`${item.file}: persisted Workshop membership changes do not trigger the scoped GitHub backup`);
+    if (/function (?:maybeAutoImportGithubSettings|scheduleGithubAutoImport)/.test(source)) failures.push(`${item.file}: automatic import must remain removed`);
     if (!source.includes("'aria-label': t('startupViewLabel')") || !source.includes("'aria-label': t('startupGroupLabel')")) failures.push(`${item.file}: startup settings controls are missing distinct accessible labels`);
     for (const removedFollowingMarker of [
       'ONLINE_FOLLOWING_GROUP_ID', 'syncOnlineFollowing', 'ziggy_online_following_cache',
@@ -147,35 +148,12 @@ for (const item of scripts) {
     if (source.includes("['openRoom', t('shortcutOpenRoom')]")) failures.push(`${item.file}: removed Workshop Open-room shortcut returned`);
     if (source.includes("const openBtn = mkOp('external'") || source.includes("const pipBtn = mkOp('pip'")) failures.push(`${item.file}: removed Workshop card quick action returned`);
     if (!source.includes("title: t('modelNameBackgroundTab')")) failures.push(`${item.file}: Workshop model-name background-tab hint is missing`);
-    if (!source.includes("const RECORDER_OWNER_KEY = 'ziggy_recorder_owner_v1'")) failures.push(`${item.file}: Recorder Hub single-owner lease is missing`);
-    if (!source.includes('let ownsRecorder = claimRecorderOwner(hubInstanceId)')) failures.push(`${item.file}: Recorder Hub owner claim is missing`);
-    if (!source.includes('const visibleJobs = ownsRecorder ? jobs : UnifiedRecorder.recordings')) failures.push(`${item.file}: duplicate Recorder Hubs do not render the owner snapshot`);
-    if (!source.includes("channel?.postMessage({ type: 'focus-hub'")) failures.push(`${item.file}: existing Recorder Hub focus/reuse request is missing`);
-    if (!source.includes("status === 'offline' || status === 'reconnecting'")) failures.push(`${item.file}: recorder reconnects do not preserve the offline timeout`);
-    if (!source.includes("['offline', 'reconnecting'].includes(jobs.get(job.id)?.sourceStatus)")) failures.push(`${item.file}: recorder offline timeout cannot stop reconnecting jobs`);
-    if (!source.includes('function handleStorageFailure(job, error)')) failures.push(`${item.file}: recorder storage failure salvage path is missing`);
-    if (!source.includes("finalizeJob(job, 'storage-error')")) failures.push(`${item.file}: storage failures do not automatically finalize partial recordings`);
-    if (!source.includes("withTimeout(job.writeQueue, 20000")) failures.push(`${item.file}: recorder finalization write timeout is missing`);
-    if (!source.includes('async function convertRecordingToMp4(blob, job)')) failures.push(`${item.file}: recorder MP4 finalization conversion is missing`);
-    if (!source.includes('async function ensureRecorderMediaToolkit()') || !source.includes("GM_getResourceText('mediabunny')")) {
-      failures.push(`${item.file}: recorder MP4 converter is not loaded lazily from the userscript resource`);
+    for (const removed of ['UnifiedRecorder', 'MediaRecorder', 'Recorder Hub', 'multicam_recorder', 'RECORDER_OWNER_KEY', 'convertRecordingToMp4', 'ensureRecorderMediaToolkit', '@resource          mediabunny']) {
+      if (source.includes(removed)) failures.push(`${item.file}: removed recording runtime remains: ${removed}`);
     }
-    if (source.includes('// @require           https://unpkg.com/mediabunny')) failures.push(`${item.file}: eager Mediabunny @require can block userscript startup`);
-    if (!source.includes("codec: 'avc'") || !source.includes("codec: 'aac'")) failures.push(`${item.file}: recorder MP4 conversion codecs are missing`);
-    if ((source.match(/bitrateMode: 'constant'/g) || []).length < 2) failures.push(`${item.file}: recorder MP4 video/audio bitrate ceilings are not constant`);
-    if (!source.includes('const recorderShellGuard = new MutationObserver(enforceRecorderShell)')) failures.push(`${item.file}: mobile Recorder Hub shell guard is missing`);
-    if (!source.includes('const disposeRecorderNativeChild = child =>') || !source.includes('child.remove();')) {
-      failures.push(`${item.file}: Recorder Hub does not prune the unused native page roots`);
+    for (const required of ['rg-workshop-native', 'rg-native-categories', 'rg-refresh-progress', 'roomgrid-mobile-recu-tab', 'Export settings to GitHub', 'Import settings from GitHub']) {
+      if (!source.includes(required)) failures.push(`${item.file}: native Workshop / direct mobile control is missing: ${required}`);
     }
-    if (source.includes("child.style?.setProperty('display', 'none', 'important')")) {
-      failures.push(`${item.file}: Recorder Hub still retains the hidden native page tree`);
-    }
-    if (!source.includes('grid-template-areas:"copy" "actions"!important')
-      || !source.includes('grid-area:copy!important')
-      || !source.includes('grid-area:actions!important')) {
-      failures.push(`${item.file}: mobile Recorder Hub header is not locked to its two-row layout`);
-    }
-    if (source.includes("confirm(t('recordingConsent'))")) failures.push(`${item.file}: recording still displays the removed consent warning`);
     if (!source.includes("findDesktopNavigationSlot('private')")) failures.push(`${item.file}: desktop Workshop navigation does not replace Private Shows`);
     if (!source.includes("const WORKSHOP_TAB_TITLE = 'Ziggy Chaturbate Suite · Workshop'")) failures.push(`${item.file}: unique Workshop tab title is missing`);
     if (!source.includes("function canonicalWorkshopUrl()")) failures.push(`${item.file}: canonical Workshop URL helper is missing`);

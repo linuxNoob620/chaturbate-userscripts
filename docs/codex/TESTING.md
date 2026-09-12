@@ -40,7 +40,7 @@ Edit the existing Suite entry in Tampermonkey. Target the visible CodeMirror edi
 
 After restarting Quetta, a sleeping target may time out on its first DevTools initialization. Activate it and perform a read-only warm-up before sending changes; do not blindly retry a mutating operation whose execution is uncertain.
 
-For Quetta CDP, use the local DevTools HTTP `/json/activate/<target-id>` endpoint to foreground the selected target. `Page.bringToFront` stalled on this build. Bound read-only warm-ups with a timeout and reconnect if necessary.
+Quetta's HTTP `/json` list can expose numeric tab IDs that are not interchangeable with browser-level CDP target IDs. Enumerate `Target.getTargets` on the browser WebSocket and use its actual target ID for `Target.attachToTarget` with flattened sessions. Do not infer a connection failure by attaching a numeric HTTP tab ID as a CDP target. Earlier builds needed the HTTP `/json/activate/<tab-id>` route to foreground a page when `Page.bringToFront` stalled; use the ID belonging to that interface. Bound read-only warm-ups and re-enumerate after restart.
 
 Re-enumerate targets after session restoration settles; IDs/URLs observed immediately after restart can change. If initialization is waiting for debugger attachment, `Runtime.runIfWaitingForDebugger` releases it before the read-only warm-up. Native `chrome-native://newtab/` surfaces have no normal page runtime: navigate their address bar rather than waiting indefinitely for `Runtime.evaluate` or `Page.navigate`.
 
@@ -65,5 +65,34 @@ After userscript source edits, run the focused regression check first, then the 
 For Recu.me changes run `npm run test:recu`, then actual desktop and phone interactions. Verify idle/selected loading, helper closure, native tab/menu switching, cancelled-load re-entry, cache/reload, refresh retention, pagination deduplication, lazy/error images and hover exit. Wait for the new document after reload before asserting state; checking the old document immediately after `Page.reload` can falsely pass a wait condition.
 
 ## Verification standard
+
+### Local engineering regression fixtures
+
+The Stage 2 tests extract implementation sections from the current userscript; they are not separate production implementations. Run from `outputs`:
+
+```powershell
+node tools/test-stage2-persistence.mjs
+node tools/test-stage2-legacy.mjs
+node tools/test-stage2-ui.mjs
+node tools/test-stage3-followups.mjs
+```
+
+These use mocks/fault injection for storage, requests, timers and media. The UI suite deliberately preserves one passing reproduction of still-unoptimized pan writes; do not count it as a performance improvement. Suite source regression checks now reject the removed recording engine/UI/resource and protect the retained native-style navigation paths.
+
+`test-stage2-recorder.mjs`, `test-stage2-recorder-center.mjs` and the mixed recording `test-stage3-acceptance.mjs` are retained locally as historical fixtures for the pre-removal candidate, not current distributed validation gates. Do not resurrect recording code merely to satisfy them. Existing user recordings/recovery data must not be deleted during ordinary tests or settings import.
+
+For a userscript-only release, run `npm run build:userscript` and `npm run test:userscript`. CI uses that scope plus the existing adapter unit tests; it does not automatically build or package extensions. A version-only release change can reuse the preceding live behavioral evidence after verifying the source differs only in its version labels.
+
+### Focused redesign acceptance
+
+Use a small dependency-based test set rather than restarting the entire historical acceptance matrix after each cosmetic correction. For Workshop presentation, check the real hydrated desktop header, category/drawer/menu access, unchanged card identity during refresh, visible progress, and mobile two-column/no-page-overflow layout. Verify explicit GitHub actions without executing account writes unless separately safe/authorized.
+
+For mobile tabs, test actual taps through Rooms, Recu.me and Bio: native Private/Tokens remain available; the selected Suite tab has one underline; private composer content is hidden only while Rooms owns its panel; Recu.me headings remain below the player; entry stays muted and Recu.me is not selected by default. Check the three-dot menu/Back fallback as a related path.
+
+Preview layout changes require separate nearby Workshop fullscreen entry/exit and normal-room regressions. Limited double-tap/Android Back checks do not close the documented native-control/gesture parity gaps. Repeat a failed path and its affected neighbors after correction, not unrelated note/sync/media tests whose implementation did not change.
+
+`node tools/test-stage2-browser.mjs` requires the already-running established Chrome CDP endpoint on port 9223. It creates and foregrounds one isolated `about:blank` fixture, checks actual DOM/CSS behavior, closes only that fixture, and reactivates the previously enumerated browser page. It does not install/update the userscript, make account requests, or modify phone settings. Confirm the endpoint/profile before running it. These fixtures do not replace actual Tampermonkey/site acceptance.
+
+Run the existing Suite, Workshop refresh, Recu.me and GitHub-sync checks as well. `node tools/validate-userscripts.mjs` without `--write-meta` is a read-only validation gate suitable for a no-build/no-deployment stage.
 
 Real observed browser/device interaction is the standard for UI behavior when reasonably possible. Report separately what was directly observed, what was verified by automation, and what remains inferred or unverified.

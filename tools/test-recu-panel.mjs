@@ -162,6 +162,7 @@ function fixture({ storage = new Map(), intersection = false } = {}) {
     isWorkshopRoute: () => false, isRecorderHubRoute: () => false,
     recuProfileUrl: room => `https://recu.me/performer/${encodeURIComponent(room)}`,
     currentRoom: 'alpha',
+    recuExplicitRoom: null,
     MutationObserver: class {
       constructor(callback) { this.callback = callback; this.targets = new Set(); }
       observe(target, options) { target.attributeObservers.set(this, options); this.targets.add(target); }
@@ -499,6 +500,9 @@ function helperFixture({ pending = true, token = true, recognized = true, room =
   f.context.contextOnly = false;
   f.document.append(tab, el('div', { id: 'roomTabs' }, [panel]));
   f.api.ensureRecuRoomTab();
+  assert.equal(f.requests.length, 0, 'a remembered Share/Recu tab must not load automatically');
+  tab.listeners.get('click')[0]();
+  await new Promise(resolve => setTimeout(resolve, 5));
   assert.equal(f.requests.length, 1);
   tab.classList.remove('tabOpen');
   await settle();

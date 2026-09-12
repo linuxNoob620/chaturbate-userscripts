@@ -49,6 +49,8 @@ const GITHUB_SYNC_TARGET = Object.freeze({
 const GITHUB_API_VERSION = '2022-11-28';
 const GITHUB_PBKDF2_ITERATIONS = 250000;
 const Storage = { load() { return { sample: true }; } };
+let suiteSettingsRevision = 0;
+let pendingStoreWriter = null;
 function buildSuiteSettingsPayload(value) { return value; }
 function openGithubSyncSetup() {}
 function updateGithubSyncMenuLabel() {}
@@ -130,10 +132,9 @@ context.GM_xmlhttpRequest = options => {
   }
   return { abort() {} };
 };
-const retriedUpload = await api.uploadSuiteSettingsToGithub(config, passphrase, payload);
-assert.equal(retriedUpload.commit, 'retried-commit');
-assert.deepEqual(retryCalls.map(call => call.method), ['GET', 'PUT', 'GET', 'PUT']);
-assert.equal(JSON.parse(retryCalls[3].data).sha, 'newer-sha', 'A 409 retry must re-read and use the newest file SHA');
+await assert.rejects(api.uploadSuiteSettingsToGithub(config, passphrase, payload), /cloud backup changed during upload/);
+assert.deepEqual(retryCalls.map(call => call.method), ['GET', 'PUT'], 'A conflict must not overwrite the newer backup with the stale encrypted payload');
+assert.equal(putAttempts, 1);
 
 context.GM_xmlhttpRequest = options => {
   setTimeout(() => options.onload({
@@ -146,4 +147,4 @@ const downloaded = await api.downloadSuiteSettingsFromGithub(config, passphrase)
 assert.deepEqual(downloaded.payload, payload);
 assert.equal(downloaded.sha, 'new-commit-sha');
 
-console.log('GitHub sync tests passed: encryption, wrong-passphrase rejection, overwrite, 409 retry, and download/import.');
+console.log('GitHub sync tests passed: encryption, wrong-passphrase rejection, overwrite, conflict rejection, and download/import.');

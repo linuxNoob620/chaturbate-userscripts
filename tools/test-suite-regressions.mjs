@@ -19,12 +19,15 @@ requireText("const FILE_INSTANCE_MARKER_ID = 'ziggy-chaturbate-suite-file-runtim
 requireText("document.getElementById(LEGACY_INSTANCE_MARKER_ID)", 'file-wide guard does not block an older Suite runtime');
 requireText('function refreshNativeLayoutMode()', 'dynamic desktop/mobile layout reconciliation is missing');
 requireText('let nativeMobilePage = isNativeMobileSite()', 'layout state is still frozen at injector startup');
-requireText('const stopRecorderNativeNode = node =>', 'Recorder Hub native media teardown is missing');
-requireText('const disposeRecorderNativeChild = child =>', 'Recorder Hub native document pruning is missing');
-requireText('child.remove();', 'Recorder Hub leaves the hidden native document mounted');
-rejectText('child.hidden = true', 'Recorder Hub still hides the native document instead of pruning it');
-requireText('let recorderPublishedEmptyState = false', 'Recorder Hub does not suppress redundant empty-state broadcasts');
-requireText('const RECORDER_PROCESSED_COMMAND_LIMIT = 500', 'Recorder Hub command de-duplication history is unbounded');
+for (const removed of ['UnifiedRecorder', 'MediaRecorder', 'Recorder Hub', 'multicam_recorder', 'RECORDER_OWNER_KEY', '@resource          mediabunny', 'shortcutRecordPage']) {
+  rejectText(removed, `Removed recording runtime returned: ${removed}`);
+}
+requireText('rg-native-categories', 'Workshop native category row is missing');
+requireText('roomgrid-mobile-recu-tab', 'Direct native-style Recu.me mobile tab is missing');
+requireText("$('div', { class: 'ziggy-recu-head' }", 'Recu heading must not inherit the native mobile page-header positioning');
+requireText('.roomgrid-mobile-host-tab::after { display:none!important; }', 'Native host underline must not compete with the selected Suite tab');
+requireText('.PrivateTab.roomgrid-mobile-rooms-host > :not(.roomgrid-mobile-panel)', 'Private composer must remain scoped out of the Rooms panel');
+requireText('function openQuickRoomEntry()', 'Add room shortcut must have a visible input after header adoption');
 requireText("window.addEventListener('pageshow', () => {", 'back-forward-cache state restoration is missing');
 requireText('publishSuiteState();', 'Suite availability is not republished after page restoration');
 
@@ -74,4 +77,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-process.stdout.write('Suite lifecycle, unified identity, Recorder Hub, and Focus-removal regression checks passed.\n');
+process.stdout.write('Suite lifecycle, native navigation, recording removal, and Focus-removal regression checks passed.\n');

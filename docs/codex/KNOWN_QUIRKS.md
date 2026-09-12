@@ -47,3 +47,27 @@ Last verified: 2026-09-08 in the persistent Chrome-for-Testing profile with Tamp
 ## Room-status responses renew live-stream tokens
 
 Chaturbate can return the same HLS origin and path with a changed `token` query parameter on successive status probes. Comparing the entire URL caused a healthy Workshop stream to be reattached during refresh. For a healthy loaded video, compare URLs with only `token` removed; preserve all other URL differences and the existing explicit-refresh/error recovery paths. Confirmed through live debugger inspection and video-element retention checks on 2026-09-09.
+
+## Historical recorder quirk: valid MP4 conversion can discard an unsupported video track
+
+The current userscript no longer records or converts media. Retain this observation for interpreting older recordings/recovery data and frozen extension builds, not as a current userscript execution path.
+
+On the OPPO/Quetta recorder pass of 2026-09-09, AVC constant-bitrate encoding was unsupported for the tested dimensions while variable bitrate was supported. Pinned Mediabunny 1.55.5 could return `isValid: true` with audio usable and video in `discardedTracks` (`no_encodable_target_codec`). The resulting MP4 was audio-only despite a good VP9/Opus WebM source.
+
+Check codec capability using the source dimensions and intended quality; preserve supported constant bitrate, otherwise try variable bitrate. Also reject discarded expected audio/video tracks independently of container validity. A subsequent real-device H.264/AAC file played and decoded. Keep recoverable source data; this does not prove every device/codec combination.
+
+## Quetta fullscreen viewport grows after the initial event
+
+Quetta can retract its browser chrome after `fullscreenchange`, increasing the portrait viewport from roughly 804 to 931 CSS pixels. Freezing preview geometry at the first event leaves an incorrectly short image. Fill subsequent viewport growth until the user actually changes zoom; afterward preserve user zoom across the tested rotation sequence. Confirmed on the actual phone, 2026-09-09.
+
+## Native browser video fullscreen is not an ancestor-fullscreen exit button
+
+In Workshop, the existing `nofullscreen` controls policy disabled the browser fullscreen control. Temporarily removing it allowed the native video control to replace `.cam-media` fullscreen with video-only fullscreen and force a landscape presentation; it did not exit the ancestor. Reverted after the actual Quetta experiment on 2026-09-09. Do not describe token removal alone as a native-exit fix.
+
+## Native mobile header CSS can affect Suite semantic headers
+
+Chaturbate's mobile `header` selectors apply fixed positioning/dimensions to unrelated Suite headings. This affected the former Recorder Hub on 2026-09-09 and the Recu.me panel on the actual OPPO/Quetta pass on 2026-09-12. Recu.me now uses `div.ziggy-recu-head`; its heading stays in the panel below the video. Avoid adding semantic `header` elements to native mobile room panels without checking the site's competing selectors. The Recorder Hub has since been removed.
+
+## Mobile carousel active underline belongs to a pseudo-element
+
+On the tested native mobile room strip, the active underline is rendered with `::after`, not only `border-bottom`. Suite tabs can temporarily use a native carousel slot while showing their own label; changing the host's border alone leaves a second active underline. Scope pseudo-element suppression to the owned host marker and remove that marker when returning to native content. Confirmed through actual OPPO/Quetta Rooms/Recu.me/Bio interactions, 2026-09-12.

@@ -24,3 +24,13 @@ This file contains only behavior observed on Chaturbate with the Ziggy userscrip
 - Rotation retained fullscreen; landscape used the approximately 932 x 428 viewport with source aspect preserved and native controls/chat present.
 - Three native-control exit/re-entry cycles succeeded. Android Back can leave the site's expanded-player state active after exiting browser fullscreen; it is not equivalent to the site's own exit control.
 - Audio-control behavior and every zoom boundary were not exhaustively tested. These observations do not establish userscript parity.
+
+## Native zoom / rotation refinement — 2026-09-09
+
+- Actual OPPO CPH2791 / Quetta, live `danamily` room, Suite disabled in Tampermonkey and runtime absence confirmed after reload. Measurements concern a 16:9 live source; adaptive resolution varied without changing aspect ratio.
+- At about 427 x 931 CSS pixels, native portrait fullscreen again enlarged the source to approximately 1655 x 931 and cropped it horizontally. Room entry remained inline without automatic fullscreen.
+- The compared inward pinch reduced the source to approximately 1326 x 746, top-aligned. A horizontal drag changed pan without changing zoom.
+- Rotating the real phone's OS display to landscape contained the image in the approximately 931 x 427 viewport. Returning to portrait **retained the reduced zoom but recentered horizontal pan**. Rotation was driven by ADB display-rotation control; physical sensor rotation was not independently tested.
+- Three exits through the site's native control and re-entries retained the session zoom and usable controls. Bio navigation and content scrolling worked afterward; URL/tab count did not unexpectedly change.
+- Native inline source sizing was about 507 x 285 within a roughly 428-pixel player, cropped horizontally. Do not assume a Suite contain/fit inline layout is an exact match.
+- This refines the native acceptance target, not a blanket claim about the userscript or every control/gesture boundary.

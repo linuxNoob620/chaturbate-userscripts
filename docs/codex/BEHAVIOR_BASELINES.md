@@ -2,6 +2,11 @@
 
 This file contains only behavior observed on Chaturbate with the Ziggy userscript disabled. Each entry must name the environment, device/browser, verification date, disabled-script state, and actual observation.
 
+## Homepage grid sizing — 2026-09-13
+
+- Persistent desktop Chrome-for-Testing, Suite 16.6.15 disabled in Tampermonkey and runtime absence confirmed after reload. The active native `.RoomCardGrid` used `repeat(auto-fill, minmax(174px, 1fr))` with approximately 9 CSS pixels between columns. At viewport widths 1889/1489/1139/839/639, the homepage displayed 10/7/5/4/3 columns without horizontal document overflow. These counts depend on the native thumbnail-size preference; they are not a required fixed breakpoint table for larger Suite previews.
+- Actual OPPO CPH2791 / Quetta Chromium 148.0.7778.217, Suite disabled and runtime absence confirmed. Native homepage at 427 x 804 CSS pixels displayed two columns; OS-driven landscape rotation to 884 x 300 displayed four, with approximately 9-pixel column gaps. The native viewport declaration was unchanged. Physical sensor rotation was not separately tested. Debugging was returned OFF and original rotation settings restored after the baseline pass.
+
 ## Mobile live-room baseline — 2026-09-05
 
 - Device: OPPO CPH2791.

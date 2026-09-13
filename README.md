@@ -1,9 +1,9 @@
 # Ziggy Chaturbate Suite
 
-This repository publishes one maintained Tampermonkey userscript for both desktop and mobile Chaturbate. The current release is **16.6.15**, with the known limitations below:
+This repository publishes one maintained Tampermonkey userscript for both desktop and mobile Chaturbate. The current release is **16.6.16**, with the known limitations below:
 
 - **Ziggy Chaturbate Suite** — one native-style Workshop and Rooms tool with Archive Search, playback and chat controls, room-tab naming, split view, encrypted settings backup, and desktop/mobile integration. Suite recording and Recorder Hub have been removed; existing saved media/recovery files are not deleted.
-- On Chaturbate's **native mobile site only**, the Suite exposes direct Rooms/Recu.me tabs, a two-column Workshop Grid, chat-hiding settings and Picture-in-Picture. Existing fullscreen adaptations remain, but complete native fullscreen parity is not established.
+- On Chaturbate's **native mobile site only**, the Suite exposes direct Rooms/Recu.me tabs, an adaptive Workshop Grid, chat-hiding settings and Picture-in-Picture. Existing fullscreen adaptations remain, but complete native fullscreen parity is not established.
 - Desktop behavior stays desktop-only; the mobile view is not activated by merely resizing a desktop page.
 
 ## Install
@@ -11,6 +11,12 @@ This repository publishes one maintained Tampermonkey userscript for both deskto
 - [Install Ziggy Chaturbate Suite](https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.user.js)
 
 Install the Suite from the same link on every device. Tampermonkey will use its embedded `@updateURL` and `@downloadURL` values for later update checks.
+
+### 16.6.16 — Adaptive Workshop grid
+
+- Columns automatically fit the available width, using the homepage's CSS `auto-fill` approach. Desktop density choices set preferred card widths instead of fixed column counts; the current normal-window density counts are preserved.
+- Mobile no longer locks every orientation to two columns. Actual Quetta testing showed two in portrait and four in landscape, matching the tested native homepage counts.
+- Live Chrome resizing retained card order/identity and visible playback. Desktop preview fullscreen/Escape and phone double-tap/Android Back passed focused regression checks. Split View sizing and the existing fullscreen limitations are unchanged.
 
 ### 16.6.15 — GitHub import and export feedback
 

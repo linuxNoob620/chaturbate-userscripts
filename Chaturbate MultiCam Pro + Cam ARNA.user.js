@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.15
+// @version           16.6.16
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -203,7 +203,7 @@
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.15');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.16');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -219,7 +219,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.15');
+  instanceMarker.setAttribute('data-suite-version', '16.6.16');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1413,7 +1413,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.15',
+    version: '16.6.16',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -8242,7 +8242,7 @@
         body.rg-workshop-native.rg-phone-device .rg-category-pill { height:36px!important; padding:8px 12px!important; }
         body.rg-workshop-native.rg-phone-device .rg-native-actions { width:100%; justify-content:flex-end; gap:16px; }
         body.rg-workshop-native.rg-phone-device .rg-native-icon { min-height:40px!important; height:40px!important; }
-        body.rg-workshop-native.rg-phone-device .grid:not(.view-split) { grid-template-columns:repeat(2,minmax(0,1fr))!important; padding:0 4px 12px!important; gap:7px!important; }
+        body.rg-workshop-native.rg-phone-device .grid:not(.view-split) { grid-template-columns:repeat(auto-fill,minmax(min(100%,174px),1fr))!important; padding:0 4px 12px!important; gap:7px!important; }
         body.rg-workshop-native.rg-phone-device:not(.rg-pure-mode) .grid:not(.view-split) .cam-card:not(:fullscreen) > .cam-media:not(:fullscreen) { aspect-ratio:4/3!important; }
         body.rg-workshop-native.rg-phone-device .cam-info { min-height:76px; padding:4px; }
         body.rg-workshop-native.rg-phone-device .cam-info-name { font-size:13px; }
@@ -8953,10 +8953,13 @@
         grid.style.setProperty('--split-ratio', clampInt(store.state.settings.splitRatio, 20, 80, 50) + '%');
         return;
       }
-      const columns = phoneEnvironment ? 2 : ({ 2: 2, 4: 4, 6: 5, 9: 6 }[layoutSize()] || 4);
+      // Like the homepage, fit whole cards to the available width. Density sets
+      // a preferred minimum, not a fixed column count; CSS handles live resizing.
+      const cardMinWidth = { 2: 604, 4: 302, 6: 240, 9: 200 }[layoutSize()] || 302;
       grid.style.display = 'grid';
       grid.style.gridTemplateAreas = '';
-      grid.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
+      grid.style.gridTemplateColumns = phoneEnvironment ? 'repeat(auto-fill, minmax(min(100%, 174px), 1fr))'
+        : `repeat(auto-fill, minmax(min(100%, ${cardMinWidth}px), 1fr))`;
       grid.style.gridTemplateRows = '';
       grid.style.gridAutoRows = 'max-content';
       grid.style.gridAutoFlow = 'row';

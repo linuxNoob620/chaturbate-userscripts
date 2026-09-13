@@ -3,12 +3,21 @@
 ## Deployment
 
 - Primary runtime: Tampermonkey userscript `Chaturbate MultiCam Pro + Cam ARNA.user.js`.
-- Current userscript release: 16.6.15 (`main`, tag `v16.6.15`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
+- Current userscript release: 16.6.16 (`main`, tag `v16.6.16`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
 - Extension builds remain at 16.6.7. They were not modified, rebuilt, packaged, or published for this userscript-only change.
 - Local rollback point: Git tag `backup/pre-16.6.8-workshop-doubletap-20260905` at the 16.6.7 baseline.
-- Version 16.6.15 is installed in the existing Chrome testing-profile and Quetta Tampermonkey entries. Both editor readbacks matched the source after reload, and both live runtimes reported 16.6.15. No reinstall or settings reset was performed. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
+- Version 16.6.16 is installed in the existing Chrome testing-profile and Quetta Tampermonkey entries. Both editor readbacks matched the source after reload, and both live runtimes reported 16.6.16. No reinstall or settings reset was performed. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
 - Recu.me release rollback point: local tag `backup/pre-recu-16.6.13-20260909` at 16.6.12.
 - Candidate rollback point: `backup/pre-native-portrait-20260905`. Extension outputs are unchanged.
+
+## Adaptive Workshop grid — 16.6.16
+
+- Rollback: local tag `backup/pre-adaptive-workshop-16.6.15-20260913` at `0573b9d43c190feb47ed2aba98ee45c9e8f9dbb5`. Baseline userscript SHA-256: `3DAE9CC7C9B73C2AB204F9F4408AAF44408B3871928712F82028F7CAD882788B`.
+- `applyGridSize` uses CSS `auto-fill` rather than fixed desktop column counts. Existing density values map to preferred minimum widths of 604/302/240/200 CSS pixels; a 100%-width clamp permits narrower containers. Mobile uses a 174-pixel preferred minimum rather than an unconditional two-column rule. No resize observer, polling, renderer, video sizing, gesture or fullscreen changes were added. Split View retains its own tracks.
+- Actual Chrome/Tampermonkey Standard density: viewport widths 1889/1489/1139/839/639 produced 5/4/3/2/1 columns without grid overflow. At 1489 pixels, Large/Standard/Compact/Dense produced 2/4/5/6 columns. Resizing retained card identity/order and continuously visible videos; previews moved offscreen still follow the existing media cleanup policy. Double-click preview fullscreen and Escape retained the same playing video and Workshop URL.
+- Actual OPPO/Quetta/Tampermonkey: 427-pixel portrait and 884-pixel OS-rotated landscape produced two/four columns, compared with the same native homepage counts in the disabled-script baseline. No grid overflow; cards and the inspected playing video survived rotation. Portrait return, preview double-tap fullscreen and Android Back retained playback and the Workshop URL. The prior category was restored. These are focused grid regressions, not complete native fullscreen acceptance.
+- The extracted-source grid check fails against the old fixed-column baseline and passes the candidate, covering every density, narrow-container clamp expression, mobile CSS precedence and Split View entry/exit ownership. Syntax, metadata and the userscript regression suite pass. Normal-room entry remained non-fullscreen and muted; exhaustive normal-room playback/fullscreen behavior was not retested because its code is unchanged.
+- Userscript-only update; extension artifacts remain untouched. No account actions, cloud writes, library edits or recording data changes were performed.
 
 ## GitHub import and export feedback — 16.6.15
 
@@ -137,7 +146,7 @@
 
 Expected idle state: **OFF**.
 
-Latest verification, September 12 after the 16.6.15 import/toast pass: flag visibly `Default` after restart, command-line file absent, ADB forward/reverse lists empty, no unsupported-feature warning. It began OFF and was enabled only for the phone pass. No orientation or unrelated phone setting was changed. Existing tabs and saved media/recovery data were preserved; no temporary test tab remains, and the temporary UI dump was removed. The Suite remains enabled at 16.6.15. Phone testing is finished and the user was told they may disconnect.
+Latest verification, September 13 after the 16.6.16 grid passes: flag visibly `Default` after each pass/restart, command-line file absent, no pass-specific ADB forward, no unsupported-feature warning. It began OFF and was enabled only for the two bounded phone passes, never during coding/desktop work. Original rotation was restored (`accelerometer_rotation=1`, `user_rotation=0`). The temporary Workshop tab and UI dump were removed; existing tabs and saved data were preserved. Suite remains enabled at 16.6.16. Phone testing is finished and the user was told they may disconnect.
 
 Final verified state after the real-phone passes on 2026-09-09:
 

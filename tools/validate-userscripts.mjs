@@ -9,6 +9,12 @@ const owner = 'linuxNoob620';
 const repo = 'chaturbate-userscripts';
 const scripts = [
   {
+    file: 'Recu.me Accurate Timeline Previews.user.js',
+    meta: 'Recu.me Accurate Timeline Previews.meta.js',
+    internalVersion: /const VERSION\s*=\s*'([^']+)'/,
+    required: ['// @grant        none', '// @match        https://recu.me/*'],
+  },
+  {
     file: 'Chaturbate MultiCam Pro + Cam ARNA.user.js',
     meta: 'Chaturbate MultiCam Pro + Cam ARNA.meta.js',
     internalVersion: /version:\s*'([^']+)'/,

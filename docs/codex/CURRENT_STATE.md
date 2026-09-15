@@ -10,6 +10,12 @@
 - Recu.me release rollback point: local tag `backup/pre-recu-16.6.13-20260909` at 16.6.12.
 - Candidate rollback point: `backup/pre-native-portrait-20260905`. Extension outputs are unchanged.
 
+## Independent Recu.me timeline previews — 1.0.0
+
+- `Recu.me Accurate Timeline Previews.user.js` is an optional separate script, not a Suite or extension update. It decodes the displayed hover second, anchors HLS timestamps at the stream beginning, matches the main rendition, and presents loading/unavailable rather than an approximate frame.
+- Actual desktop Chrome/Tampermonkey checks passed four timestamps with 0.015-second frame error. Two same-time main-video comparisons had identical frame timestamps and comparison pixels. Rapid-hover cancellation, request shutdown and idle decoder disposal were observed. Scope, resource costs and remaining browser/source coverage are documented in `../RECU_ACCURATE_PREVIEWS.md`.
+- Main Suite source remains byte-identical to 16.6.16. No phone or extension work was performed.
+
 ## Adaptive Workshop grid — 16.6.16
 
 - Rollback: local tag `backup/pre-adaptive-workshop-16.6.15-20260913` at `0573b9d43c190feb47ed2aba98ee45c9e8f9dbb5`. Baseline userscript SHA-256: `3DAE9CC7C9B73C2AB204F9F4408AAF44408B3871928712F82028F7CAD882788B`.

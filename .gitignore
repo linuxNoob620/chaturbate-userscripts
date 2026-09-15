@@ -1,4 +1,4 @@
-# Publish only the two maintained userscripts and repository support files.
+# Publish only the explicitly listed userscripts and repository support files.
 *
 !.gitignore
 !AGENTS.md
@@ -10,6 +10,8 @@
 !Chaturbate MultiCam Pro + Cam ARNA.meta.js
 !Chaturbate Desktop Mobile Comfort.user.js
 !Chaturbate Desktop Mobile Comfort.meta.js
+!Recu.me Accurate Timeline Previews.user.js
+!Recu.me Accurate Timeline Previews.meta.js
 !extension/
 !extension/**
 !docs/

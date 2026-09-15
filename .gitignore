@@ -1,6 +1,7 @@
 # Publish only the explicitly listed userscripts and repository support files.
 *
 !.gitignore
+!.gitattributes
 !AGENTS.md
 !README.md
 !LICENSE
@@ -12,6 +13,11 @@
 !Chaturbate Desktop Mobile Comfort.meta.js
 !Recu.me Accurate Timeline Previews.user.js
 !Recu.me Accurate Timeline Previews.meta.js
+!Recu.me Responsive Player.user.js
+!Recu.me Responsive Player.meta.js
+!standalone/
+!standalone/recu-responsive/
+!standalone/recu-responsive/**
 !extension/
 !extension/**
 !docs/

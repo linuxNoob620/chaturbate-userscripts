@@ -1,0 +1,5 @@
+# Preserve pinned upstream bytes and reproducible standalone build inputs.
+standalone/recu-responsive/vendor/* -text
+standalone/recu-responsive/*.js text eol=lf
+"Recu.me Responsive Player.user.js" text eol=lf
+"Recu.me Responsive Player.meta.js" text eol=lf

@@ -38,6 +38,14 @@ Install the Suite from the same link on every device. Tampermonkey will use its 
 
 The former standalone room-tab naming behavior is also integrated into the Suite, and Workshop always uses the unique `Ziggy Chaturbate Suite · Workshop` title.
 
+## Separate Recu.me replacement player — experimental
+
+[Install Recu.me Responsive Player](https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Recu.me%20Responsive%20Player.user.js) — **0.1.0**, an optional desktop prototype, independent of the Suite and extension builds.
+
+Disable **Accurate Timeline Previews**, reload a Recu.me recording, start its original video, then click **Use responsive player**. The replacement uses Shaka Player, the site's existing authorized media transport, and preloaded sampled storyboard thumbnails. It does not decode a new video frame for each hover. **Use original player** returns through the site's timestamp link.
+
+Actual Chrome/Tampermonkey checks showed already-loaded hover previews on the next animation frame, without extra media requests. Controls stay visible while hovering the timeline or using an open settings menu. Cold media seeks still took roughly 1–3 seconds; this prototype does **not** promise faster server delivery or second-accurate images. Mobile/Firefox and site controls outside the replacement player are not accepted integration surfaces yet. See [scope, measurements, limitations and build commands](docs/RECU_RESPONSIVE_PLAYER.md).
+
 ## Separate Recu.me timeline preview script
 
 [Install Recu.me Accurate Timeline Previews](https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Recu.me%20Accurate%20Timeline%20Previews.user.js) — version **1.0.0**. This is optional and independent of the Suite, runs only on `recu.me`, and requires the site's supported desktop HLS/Plyr player.

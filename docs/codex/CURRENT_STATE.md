@@ -10,6 +10,14 @@
 - Recu.me release rollback point: local tag `backup/pre-recu-16.6.13-20260909` at 16.6.12.
 - Candidate rollback point: `backup/pre-native-portrait-20260905`. Extension outputs are unchanged.
 
+## Independent Recu.me replacement player — 0.1.0 experimental
+
+- `Recu.me Responsive Player.user.js` is a separate opt-in desktop prototype with a private bundled Shaka 5.2.10 engine/UI, the site's existing authorized TS loader and preloaded sampled storyboard images. No Suite or extension source was changed.
+- Actual persistent Chrome/Tampermonkey playback, loaded hover, controls retention, quality/rate, scoped keyboard, repeated fullscreen button/F cycles, video PiP and native timestamp return passed on one recording. Final installed editor bytes matched the generated file; build `e50f01a5a201`. Full source/dependency review and 68 local controlled checks cover the new modules, not mobile parity.
+- Loaded sampled hover required no new segment/image request and appeared on the next animation frame in the measured pass. Cold media seeks still took roughly 1–3 seconds and were not proven faster than native. The tested source's samples were roughly 76 seconds apart; this replaces the requirement for second-accurate thumbnail decoding, not the source's sample density.
+- The old Accurate Timeline Previews entry is disabled in the testing profile to prevent overlapping modifications. Its unpublished local work was not included. The replacement is enabled, opt-in per page, and was left ready/paused. Native return uses the site's timestamp URL and native playback preferences rather than promising pause/volume/rate preservation.
+- Desktop-only experimental scope; mobile/Firefox, external site actions and browser Escape remain unaccepted. Details, installation, reproducible build and evidence: `../RECU_RESPONSIVE_PLAYER.md`. No phone settings were changed.
+
 ## Independent Recu.me timeline previews — 1.0.0
 
 - `Recu.me Accurate Timeline Previews.user.js` is an optional separate script, not a Suite or extension update. It decodes the displayed hover second, anchors HLS timestamps at the stream beginning, matches the main rendition, and presents loading/unavailable rather than an approximate frame.

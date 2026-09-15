@@ -44,6 +44,12 @@ Reliable workaround: Attempt the direct lazy request first. On HTTP 403, open th
 
 Last verified: 2026-09-08 in the persistent Chrome-for-Testing profile with Tampermonkey and Suite 16.6.11.
 
+## Native Share tab retains child ownership and shares selection styling with hover
+
+Chaturbate's native Share controller retains `shareRows` references and calls `removeChild` on later selection. Replacing all `#shareTab` children breaks that cleanup before the native active-tab state updates. The visible panel can then disagree with the selected tab; `tabOpen` also appears on mouse hover and is not by itself a selection signal.
+
+Keep original native children attached and render into a separate Suite-owned child, hiding native siblings only within that host. Use the native host display for selection. Record deliberate Suite selection during click capture: a native display mutation can deliver an observer callback before a later bubbling listener, otherwise the entry-time Bio fallback can undo the user's click. Confirmed against disabled/enabled actual Chrome/Tampermonkey behavior on 2026-09-15; extracted-source regressions preserve both node ownership and callback ordering.
+
 ## Room-status responses renew live-stream tokens
 
 Chaturbate can return the same HLS origin and path with a changed `token` query parameter on successive status probes. Comparing the entire URL caused a healthy Workshop stream to be reattached during refresh. For a healthy loaded video, compare URLs with only `token` removed; preserve all other URL differences and the existing explicit-refresh/error recovery paths. Confirmed through live debugger inspection and video-element retention checks on 2026-09-09.

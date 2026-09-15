@@ -3,10 +3,10 @@
 ## Deployment
 
 - Primary runtime: Tampermonkey userscript `Chaturbate MultiCam Pro + Cam ARNA.user.js`.
-- Current userscript release: 16.6.16 (`main`, tag `v16.6.16`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
+- Current userscript release: 16.6.17 (`main`, tag `v16.6.17`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
 - Extension builds remain at 16.6.7. They were not modified, rebuilt, packaged, or published for this userscript-only change.
 - Local rollback point: Git tag `backup/pre-16.6.8-workshop-doubletap-20260905` at the 16.6.7 baseline.
-- Version 16.6.16 is installed in the existing Chrome testing-profile and Quetta Tampermonkey entries. Both editor readbacks matched the source after reload, and both live runtimes reported 16.6.16. No reinstall or settings reset was performed. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
+- Version 16.6.17 is installed in the existing Chrome testing-profile Tampermonkey entry; its saved editor readback matched the source after reload. Quetta was last updated/tested at 16.6.16; no phone was connected for 16.6.17. No reinstall or settings reset was performed. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
 - Recu.me release rollback point: local tag `backup/pre-recu-16.6.13-20260909` at 16.6.12.
 - Candidate rollback point: `backup/pre-native-portrait-20260905`. Extension outputs are unchanged.
 
@@ -22,7 +22,7 @@
 
 - `Recu.me Accurate Timeline Previews.user.js` is an optional separate script, not a Suite or extension update. It decodes the displayed hover second, anchors HLS timestamps at the stream beginning, matches the main rendition, and presents loading/unavailable rather than an approximate frame.
 - Actual desktop Chrome/Tampermonkey checks passed four timestamps with 0.015-second frame error. Two same-time main-video comparisons had identical frame timestamps and comparison pixels. Rapid-hover cancellation, request shutdown and idle decoder disposal were observed. Scope, resource costs and remaining browser/source coverage are documented in `../RECU_ACCURATE_PREVIEWS.md`.
-- Main Suite source remains byte-identical to 16.6.16. No phone or extension work was performed.
+- That independent release left the main Suite byte-identical to 16.6.16. Subsequent Suite-only changes are listed separately below. No phone or extension work was performed for the timeline-preview release.
 
 ## Adaptive Workshop grid — 16.6.16
 
@@ -120,16 +120,25 @@
 
 ## Recu.me model-room tab
 
-- On desktop model-room pages, the Suite renames Chaturbate's native **Share** tab to **Recu.me** and reuses the native `#shareTab` content panel.
-- In the current candidate, deliberate selection loads the tab without repeated label writes; remembered Share/Recu.me selection instead falls back to Bio on room entry. After deliberate selection, attribute-only return can resume a cancelled load. Page hiding and navigation still cancel pending work and hover animations.
+- On desktop model-room pages, the Suite renames Chaturbate's native **Share** tab to **Recu.me** and renders inside its own `#ziggy-recu-desktop-panel` child. Original `#shareTab` children remain native-owned and are hidden through host-scoped CSS, not removed: native Share cleanup retains references to them.
+- Deliberate selection is recorded during click capture, before the native tab controller's display mutations can trigger reconciliation. Remembered Share/Recu.me selection still falls back to Bio on room entry. Selection follows the native host's display, not `tabOpen` (also a hover class). Both native host and tab attributes are observed.
+- Changing native panels, room/route changes, removal and page exit cancel pending work. Merely backgrounding the document stops hover but preserves its already-pending helper/profile request. New lazy image discovery waits until visible; already-queued requests can finish. Return resumes the selected panel without reopening a pending helper.
 - On native mobile room pages, a direct **Recu.me** tab and the existing three-dot menu entry call the same renderer. A stable **Back to Room Menu** control returns to the original menu. Suite tab ownership is visual/panel-scoped; the native player/fullscreen path is not replaced.
-- Profile data is cached separately from settings in tab-session storage: twelve performers maximum, five-minute freshness, thirty-minute retention. Stale entries are labelled and reused until explicit Refresh. Refresh keeps previous results visible and reports failures without discarding them.
+- Profile data is cached separately from settings in tab-session storage: twelve performers maximum, five-minute freshness, thirty-minute retention. Stale entries are labelled and reused until explicit Refresh. Refresh keeps previous results visible and reports failures without discarding them. Same-room loading coalesces repeated Refresh; initial loading disables Refresh. Explicit Refresh retries failed/missing thumbnails even if the new profile request fails; cancelled thumbnails are re-enrolled after their old promise settles.
 - The panel emphasizes last/new broadcasts, collapsible profile details, recording date/duration and labelled views. It initially shows eight cards; **Load older recordings** reveals remaining fetched cards before requesting an observed native pagination URL. Duplicate recording IDs are excluded.
 - Exact performer identity and recording/page URLs are checked. External hosts are allowlisted. Images are fetched near the visible area, at most three requests at once, then converted to CSP-compatible data URLs. Failure placeholders wait for explicit refresh instead of retrying indefinitely.
 - Desktop mouse hover waits 300 ms, then cycles random nonrepeating samples from Recu.me's confirmed sixteen-frame sprite. Only one hover animation runs; touch does not trigger it, and reduced-motion disables cycling. These are sampled images, not continuous/full-video seeking. Asset caching is memory-only and bounded.
 - Recu.me currently rejects direct background userscript requests with HTTP 403. The Suite then opens the performer page in an inactive helper tab, extracts only the sanitized performer payload through the same Tampermonkey script, and closes the helper tab. Ordinary Recu.me visits are inert and do not mount the Suite.
-- Helper requests use expiring one-use pending tokens, reject mismatched/stale replies and delete their transient storage keys when finished or cancelled. Ordinary Recu.me visits remain inert.
+- Helper requests use one shared 90-second ownership budget, expiring one-use pending tokens, reject mismatched/stale replies and delete their transient storage keys when finished or cancelled. Loading status explains that the helper can be selected to complete verification. Ordinary Recu.me visits remain inert. Direct HTTP-403 routing and Cloudflare policy are unchanged; no challenge bypass or guarantee against repeated verification is claimed.
 - The full-profile and recording actions remain normal external Recu.me links. The Suite does not embed an iframe, weaken Chaturbate's CSP, or reproduce Recu.me account/navigation behavior.
+
+## Recu.me reliability verification — 16.6.17
+
+- Rollback: local tag `backup/pre-recu-panel-reliability-20260915` at `39212330124237aa88a288177ed9e8b3e68f6096`; baseline Suite SHA-256 `4d518153970c7221fe271aa2d4f11a3764e04be5f4881aec178d809764f74c88`.
+- Actual Chrome/Tampermonkey baseline: disabled-script Share/Bio switching retained the correct selected tab and native host display without errors. The old Suite removed native children; repeated Share selection threw native `removeChild` errors before `activeTabName` updated. Pointer exit then removed hover styling and stopped preview loading. The candidate preserves those children and passes three Recu.me/Bio return cycles without that error.
+- Installed candidate: remembered Share entry returns to Bio; deliberate selection, cold profile loading, all eight initial decoded thumbnails, sampled hover/frame changes and hover exit, Refresh retaining previous results, 8/15/22-card pagination without duplicate URLs, and helper closure passed. No native video/fullscreen code changed. A separate intermittent native JSON parse error was observed but not attributed or repaired in this scoped change.
+- An actual interactive Cloudflare challenge was not reproduced during the candidate passes. Hidden-owner completion/cancellation, 90-second verification budget, forced-refresh coalescing, thumbnail retry/cancellation races and click/mutation ordering are covered by extracted-source fixtures, including failing baseline/counterfactual probes. Do not describe Cloudflare challenges as eliminated.
+- Syntax, Suite metadata/build and userscript regression gates passed; independent Riqor scoped review found no blocker. No phone was connected: mobile helper/menu behavior is fixture-tested, not newly real-device verified. Standalone Recu.me scripts, extensions, account data and phone settings were not changed for this release.
 
 ## Recu.me verification — 2026-09-09
 

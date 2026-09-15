@@ -22,9 +22,16 @@ class Element {
     this.tagName = tag.toUpperCase();
     this.attributes = {};
     this.dataset = {};
-    this.style = {};
+    this.style = new Proxy({}, {
+      set: (styles, name, value) => {
+        styles[name] = String(value);
+        this.setAttribute('style', Object.entries(styles).map(([key, item]) => `${key}:${item}`).join(';'));
+        return true;
+      },
+    });
     this.children = [];
     this.listeners = new Map();
+    this.listenerOptions = new Map();
     this.attributeObservers = new Map();
     this.isConnected = true;
     this.parentElement = null;
@@ -72,21 +79,50 @@ class Element {
     this.children.unshift(...children);
   }
   appendChild(child) {
-    if (child instanceof Element) child.parentElement = this;
+    if (child instanceof Element) {
+      if (child.parentElement) child.parentElement.removeChild(child);
+      child.parentElement = this;
+      const reconnect = node => {
+        node.isConnected = this.isConnected;
+        for (const item of node.children) if (item instanceof Element) reconnect(item);
+      };
+      reconnect(child);
+    }
     this.children.push(child);
     return child;
   }
-  replaceChildren(...children) { this.children = []; this.append(...children); }
-  remove() {
-    if (this.parentElement) this.parentElement.children = this.parentElement.children.filter(child => child !== this);
-    this.parentElement = null;
-    this.isConnected = false;
+  removeChild(child) {
+    const index = this.children.indexOf(child);
+    if (index < 0) throw new Error('NotFoundError: node is not a child of this parent');
+    this.children.splice(index, 1);
+    if (child instanceof Element) {
+      child.parentElement = null;
+      const disconnect = node => {
+        node.isConnected = false;
+        for (const item of node.children) if (item instanceof Element) disconnect(item);
+      };
+      disconnect(child);
+    }
+    return child;
   }
-  addEventListener(name, fn) {
+  replaceChildren(...children) {
+    for (const child of [...this.children]) this.removeChild(child);
+    this.append(...children);
+  }
+  remove() {
+    if (this.parentElement) this.parentElement.removeChild(this);
+    else this.isConnected = false;
+  }
+  addEventListener(name, fn, options = false) {
     if (!this.listeners.has(name)) this.listeners.set(name, []);
     this.listeners.get(name).push(fn);
+    if (!this.listenerOptions.has(name)) this.listenerOptions.set(name, new Map());
+    this.listenerOptions.get(name).set(fn, { capture: typeof options === 'boolean' ? options : !!options.capture });
   }
-  removeEventListener(name, fn) { this.listeners.set(name, (this.listeners.get(name) || []).filter(x => x !== fn)); }
+  removeEventListener(name, fn) {
+    this.listeners.set(name, (this.listeners.get(name) || []).filter(x => x !== fn));
+    this.listenerOptions.get(name)?.delete(fn);
+  }
   contains(node) { return node === this || this.children.some(child => child instanceof Element && child.contains(node)); }
   matches(selector) {
     const tag = selector.match(/^[a-z][a-z0-9-]*/i)?.[0];
@@ -193,7 +229,7 @@ function fixture({ storage = new Map(), intersection = false } = {}) {
     extractRecuPerformerPayload, safeRecuLink, safeRecuImage, safeRecuPageUrl,
     sanitizeRecuProfilePayload, readRecuCache, writeRecuCache,
     requestRecuProfile, cancelRecuRequests, loadRecuRoomPanel, loadMoreRecuRecordings, observeRecuThumbnails,
-    ensureRecuRoomTab, ensureRecuMobileMenu, setRecuMobileOpen,
+    ensureRecuRoomTab, ensureRecuMobileMenu, setRecuMobileOpen, isRecuPanelActive,
     setRoom(room) { currentRoom = room; },
     generation() { return recuRequestGeneration; }
   };`, context, { filename: 'recu-panel-extracted.js' });
@@ -202,6 +238,26 @@ function fixture({ storage = new Map(), intersection = false } = {}) {
     now: () => now, advance: ms => { now += ms; }, tickIntervals: () => { for (const fn of [...intervals.values()]) fn(); },
     intersect: () => { for (const observer of observers) observer.callback([...observer.observed].map(target => ({ target, isIntersecting: true }))); },
   };
+}
+
+// This models the native DOM ownership contract, not native site JavaScript or
+// CSS rendering: the native Share object retains rows that it removes/re-adds.
+function desktopPanelFixture(f, { selected = true, reconcile = false } = {}) {
+  const tab = el('a', { class: `tabLink${selected ? ' tabOpen' : ''}`, 'data-testid': 'room-tab-Share' });
+  const nativeRow = el('div', { class: 'native-share-row' }, 'Native share row');
+  const host = el('div', { id: 'shareTab' }, [nativeRow]);
+  host.style.display = selected ? 'block' : 'none';
+  f.document.append(tab, el('div', { id: 'roomTabs' }, [host]));
+  let panel;
+  if (reconcile) {
+    f.context.contextOnly = false;
+    f.api.ensureRecuRoomTab();
+    panel = host.querySelector('#ziggy-recu-desktop-panel');
+  } else {
+    panel = el('div', { id: 'ziggy-recu-desktop-panel' });
+    host.appendChild(panel);
+  }
+  return { tab, host, panel, nativeRow };
 }
 
 function recording(id, { href = `/alpha/video/${id}/play`, image = 'https://img.mediafront.net/poster.jpg', previewImage = 'https://img.mediafront.net/sprite.jpg' } = {}) {
@@ -230,19 +286,20 @@ function helperFixture({ pending = true, token = true, recognized = true, room =
   const key = `ziggy_recu_bridge_v1_${id}`;
   const stored = new Map();
   const writes = [], timers = [];
-  let closes = 0;
+  let closes = 0, now = Date.now();
   const document = recognized ? performerDocument({ identity: room, latest, cards: [], next: '' }) : el('document', {}, []);
   document.readyState = 'complete';
-  if (pending) stored.set(key, JSON.stringify({ token: id, room, pending: true, at: Date.now() }));
+  if (pending) stored.set(key, JSON.stringify({ token: id, room, pending: true, at: now }));
   vm.runInNewContext(`(function() { ${helperImplementation} })();`, {
     URL, URLSearchParams, document,
+    Date: class extends Date { static now() { return now; } },
     location: new URL(`https://recu.me/performer/${room}${latest ? '/latest' : ''}${token ? `?ziggy_suite_bridge=${id}` : ''}`),
     GM_getValue: (name, fallback) => stored.get(name) ?? fallback,
     GM_setValue(name, value) { writes.push({ name, value }); stored.set(name, value); },
     window: { close() { closes++; } },
     setTimeout(fn, ms) { timers.push({ fn, ms }); },
   });
-  return { key, stored, writes, timers, closes: () => closes };
+  return { key, stored, writes, timers, document, advance: ms => { now += ms; }, closes: () => closes };
 }
 
 {
@@ -271,6 +328,20 @@ function helperFixture({ pending = true, token = true, recognized = true, room =
     const listing = helperFixture({ room, latest: true });
     assert.equal(listing.writes.length, 1, `the same username still supports the actual latest listing route: ${room}`);
   }
+}
+
+{
+  const waiting = helperFixture({ recognized: false });
+  waiting.advance(60000);
+  waiting.document.append(...performerDocument({ cards: [], next: '' }).children);
+  waiting.timers[0].fn();
+  assert.equal(waiting.writes.length, 1, 'a helper that becomes ready after sixty seconds must retain its pending owner');
+  assert.equal(JSON.parse(waiting.writes[0].value).payload.room, 'alpha');
+  const expired = helperFixture({ recognized: false });
+  expired.advance(90000);
+  expired.timers[0].fn();
+  assert.equal(expired.writes.length, 0, 'an expired helper cannot recreate its pending bridge key');
+  assert.equal(expired.closes(), 1, 'the helper deadline remains bounded');
 }
 
 {
@@ -397,6 +468,23 @@ function helperFixture({ pending = true, token = true, recognized = true, room =
 {
   const f = fixture(), panel = el('section');
   const first = f.api.loadRecuRoomPanel(panel, 'alpha');
+  assert.equal(panel.querySelector('button[data-recu-action="refresh"]').disabled, true, 'initial loading must disable Refresh');
+  const repeat = f.api.loadRecuRoomPanel(panel, 'alpha', true);
+  assert.equal(f.requests.length, 1, 'forced Refresh must coalesce with a same-room load');
+  assert.equal(f.requests[0].aborted, false, 'coalescing must not restart the profile request');
+  f.requests[0].options.onload({ status: 403 });
+  const helperRepeat = f.api.loadRecuRoomPanel(panel, 'alpha', true);
+  assert.equal(f.requests.length, 1, 'Refresh during helper verification must not issue another profile GET');
+  assert.equal(f.helperTabs.length, 1, 'Refresh during verification must retain one helper');
+  assert.equal(f.helperTabs[0].closed, false);
+  f.api.cancelRecuRequests();
+  await assertSettles(Promise.all([first, repeat, helperRepeat]), 'the coalesced loads still settle on cancellation');
+}
+
+{
+  const f = fixture(), panel = el('section');
+  const first = f.api.loadRecuRoomPanel(panel, 'alpha');
+  f.api.cancelRecuRequests();
   const replacement = f.api.loadRecuRoomPanel(panel, 'alpha', true);
   assert.equal(f.requests.length, 2);
   f.requests[0].options.onerror();
@@ -465,8 +553,8 @@ function helperFixture({ pending = true, token = true, recognized = true, room =
 }
 
 {
-  const f = fixture({ intersection: true }), panel = el('section');
-  f.document.appendChild(el('a', { class: 'tabLink tabOpen', 'data-testid': 'room-tab-Share' }));
+  const f = fixture({ intersection: true });
+  const { panel } = desktopPanelFixture(f);
   const profile = f.api.extractRecuPerformerPayload(performerDocument(), 'alpha');
   f.api.writeRecuCache('alpha', profile);
   await f.api.loadRecuRoomPanel(panel, 'alpha');
@@ -483,8 +571,8 @@ function helperFixture({ pending = true, token = true, recognized = true, room =
 }
 
 {
-  const f = fixture({ intersection: true }), panel = el('section');
-  f.document.appendChild(el('a', { class: 'tabLink tabOpen', 'data-testid': 'room-tab-Share' }));
+  const f = fixture({ intersection: true });
+  const { panel } = desktopPanelFixture(f);
   const profile = f.api.extractRecuPerformerPayload(performerDocument({ cards: [recording('101', { image: '' })] }), 'alpha');
   f.api.writeRecuCache('alpha', profile);
   await f.api.loadRecuRoomPanel(panel, 'alpha');
@@ -496,22 +584,29 @@ function helperFixture({ pending = true, token = true, recognized = true, room =
 }
 
 {
-  const f = fixture(), tab = el('a', { class: 'tabLink tabOpen', 'data-testid': 'room-tab-Share' }), panel = el('div', { id: 'shareTab' });
-  f.context.contextOnly = false;
-  f.document.append(tab, el('div', { id: 'roomTabs' }, [panel]));
-  f.api.ensureRecuRoomTab();
+  const f = fixture();
+  const { tab, host, panel } = desktopPanelFixture(f, { reconcile: true });
   assert.equal(f.requests.length, 0, 'a remembered Share/Recu tab must not load automatically');
+  assert.ok(panel, 'Suite rendering must have a private child inside the native Share host');
+  f.context.setTimeout = fn => { fn(); return 0; };
   tab.listeners.get('click')[0]();
-  await new Promise(resolve => setTimeout(resolve, 5));
   assert.equal(f.requests.length, 1);
+  host.style.display = 'none';
+  await settle();
+  assert.equal(f.requests[0].aborted, true, 'native panel hiding must cancel the active load even while tabOpen remains');
+  assert.equal(panel.dataset.ziggyRecuState, 'idle');
   tab.classList.remove('tabOpen');
   await settle();
-  assert.equal(f.requests[0].aborted, true, 'an attributes-only native tab switch must cancel the active load');
-  assert.equal(panel.dataset.ziggyRecuState, 'idle');
   tab.classList.add('tabOpen');
   await settle();
-  assert.equal(f.requests.length, 2, 'attributes-only return to Recu.me must restart a cancelled load');
-  panel.remove();
+  assert.equal(f.requests.length, 1, 'tabOpen hover styling alone must not start a hidden panel');
+  host.style.display = 'block';
+  await settle();
+  assert.equal(f.requests.length, 2, 'the observed native host display transition must resume a cancelled load');
+  tab.classList.remove('tabOpen');
+  await settle();
+  assert.equal(f.requests[1].aborted, false, 'removing hover styling must not cancel the actually visible native panel');
+  host.remove();
   f.api.ensureRecuRoomTab();
   assert.equal(f.requests[1].aborted, true, 'removing the native panel must cancel its request');
   await settle();
@@ -525,6 +620,195 @@ function helperFixture({ pending = true, token = true, recognized = true, room =
   f.api.ensureRecuRoomTab();
   assert.equal(f.requests[0].aborted, true, 'entering an unsupported route cancels an active Recu.me request');
   await assertSettles(loading, 'route-change cancellation must settle');
+}
+
+{
+  const f = fixture();
+  const { tab, host, panel } = desktopPanelFixture(f, { selected: false });
+  let bioFallbacks = 0;
+  const bio = el('a', { class: 'tabLink', 'data-testid': 'room-tab-Bio' });
+  bio.click = () => { bioFallbacks++; host.style.display = 'none'; };
+  f.document.appendChild(bio);
+  // Native onclick exists first; its style mutation may deliver an observer
+  // checkpoint before a later Suite bubbling listener. Capture must run first.
+  tab.addEventListener('click', () => { host.style.display = 'block'; });
+  f.context.contextOnly = false;
+  f.api.ensureRecuRoomTab();
+  host.style.display = 'block';
+  f.api.ensureRecuRoomTab();
+  await settle();
+  assert.equal(bioFallbacks, 1, 'remembered Share selection on entry must still return to Bio');
+  assert.equal(host.style.display, 'none');
+  assert.equal(f.requests.length, 0, 'remembered selection must not start a profile request');
+
+  const deferredClicks = [];
+  f.context.setTimeout = fn => { deferredClicks.push(fn); return deferredClicks.length; };
+  const clickListeners = [...tab.listeners.get('click')];
+  for (const capture of [true, false]) {
+    for (const listener of clickListeners) {
+      if (tab.listenerOptions.get('click').get(listener).capture !== capture) continue;
+      listener({ type: 'click', target: tab });
+      await Promise.resolve();
+    }
+  }
+  for (const callback of deferredClicks) callback();
+  await settle();
+  assert.equal(bioFallbacks, 1, 'explicit selection must be recorded before native style mutation can trigger the Bio fallback');
+  assert.equal(host.style.display, 'block', 'deliberate Recu selection remains visible after native click and observer callbacks');
+  assert.equal(f.api.isRecuPanelActive(panel), true);
+  assert.equal(f.requests.length, 1, 'one deliberate click starts exactly one profile request');
+  f.api.cancelRecuRequests();
+}
+
+{
+  const f = fixture({ intersection: true });
+  const { host, panel, nativeRow } = desktopPanelFixture(f, { reconcile: true });
+  assert.equal(host.classList.contains('ziggy-recu-host'), true, 'the native Share host receives scoped sibling-hiding ownership');
+  const assertNativeRetained = phase => {
+    assert.equal(nativeRow.parentElement, host, `${phase}: native row parent must be retained`);
+    assert.equal(host.querySelector('.native-share-row'), nativeRow, `${phase}: the exact native row must remain`);
+    assert.doesNotThrow(() => { host.removeChild(nativeRow); host.appendChild(nativeRow); }, `${phase}: native cleanup must still own its retained child`);
+    assert.equal(host.querySelector('#ziggy-recu-desktop-panel'), panel, `${phase}: the Suite child must remain stable`);
+  };
+  assertNativeRetained('idle');
+  const first = f.api.loadRecuRoomPanel(panel, 'alpha');
+  assertNativeRetained('loading');
+  f.requests[0].options.onerror();
+  await first;
+  assertNativeRetained('error');
+  f.api.writeRecuCache('alpha', f.api.extractRecuPerformerPayload(performerDocument(), 'alpha'));
+  await f.api.loadRecuRoomPanel(panel, 'alpha');
+  assertNativeRetained('cache render');
+  const card = panel.querySelector('.ziggy-recu-recording');
+  const refresh = f.api.loadRecuRoomPanel(panel, 'alpha', true);
+  assert.equal(panel.querySelector('.ziggy-recu-recording'), card, 'refresh must keep the visible old card until replacement');
+  assertNativeRetained('refresh loading');
+  f.requests[1].options.onload({ status: 200, responseText: 'alpha' });
+  await refresh;
+  assertNativeRetained('refresh complete');
+  f.api.cancelRecuRequests();
+}
+
+{
+  const f = fixture({ intersection: true });
+  const { host, panel } = desktopPanelFixture(f, { reconcile: true });
+  f.context.recuExplicitRoom = 'alpha';
+  const loading = f.api.loadRecuRoomPanel(panel, 'alpha');
+  f.requests[0].options.onload({ status: 403 });
+  const [key, raw] = [...f.gmStored][0], pending = JSON.parse(raw);
+  const generation = f.api.generation();
+  f.document.hidden = true;
+  for (const listener of f.document.listeners.get('visibilitychange') || []) listener();
+  f.api.ensureRecuRoomTab();
+  host.appendChild(el('div', { class: 'native-update' }, 'Native DOM churn'));
+  f.api.ensureRecuRoomTab();
+  assert.equal(f.api.isRecuPanelActive(panel), false, 'a background document must not be image-active');
+  assert.equal(f.api.generation(), generation, 'backgrounding the owner must not cancel its selected helper load');
+  assert.equal(f.helperTabs[0].closed, false, 'verification helper survives hidden-owner reconciliation');
+  assert.equal(f.gmStored.has(key), true, 'the hidden owner retains its pending bridge token');
+  assert.equal(f.requests.length, 1);
+  f.document.hidden = false;
+  for (const listener of f.document.listeners.get('visibilitychange') || []) listener();
+  assert.equal(f.requests.length, 1, 'returning to a pending load must not make another GET');
+  assert.equal(f.helperTabs.length, 1, 'returning to a pending load must not reopen its helper');
+  f.document.hidden = true;
+  for (const listener of f.document.listeners.get('visibilitychange') || []) listener();
+  f.advance(60000);
+  f.tickIntervals();
+  assert.equal(f.helperTabs[0].closed, false, 'a selected helper gets time for a verification longer than thirty seconds');
+  f.gmStored.set(key, JSON.stringify({ token: pending.token, room: 'alpha', at: f.now(), payload: f.api.extractRecuPerformerPayload(performerDocument(), 'alpha') }));
+  f.tickIntervals();
+  await loading;
+  assert.equal(panel.dataset.ziggyRecuState, 'loaded', 'a background owner may accept its completed helper');
+  assert.ok(f.api.readRecuCache('alpha'), 'the completed hidden-owner payload is cached');
+  assert.equal(f.requests.length, 1, 'hidden-owner completion must not start thumbnail fetches');
+  assert.equal(f.helperTabs[0].closed, true);
+  assert.equal(f.gmStored.has(key), false);
+  f.document.hidden = false;
+  for (const listener of f.document.listeners.get('visibilitychange') || []) listener();
+  f.intersect();
+  assert.equal(f.requests.length, 2, 'visible return starts the queued thumbnail without reloading the profile');
+  assert.equal(f.requests[1].options.url, 'https://img.mediafront.net/poster.jpg');
+  assert.equal(f.helperTabs.length, 1);
+  f.api.cancelRecuRequests();
+}
+
+for (const reason of ['native switch', 'host removal', 'room change', 'unsupported route']) {
+  const f = fixture();
+  const { host, panel } = desktopPanelFixture(f, { reconcile: true });
+  f.context.recuExplicitRoom = 'alpha';
+  const loading = f.api.loadRecuRoomPanel(panel, 'alpha');
+  f.requests[0].options.onload({ status: 403 });
+  f.document.hidden = true;
+  if (reason === 'native switch') host.style.display = 'none';
+  if (reason === 'host removal') host.remove();
+  if (reason === 'room change') f.api.setRoom('beta');
+  if (reason === 'unsupported route') f.context.isWorkshopRoute = () => true;
+  f.api.ensureRecuRoomTab();
+  await assertSettles(loading, `${reason}: hidden-owner invalidation must settle`);
+  assert.equal(f.helperTabs[0].closed, true, `${reason}: actual owner invalidation must still close the helper`);
+  assert.equal(f.gmStored.size, 0, `${reason}: helper token must be removed`);
+  assert.equal(f.intervals.size, 0, `${reason}: helper poll must be removed`);
+}
+
+{
+  const f = fixture(), panel = el('section');
+  const loading = f.api.loadRecuRoomPanel(panel, 'alpha');
+  f.requests[0].options.onload({ status: 403 });
+  f.advance(89999);
+  f.tickIntervals();
+  assert.equal(f.helperTabs[0].closed, false, 'the owner must not expire its helper before ninety seconds');
+  f.advance(1);
+  f.tickIntervals();
+  await assertSettles(loading, 'the ninety-second helper deadline must settle the owner');
+  assert.equal(f.helperTabs[0].closed, true);
+  assert.equal(f.gmStored.size, 0);
+  assert.equal(f.intervals.size, 0);
+  assert.match(panel.textContent, /did not finish within 90 seconds/i);
+  f.tickIntervals();
+  assert.equal(f.gmStored.size, 0, 'late deadline ticks must not recreate bridge storage');
+}
+
+{
+  const f = fixture({ intersection: true });
+  const { panel } = desktopPanelFixture(f);
+  f.api.writeRecuCache('alpha', f.api.extractRecuPerformerPayload(performerDocument(), 'alpha'));
+  await f.api.loadRecuRoomPanel(panel, 'alpha');
+  f.intersect();
+  const image = panel.querySelector('img');
+  f.api.cancelRecuRequests();
+  f.api.observeRecuThumbnails(panel);
+  f.intersect();
+  await settle();
+  f.intersect();
+  assert.equal(f.requests.length, 2, 'an immediate return before the abort microtask must still reobserve its cancelled thumbnail');
+  assert.equal(f.requests[0].aborted, true);
+  assert.equal(image.dataset.recuFetching, '1', 'the replacement image request must retain its own fetching state');
+  assert.notEqual(image.dataset.recuFailed, '1', 'cancellation is not a terminal preview failure');
+  f.api.cancelRecuRequests();
+}
+
+{
+  const f = fixture({ intersection: true });
+  const { panel } = desktopPanelFixture(f);
+  f.api.writeRecuCache('alpha', f.api.extractRecuPerformerPayload(performerDocument(), 'alpha'));
+  await f.api.loadRecuRoomPanel(panel, 'alpha');
+  f.intersect();
+  const image = panel.querySelector('img');
+  f.requests[0].options.onerror();
+  await settle();
+  assert.equal(image.dataset.recuFailed, '1');
+  const refresh = f.api.loadRecuRoomPanel(panel, 'alpha', true);
+  const profileRequest = f.requests.find(request => request.options.url === 'https://recu.me/performer/alpha');
+  assert.ok(profileRequest);
+  profileRequest.options.onerror();
+  await refresh;
+  f.intersect();
+  assert.equal(panel.querySelector('img'), image, 'a failed profile refresh retains the old card and image');
+  assert.equal(f.requests.filter(request => request.options.url === 'https://img.mediafront.net/poster.jpg').length, 2, 'explicit Refresh must retry failed previews even if the profile request fails');
+  assert.notEqual(image.dataset.recuFailed, '1');
+  assert.equal(image.dataset.recuFetching, '1');
+  f.api.cancelRecuRequests();
 }
 
 {
@@ -561,4 +845,32 @@ function helperFixture({ pending = true, token = true, recognized = true, room =
   assert.equal(nativeItem.classList.contains('ziggy-recu-mobile-hidden'), false, 'Back restores native menu contents');
 }
 
-console.log('Recu.me behavior: helper ownership/protocol, URL allowlists, exact identity, missing links, lazy thumbnail failure states, preview assets, pagination/deduplication, payload sanitization, bounded caching, stale reuse, cancellation, native selection, and stable mobile Back passed.');
+{
+  const f = fixture();
+  f.context.contextOnly = false; f.context.nativeMobilePage = true;
+  const host = el('div', { 'data-testid': 'additional-options-container' });
+  const menuTab = el('li', { class: 'roomMenu activeTab' });
+  f.document.appendChild(el('div', { id: 'portrait-contents' }, [menuTab, host]));
+  f.api.ensureRecuRoomTab();
+  f.api.setRecuMobileOpen(true);
+  f.requests[0].options.onload({ status: 403 });
+  const generation = f.api.generation();
+  f.document.hidden = true;
+  for (const listener of f.document.listeners.get('visibilitychange') || []) listener();
+  f.api.ensureRecuRoomTab();
+  assert.equal(f.api.generation(), generation, 'mobile selected-panel reconciliation must retain a hidden owner');
+  assert.equal(f.helperTabs[0].closed, false, 'the mobile helper stays open when the user switches to verification');
+  assert.equal(f.gmStored.size, 1);
+  f.document.hidden = false;
+  for (const listener of f.document.listeners.get('visibilitychange') || []) listener();
+  assert.equal(f.requests.length, 1, 'mobile return must not restart the pending profile request');
+  assert.equal(f.helperTabs.length, 1);
+  f.document.hidden = true;
+  menuTab.classList.remove('activeTab');
+  await settle();
+  assert.equal(f.helperTabs[0].closed, true, 'actual mobile native-tab deselection still cancels while hidden');
+  assert.equal(f.gmStored.size, 0);
+  assert.equal(f.intervals.size, 0);
+}
+
+console.log('Recu.me behavior: helper ownership/protocol/deadline, hidden-owner completion and invalidation, URL allowlists, exact identity, lazy thumbnail cancellation/retry, pagination/deduplication, bounded caching, coalesced refresh, native Share child preservation and actual selection, and stable mobile Back passed.');

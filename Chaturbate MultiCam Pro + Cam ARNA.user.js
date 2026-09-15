@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.16
+// @version           16.6.17
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -85,6 +85,7 @@
 
   const RECU_BRIDGE_PARAM = 'ziggy_suite_bridge';
   const RECU_BRIDGE_KEY_PREFIX = 'ziggy_recu_bridge_v1_';
+  const RECU_BRIDGE_TIMEOUT = 90000;
 
   function extractRecuPerformerPayload(doc, room, pageUrl = '') {
     const normalizedRoom = String(room || '').trim().toLowerCase();
@@ -155,7 +156,7 @@
           const pending = JSON.parse(GM_getValue(key, ''));
           const age = Date.now() - pending.at;
           return !!room && pending.token === token && pending.room === room && pending.pending === true
-            && Number.isFinite(pending.at) && age >= 0 && age < 30000;
+            && Number.isFinite(pending.at) && age >= 0 && age < RECU_BRIDGE_TIMEOUT;
         } catch (_) { return false; }
       };
       const finish = (payload, error = '') => {
@@ -175,7 +176,7 @@
             && /\b(?:404|(?:profile|performer|page) (?:was )?not found|(?:profile|performer) does not exist)\b/i.test(pageText)) {
           finish(null, 'No Recu.me performer profile was found for this model.'); return;
         }
-        if (Date.now() - startedAt >= 10000) {
+        if (Date.now() - startedAt >= RECU_BRIDGE_TIMEOUT - 1000) {
           const verification = !!document.querySelector('#challenge-running,#cf-chl-widget,iframe[src*="challenges.cloudflare.com"]')
             || /just a moment|verify (?:you are|that you are)|verification|checking your browser/i.test(pageText);
           const login = !!document.querySelector('input[type="password"]') && !payload;
@@ -203,7 +204,7 @@
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.16');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.17');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -219,7 +220,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.16');
+  instanceMarker.setAttribute('data-suite-version', '16.6.17');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1413,7 +1414,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.16',
+    version: '16.6.17',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -4215,6 +4216,7 @@
     }
 
     const recuTabStyle = $('style', { html: trustedHtml(`
+      #shareTab.ziggy-recu-host > :not(#ziggy-recu-desktop-panel) { display:none !important; }
       .ziggy-recu-panel { box-sizing:border-box; min-height:220px; padding:18px; color:#f1f1f1; background:#17202a; font-family:UbuntuRegular,Helvetica,Arial,sans-serif; }
       .ziggy-recu-actions { display:flex; flex-wrap:wrap; gap:8px; }
       .ziggy-recu-button:disabled { opacity:.55; cursor:wait; }
@@ -4331,10 +4333,16 @@
       try { sessionStorage.setItem('ziggy_recu_cache_v1', JSON.stringify([...recuCache])); } catch (_) {}
     }
 
-    function isRecuPanelActive(panel) {
-      if (!panel?.isConnected || document.hidden) return false;
+    function isRecuPanelSelected(panel) {
+      if (!panel?.isConnected) return false;
       if (panel === recuMobilePanel) return recuMobileOpen && !!document.querySelector('#portrait-contents li.roomMenu.activeTab');
-      return !!document.querySelector('a.tabLink[data-testid="room-tab-Share"].tabOpen');
+      // Native tabOpen is also a hover class. The native panel's display is
+      // the selection contract; keep it owned by Chaturbate's tab controller.
+      return panel.closest('#shareTab')?.style.display === 'block';
+    }
+
+    function isRecuPanelActive(panel) {
+      return !document.hidden && isRecuPanelSelected(panel);
     }
 
     function setRecuStatus(panel, text, busy = false) {
@@ -4391,6 +4399,7 @@
       panel.replaceChildren(shell.panel);
       panel.dataset.ziggyRecuState = 'loading';
       panel.dataset.ziggyRecuRoom = room;
+      setRecuStatus(panel, '', true);
     }
 
     function renderRecuError(panel, room, message) {
@@ -4500,7 +4509,13 @@
       image.dataset.recuFetching = '1';
       void requestRecuAsset(sourceUrl, generation).then(data => {
         delete image.dataset.recuFetching;
-        if (generation !== recuRequestGeneration || !image.isConnected) return;
+        if (!image.isConnected) return;
+        if (generation !== recuRequestGeneration) {
+          // A synchronous tab return can rescan before abort's promise settles.
+          // Re-enrol that still-owned image after releasing its fetching flag.
+          if (recuActivePanel?.contains(image)) observeRecuThumbnails(recuActivePanel);
+          return;
+        }
         if (data) image.src = data;
         else image.dataset.recuFailed = '1';
         const placeholder = image.parentElement?.querySelector('.ziggy-recu-placeholder');
@@ -4718,6 +4733,7 @@
         try {
           GM_setValue(key, JSON.stringify({ token, room: room.toLowerCase(), pending: true, at: Date.now() }));
           helperTab = GM_openInTab(url.href, { active: false, insert: true, setParent: true });
+          setRecuStatus(recuActivePanel, 'Loading in the Recu.me tab. If verification is required, switch to that tab to complete it. Waiting up to 90 seconds…', true);
         } catch (_) {
           finished = true;
           cleanup();
@@ -4728,10 +4744,10 @@
         timer = setInterval(() => {
           if (finished) return;
           if (generation !== recuRequestGeneration) { cancel(); return; }
-          if (Date.now() - startedAt > 16000) {
+          if (Date.now() - startedAt >= RECU_BRIDGE_TIMEOUT) {
             finished = true;
             cleanup();
-            reject(new Error('Recu.me took too long to load in the background.'));
+            reject(new Error('Recu.me did not finish within 90 seconds. Open the full profile, complete any verification, then try again.'));
             return;
           }
           let raw = '';
@@ -4752,7 +4768,8 @@
 
     async function loadRecuRoomPanel(panel, room, force = false) {
       if (!panel?.isConnected || currentRoom !== room) return;
-      if (!force && panel.dataset.ziggyRecuRoom === room && ['loading', 'loaded'].includes(panel.dataset.ziggyRecuState)) return;
+      if (panel.dataset.ziggyRecuRoom === room && (panel.dataset.ziggyRecuState === 'loading'
+          || (!force && panel.dataset.ziggyRecuState === 'loaded'))) return;
       cancelRecuRequests();
       const generation = recuRequestGeneration;
       recuActivePanel = panel;
@@ -4762,6 +4779,15 @@
       if (previous && panel.dataset.ziggyRecuRoom === room) {
         panel.dataset.ziggyRecuState = 'loading';
         setRecuStatus(panel, 'Refreshing Recu.me…', true);
+        if (force) {
+          for (const image of panel.querySelectorAll('img[data-recu-image]')) {
+            if (image.getAttribute('src')) continue;
+            delete image.dataset.recuFailed;
+            const placeholder = image.parentElement?.querySelector('.ziggy-recu-placeholder');
+            if (placeholder) placeholder.textContent = 'Loading preview…';
+          }
+          observeRecuThumbnails(panel);
+        }
       } else renderRecuLoading(panel, room);
       try {
         const profile = await requestRecuProfile(room, generation);
@@ -4825,20 +4851,29 @@
       }
       if (nativeMobilePage) {
         ensureRecuMobileMenu();
-        if (isRecuPanelActive(recuMobilePanel)) {
-          if (recuMobilePanel.dataset.ziggyRecuState === 'idle') void loadRecuRoomPanel(recuMobilePanel, currentRoom);
+        if (isRecuPanelSelected(recuMobilePanel)) {
+          if (!document.hidden && recuMobilePanel.dataset.ziggyRecuState === 'idle') void loadRecuRoomPanel(recuMobilePanel, currentRoom);
           observeRecuThumbnails(recuMobilePanel);
         } else if (recuActivePanel && (recuProfileRequest || recuBridgeCancel || recuImageRequests.size || recuHoverStop)) cancelRecuRequests();
         return;
       }
       const tab = document.querySelector('a.tabLink[data-testid="room-tab-Share"]');
-      const panel = document.querySelector('#roomTabs > #shareTab,#shareTab');
-      if (!tab || !panel) {
+      const nativePanel = document.querySelector('#roomTabs > #shareTab,#shareTab');
+      if (!tab || !nativePanel) {
         if (recuActivePanel) { cancelRecuRequests(); recuActivePanel = null; }
         return;
       }
       observeRecuSelection(tab);
-      if (recuExplicitRoom !== currentRoom && isRecuPanelActive(panel)) {
+      observeRecuSelection(nativePanel);
+      // Never remove native Share children: its show/clean methods retain
+      // references and removeChild them on later selection. Render only here.
+      let panel = nativePanel.querySelector(':scope > #ziggy-recu-desktop-panel');
+      if (!panel) {
+        panel = $('div', { id: 'ziggy-recu-desktop-panel' });
+        nativePanel.appendChild(panel);
+      }
+      if (!nativePanel.classList.contains('ziggy-recu-host')) nativePanel.classList.add('ziggy-recu-host');
+      if (recuExplicitRoom !== currentRoom && isRecuPanelSelected(panel)) {
         document.querySelector('a.tabLink[data-testid="room-tab-Bio"]')?.click();
       }
       if (tab.textContent !== RECU_TAB_LABEL) tab.textContent = RECU_TAB_LABEL;
@@ -4854,22 +4889,26 @@
       if (!recuBoundTabs.has(tab)) {
         recuBoundTabs.add(tab);
         tab.addEventListener('click', () => {
+          // Record deliberate selection before native onclick changes display;
+          // its mutation callback can otherwise apply the entry-time Bio fallback.
           recuExplicitRoom = currentRoom;
           const room = currentRoom;
           setTimeout(() => {
-            const activePanel = document.querySelector('#roomTabs > #shareTab,#shareTab');
+            const activePanel = document.querySelector('#shareTab > #ziggy-recu-desktop-panel');
             if (room && isRecuPanelActive(activePanel)) void loadRecuRoomPanel(activePanel, room);
           }, 0);
-        });
+        }, true);
       }
-      if (recuExplicitRoom === currentRoom && isRecuPanelActive(panel)) {
-        if (panel.dataset.ziggyRecuState === 'idle') void loadRecuRoomPanel(panel, currentRoom);
+      if (recuExplicitRoom === currentRoom && isRecuPanelSelected(panel)) {
+        if (!document.hidden && panel.dataset.ziggyRecuState === 'idle') void loadRecuRoomPanel(panel, currentRoom);
         observeRecuThumbnails(panel);
       } else if (recuActivePanel && (recuProfileRequest || recuBridgeCancel || recuImageRequests.size || recuHoverStop)) cancelRecuRequests();
     }
 
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) cancelRecuRequests();
+      // Switching to an already-open verification helper must not cancel it.
+      // One-shot requests may finish; new lazy images/hover wait until visible.
+      if (document.hidden) recuHoverStop?.();
       else ensureRecuRoomTab();
     });
 

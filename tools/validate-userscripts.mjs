@@ -49,7 +49,7 @@ function field(header, name) {
 
 for (const item of scripts) {
   const scriptPath = path.join(root, item.file);
-  const source = await readFile(scriptPath, 'utf8');
+  const source = (await readFile(scriptPath, 'utf8')).replace(/\r\n/g, '\n');
   const header = metadata(source, item.file);
   const version = field(header, 'version');
   const updateUrl = field(header, 'updateURL');
@@ -174,7 +174,8 @@ for (const item of scripts) {
     if (!source.includes('function requestRecuProfileThroughTab(room, generation, pageUrl =')) failures.push(`${item.file}: Recu.me 403 fallback is missing`);
     if (!source.includes('a.tabLink[data-testid="room-tab-Share"]')) failures.push(`${item.file}: Recu.me does not reuse the native Share tab`);
     if (!source.includes("document.querySelector('#roomTabs > #shareTab,#shareTab')")) failures.push(`${item.file}: Recu.me does not reuse the native Share panel`);
-    if (!source.includes("['loading', 'loaded'].includes(panel.dataset.ziggyRecuState)")) failures.push(`${item.file}: Recu.me tab is missing its lazy-load guard`);
+    if (!/panel\.dataset\.ziggyRecuState === 'loading'\s*\|\| \(!force && panel\.dataset\.ziggyRecuState === 'loaded'\)/.test(source)) failures.push(`${item.file}: Recu.me tab is missing its load/coalescing guard`);
+    if (!source.includes("nativePanel.appendChild(panel)") || !source.includes("id: 'ziggy-recu-desktop-panel'")) failures.push(`${item.file}: Recu.me must preserve the native Share panel children`);
     if (!source.includes("url.hostname.endsWith('.mediafront.net')")) failures.push(`${item.file}: Recu.me thumbnails are not host validated`);
     if (source.includes('frame[src*="recu.me"]')) failures.push(`${item.file}: Recu.me integration attempts a CSP-blocked iframe`);
     if (!source.includes('nativeColorCounts')) failures.push(`${item.file}: Workshop navigation does not inherit a normal native nav item`);

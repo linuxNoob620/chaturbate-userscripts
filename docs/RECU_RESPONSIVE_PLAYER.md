@@ -1,6 +1,6 @@
 # Recu.me Responsive Player
 
-Version **0.1.0 — experimental desktop prototype**. Separate from Ziggy Chaturbate Suite and the paused Accurate Timeline Previews development. No Suite source, settings or extension build is changed.
+Version **0.2.0 — experimental desktop player**. Separate from Ziggy Chaturbate Suite and the paused Accurate Timeline Previews development. No Suite source, settings or extension build is changed.
 
 ## Install and use
 
@@ -8,9 +8,9 @@ Version **0.1.0 — experimental desktop prototype**. Separate from Ziggy Chatur
 
 1. Disable **Recu.me Accurate Timeline Previews** to avoid overlapping player modifications.
 2. Reload the recording's normal Recu.me playback page and start the original player. Existing site login/access requirements still apply.
-3. Click **Use responsive player** above it. Replacement is opt-in on each page; the original player is not automatically taken over.
+3. The responsive player now starts automatically once the site's authorized recording/player is ready. Its fixed initial quality is **1080p**, or the highest offered resolution below it. Explicit manual quality and **Auto** choices remain available afterward. If native readiness takes more than twenty seconds after the supported source appears, use **Use responsive player** to retry; it does not run an endless takeover loop or bypass the site's Play/access gate.
 4. Hover the replacement timeline for sampled thumbnails. Play/pause, mute/volume, speed, quality, fullscreen and video Picture-in-Picture use the replacement controls.
-5. **Use original player** disposes the replacement and reloads the same recording with the site's `t` timestamp parameter, rounded down to a whole second. Native autoplay, audio preferences and speed initialization apply again; this is not preservation of the replacement's paused/volume/rate state.
+5. **Use original player** disposes the replacement and reloads the same recording with the site's `t` timestamp parameter, rounded down to a whole second. The URL also contains `rrp_player=original`, preventing automatic takeover on that URL, including reload. Explicit **Use responsive player** removes that marker. Ordinary new recording URLs default to the replacement. Native autoplay, audio preferences and speed initialization apply again; this is not preservation of the replacement's paused/volume/rate state.
 
 Disable the new script and reload to remove it. This does not erase Suite or site settings.
 
@@ -20,6 +20,9 @@ Disable the new script and reload to remove it. This does not erase Suite or sit
 - `storyboards.js` validates native thumbnail cues, loads/decode-prepares at most two sheets concurrently and retains at most sixteen sheets. A 16,777,216-pixel retention budget is approximately 64 MiB at four bytes per pixel; it is not a hard browser-process memory cap. All sheets, callbacks and timers are released on disposal.
 - `transport.js` delegates matching TS segments to the site's existing HLS loader. The current site adds required request authorization there; a plain replacement fetch returned HTTP 422 in the observed session. No authorization logic is reconstructed, no credentials are exported, and no access restriction is bypassed. Other requests use Shaka's fetch transport. Abort, timeout and cleanup ownership are explicit.
 - `player.js` owns only its Shadow DOM player, scoped keyboard listeners and playback engine. The native player's existing cleanup is called before replacement media loads. Unknown/inaccessible native ownership is rejected rather than running two playback engines. Native display/keyboard configuration is restored during disposal; playback restoration uses the native timestamp route.
+- Automatic startup waits for native readiness, briefly allows storyboard metadata to arrive, does not steal keyboard focus, and defers while native fullscreen/Picture-in-Picture is active. Route/element changes and page exit cancel its bounded timer. Handoff preserves the native playback snapshot rather than forcing play or unmute.
+- Idle controls retain their pointer hit surface while transparent; hiding no longer generates its own pointer-exit/re-entry wakeup. Buffer/seek recovery rearms hiding without revealing idle controls. Pointer interaction, pause, menus, timeline hover and keyboard focus retain their existing visibility behavior.
+- The tested Recu.me TS playlists round segment durations. Shaka now retains embedded segment timestamps (`ignoreManifestTimestampsInSegmentsMode`) rather than realigning each segment to those rounded boundaries. Gap/stall recovery remains enabled. This corrects the measured repeated buffer holes; it is not a guarantee for every timestamp/discontinuity layout or network stall.
 - `@grant none` with bundled dependencies is intentional. In the tested Tampermonkey environment, a resource grant isolated the window from the native player/loader even with `@sandbox raw`. Actual installed-script tests, not manual page injection, established the working mode.
 - The script is restricted to top-level HTTPS Recu.me recording playback routes. No persistent storage, recording/file download, account modification or phone setting change is added. Media is buffered for ordinary playback; previews download the site's existing storyboard images.
 
@@ -33,6 +36,8 @@ Disable the new script and reload to remove it. This does not erase Suite or sit
 - First storyboard preparation still requires an image request and decode. Missing/failed sheets show loading/unavailable instead of a stale unrelated picture.
 
 ## Actual desktop acceptance — 2026-09-15
+
+Historical **0.1.0** acceptance; the current automatic-start and playback corrections are covered below.
 
 Persistent Chrome-for-Testing, actual Tampermonkey entry, one existing authorized recording. Old Accurate Timeline Previews disabled; Suite left unchanged. The final editor readback matched the generated file after reload and the live build identifier was `e50f01a5a201`.
 
@@ -60,6 +65,24 @@ Same recording, three pointer seeks per player, at approximately 39%, 47%, 55%. 
 
 The replacement responds to the seek command sooner, but **cold-seek completion is not proven faster**. Sampled hover avoids this media-seek path entirely. Instrumented first-frame timestamps do not guarantee the monitor displayed that frame at exactly that instant.
 
+## Current desktop acceptance — 2026-09-16
+
+The actual existing Chrome-for-Testing/Tampermonkey entry was updated without reinstalling or resetting settings. Final saved editor bytes matched the generated 0.2.0 source; live build `5abb0248b147`. Three authorized recordings offered maximum renditions of 540p, 720p and 1080p respectively. No account actions, media downloads, phone changes or Suite/extension edits were performed.
+
+| Check | Observed result |
+| --- | --- |
+| Baseline idle failure | 0.1.0 hid the overlay, then revealed it about 28 ms later with a stationary pointer. Changing `pointer-events` changed the hit target and generated the wakeup. |
+| Baseline stutter | Repeated approximately 0.4-second buffer holes and Shaka recovery seeks of about 0.7–0.8 seconds occurred even with the pointer outside. Recovery events also revealed controls. The same source's native player had continuous buffered ranges. |
+| Corrected playback | A candidate with the final media/idle changes advanced 76.005 seconds during 76.006 seconds of elapsed time at 540p, without observed jumps/stalls. Final-build 720p advanced 23.697 seconds over 23.696 seconds. Final-build 1080p passed a 35-second steady interval and a 47-second post-seek interval with zero additional gap jumps/stalls. A small initial-buffer jump was present in the 1080p startup counter; it did not recur during those intervals. These are bounded observations, not an all-recordings guarantee. |
+| Default player and quality | Automatic handoff worked without clicking the opt-in button; decoded sizes matched fixed 540p, 720p and 1920 × 1080 fallback/default selection. Native video was paused and native HLS detached. |
+| Idle/reveal/hover | Controls stayed hidden until pointer interaction; subsequent reveal/hide cycles did not create playback seeks/stalls. A loaded thumbnail remained ready and visible while hovered beyond the idle timeout. Open menus stayed usable. |
+| Manual quality | Explicit 360p remained selected in the lower-resolution source. Final-build explicit Auto enabled ABR; selecting 1080p again disabled it and selected the 1080 track. Defaults do not repeatedly overwrite manual choices. |
+| Cold seek | Timeline pointer seeking resumed playback at a nonzero position; a final-build 1080p seek produced a decoded frame after approximately 1.47 seconds. No universal seek-speed improvement is claimed. |
+| Original-player fallback | Returned to the native timestamp route; `rrp_player=original` survived reload without takeover. Explicit responsive selection removed only that marker and resumed the replacement. |
+| Fullscreen / final state | Fullscreen button entry/exit passed; actual browser Escape remains unconfirmed. Final foreground recording was left paused at fixed 1080p. |
+
+Native-fullscreen/PiP startup deferral, missing-readiness timeout, cancellation and failure fallback are additionally covered by controlled fixtures, not a complete live browser-state matrix. Audible A/V synchronization and sources with different initial timestamp offsets/discontinuities were not comprehensively validated. Mobile/Firefox and external site actions remain outside accepted coverage.
+
 ## Source, build and checks
 
 Production modules: `standalone/recu-responsive/{storyboards,transport,player}.js`.
@@ -79,8 +102,8 @@ node tools/test-recu-responsive-player.mjs
 
 The build checks pinned hashes and refuses modified dependencies. Vendored bytes and explicit LF source rules make output reproducible. These commands do not rebuild the Suite or extensions.
 
-Local tests execute the shipped modules with controlled boundaries: 13 storyboard checks, 14 transport checks and 41 player/lifecycle checks. Coverage includes cue validation/caps/abort, scoped request delegation/ranges/late callbacks, exact teardown, retry ownership, keyboard isolation, stale async jobs, persistent errors, original timestamp URLs, open-menu idle behavior and BFCache handling. Mocks are not evidence of live mobile or alternate-site compatibility.
+Local tests execute the shipped modules with controlled boundaries: 13 storyboard checks, 14 transport checks and 58 player/lifecycle checks. Coverage includes cue validation/caps/abort, scoped request delegation/ranges/late callbacks, exact teardown, retry ownership, keyboard isolation, stale async jobs, persistent errors, original timestamp URLs, open-menu idle behavior and BFCache handling. New regressions cover bounded automatic startup/cancellation, original-only URLs, fixed-quality defaults/manual override, non-waking recovery and rearming the idle timer after buffering. The player checks passed ten repeated runs; baseline/counterfactual runs failed the new targeted assertions. Mocks are not evidence of live mobile or alternate-site compatibility.
 
 ## Follow-up gate
 
-Before broadening from this opt-in desktop prototype: test multiple recordings/renditions, missing-storyboard and expired-session recovery, real browser Escape, external site workflows, and mobile/Firefox separately. Any further seek-speed claim needs matched-cache repeated measurement and transport/segment analysis, not just a new player skin.
+Before broadening desktop acceptance: test alternate timestamp/discontinuity layouts, missing-storyboard and expired-session recovery, real browser Escape, external site workflows, and mobile/Firefox separately. Any further seek-speed claim needs matched-cache repeated measurement and transport/segment analysis, not just a new player skin. Rollback is available at local tag `backup/pre-responsive-20260916`.

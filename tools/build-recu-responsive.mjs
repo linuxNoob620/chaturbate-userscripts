@@ -44,8 +44,8 @@ if (createHash('sha256').update(licenseBytes).digest('hex') !== licenseHash) thr
 const metadata = `// ==UserScript==
 // @name         Recu.me Responsive Player
 // @namespace    https://github.com/linuxNoob620/chaturbate-userscripts
-// @version      0.1.0
-// @description  Opt-in replacement player with preloaded sampled timeline previews for Recu.me.
+// @version      0.2.0
+// @description  Default 1080p replacement player with preloaded sampled timeline previews for Recu.me.
 // @author       Ziggy
 // @license      MIT
 // @match        https://recu.me/*/video/*/play*
@@ -70,5 +70,5 @@ if (process.argv.includes('--check')) {
 } else {
   writeFileSync(new URL('Recu.me Responsive Player.user.js', root), code);
   writeFileSync(new URL('Recu.me Responsive Player.meta.js', root), metadata);
-  console.log('Built separate Recu.me Responsive Player 0.1.0 (Suite and extensions untouched).');
+  console.log('Built separate Recu.me Responsive Player 0.2.0 (Suite and extensions untouched).');
 }

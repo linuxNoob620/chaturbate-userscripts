@@ -27,7 +27,7 @@ const eventSurfaces = new WeakMap();
 function harness(options = {}) {
   const timers = new Map(), observers = [], engines = [], overlays = [], boards = [], transports = [];
   const actions = [];
-  let timerId = 0, nativeVideo;
+  let timerId = 0, elapsed = 0, nativeVideo;
 
   class Target {
     constructor() { this.listeners = new Map(); }
@@ -137,28 +137,48 @@ function harness(options = {}) {
     const sourceNode = new Node('source'); sourceNode.src = 'https://media.example/recording/master.m3u8?session=private';
     video.append(sourceNode);
     video.plyr = { config: { keyboard: { global: true, focused: true } }, pause: () => video.pause(),
-      previewThumbnails: { thumbnails: [{ frames: [] }] } };
+      previewThumbnails: { thumbnails: [{ frames: options.frames || [] }] } };
     Object.assign(video, extra); return video;
   }
   nativeVideo = makeVideo(options.video); nativeHost.append(nativeVideo);
   const document = new Target();
   Object.assign(document, { body, createElement: tag => new Node(tag),
     getElementById: id => body.querySelector(`#${id}`),
-    querySelector: selector => selector === '#plyr_container video.video-player' ? nativeVideo : body.querySelector(selector) });
+    querySelector: selector => selector === '#plyr_container video.video-player'
+      ? nativeVideo.isConnected ? nativeVideo : null : body.querySelector(selector) });
   const window = new Target(); window.top = window.self = window;
   if (options.iframe) window.top = {};
   window.Hls = {};
-  window.timeline = { hls: { media: nativeVideo }, destroy() { actions.push('timeline.destroy'); } };
+  window.timeline = { hls: { media: nativeVideo, levels: options.levels || [{ height: 720 }, { height: 1080 }, { height: 2160 }] },
+    destroy() { actions.push('timeline.destroy'); } };
   window.autoplay = { clearPrefetch() { actions.push('autoplay.clearPrefetch'); }, pause() { actions.push('autoplay.pause'); } };
   const location = { origin: 'https://recu.me', pathname: options.route || route,
-    href: `https://recu.me${options.route || route}`, assigned: [],
+    href: options.href || `https://recu.me${options.route || route}`, assigned: [],
     assign(url) { this.assigned.push(url); actions.push('location.assign'); },
     reloads: 0, reload() { this.reloads++; actions.push('reload'); } };
+  const history = { state: { native: 'preserved' }, replacements: [],
+    replaceState(state, title, url) {
+      this.replacements.push({ state, title, url }); location.href = url; actions.push('history.replaceState');
+    } };
   class Engine extends Target {
     static isBrowserSupported() { return options.supported !== false; }
-    constructor() { super(); this.attachGate = deferred(); this.loadGate = deferred(); this.destroyCalls = 0; engines.push(this); }
+    constructor() {
+      super(); this.attachGate = deferred(); this.loadGate = deferred(); this.destroyCalls = 0;
+      this.configurations = []; this.selections = [];
+      this.tracks = (options.tracks || [720, 1080, 2160].map((height, id) => ({ id, height, bandwidth: height * 1000 })))
+        .map(track => ({ ...track })); engines.push(this);
+    }
     attach(video) { this.video = video; actions.push('engine.attach'); return options.deferAttach ? this.attachGate.promise : Promise.resolve(); }
-    configure(config) { this.config = config; }
+    configure(config) {
+      this.configurations.push(config); actions.push('engine.configure');
+      this.config = { ...this.config, ...config, abr: { ...this.config?.abr, ...config.abr,
+        restrictions: { ...this.config?.abr?.restrictions, ...config.abr?.restrictions } } };
+    }
+    getVideoTracks() { return this.tracks; }
+    selectVideoTrack(track, clearBuffer) {
+      this.selections.push({ track, clearBuffer }); actions.push('engine.selectVideoTrack');
+      for (const item of this.tracks) item.active = item === track;
+    }
     load(url, time, mime) {
       this.loadArgs = { url, time, mime }; actions.push('engine.load');
       this.video.currentTime = time; this.video.duration = 600; this.video.readyState = 4;
@@ -194,13 +214,13 @@ function harness(options = {}) {
     install() { actions.push('transport.install'); }
     dispose() { this.disposeCalls++; actions.push('transport.dispose'); return options.deferTransportDispose ? this.disposeGate.promise : Promise.resolve(); }
   }
-  class Clock extends Date { static now() { return now; } }
-  const context = vm.createContext({ URL, Date: Clock, AbortController, Error, performance: { now: () => 10 },
-    document, window, location, RRP_SK: { Player: Engine, ui: { Overlay } }, RRPStoryboards: Storyboards,
+  class Clock extends Date { static now() { return now + elapsed; } }
+  const context = vm.createContext({ URL, Date: Clock, AbortController, Error, performance: { now: () => 10 + elapsed },
+    document, window, location, history, RRP_SK: { Player: Engine, ui: { Overlay } }, RRPStoryboards: Storyboards,
     RRPSegmentTransport: Transport, RRP_BUILD: 'fixture', RRP_SH_CSS: options.css ?? `:root { --test: 1; }${' '.repeat(1100)}`,
     activeStreamCleanup() { actions.push('native.cleanup'); window.timeline.hls.media = null; },
     sessionStorage: new Proxy({}, { get() { actions.push('storage.access'); throw new Error('Player must not use session storage.'); } }),
-    setTimeout(fn, delay) { const id = ++timerId; timers.set(id, { fn, delay }); return id; },
+    setTimeout(fn, delay) { const id = ++timerId; timers.set(id, { fn, delay, due: elapsed + delay }); return id; },
     clearTimeout(id) { timers.delete(id); },
     MutationObserver: class {
       constructor(callback) { this.callback = callback; this.connected = false; observers.push(this); }
@@ -222,8 +242,18 @@ function harness(options = {}) {
     const player = new api.RRPPlayer(nativeVideo, hostNode, new Node('span'), new Node('button'));
     eventSurfaces.set(player, { window, document }); return player;
   };
-  return { api, context, window, document, location, nativeHost, nativeSurface, timers, observers, actions,
+  return { api, context, window, document, location, history, nativeHost, nativeSurface, timers, observers, actions,
     engines, overlays, boards, transports, makeVideo, Node, newPlayer, host, button, message, reconcile,
+    advance(ms) {
+      const end = elapsed + ms;
+      for (let count = 0; ; count++) {
+        const next = [...timers].filter(([, timer]) => timer.due <= end).sort((a, b) => a[1].due - b[1].due)[0];
+        if (!next) break;
+        assert(count < 1000, 'Fixture timer loop must stay bounded.');
+        elapsed = next[1].due; timers.delete(next[0]); next[1].fn();
+      }
+      elapsed = end;
+    },
     get video() { return nativeVideo; },
     replaceVideo(extra = {}) {
       nativeVideo.remove(); nativeVideo = makeVideo(extra); nativeHost.append(nativeVideo);
@@ -278,14 +308,16 @@ await check('route and media parsing reject non-recording paths and unsafe or no
 
 await check('original URL uses whole-second t while preserving same-recording query values and fragment', () => {
   const h = harness();
-  const href = `https://recu.me${route}?quality=high&q=a%20b&t=1&t=2&tag=x&tag=y#chapter`;
+  const href = `https://recu.me${route}?quality=high&q=a%20b&t=1&t=2&tag=x&tag=y&rrp_player=old&rrp_player=other#chapter`;
   const result = new URL(h.api.rrpOriginalURL(123.987, href));
   assert.equal(result.origin, h.location.origin); assert.equal(result.pathname, route);
   assert.equal(result.searchParams.get('t'), '123'); assert.equal(result.searchParams.getAll('t').length, 1);
+  assert.equal(result.searchParams.get('rrp_player'), 'original');
+  assert.equal(result.searchParams.getAll('rrp_player').length, 1);
   assert.equal(result.searchParams.get('quality'), 'high'); assert.equal(result.searchParams.get('q'), 'a b');
   assert.deepEqual(result.searchParams.getAll('tag'), ['x', 'y']); assert.equal(result.hash, '#chapter');
-  assert.equal(h.api.rrpOriginalURL(0), `https://recu.me${route}?t=0`);
-  assert.equal(h.api.rrpOriginalURL(1.999), `https://recu.me${route}?t=1`);
+  assert.equal(h.api.rrpOriginalURL(0), `https://recu.me${route}?t=0&rrp_player=original`);
+  assert.equal(h.api.rrpOriginalURL(1.999), `https://recu.me${route}?t=1&rrp_player=original`);
   assert.equal(h.location.href, `https://recu.me${route}`, 'URL construction is not navigation.');
 });
 
@@ -322,7 +354,7 @@ await check('boot is inert off-route, inside frames and without a supported nati
   assert.equal(h.host(), null); assert.equal(h.engines.length, 0); assert.deepEqual(h.actions, []);
 });
 
-await check('toolbar creation is opt-in and repeated reconciliation does not duplicate it', () => {
+await check('toolbar waits for native readiness and repeated reconciliation does not duplicate it', () => {
   const h = harness(); h.api.rrpBoot(); const host = h.host();
   assert(host); assert.equal(h.engines.length, 0); assert.equal(h.boards.length, 0);
   assert.equal(host.dataset.build, 'fixture'); assert.equal(host.rrpDiagnostics().build, 'fixture');
@@ -331,7 +363,7 @@ await check('toolbar creation is opt-in and repeated reconciliation does not dup
   h.reconcile(); h.api.rrpBoot(); assert.equal(h.host(), host); assert.equal(h.observers.length, 1);
 });
 
-await check('idle boot leaves native metadata, autoplay and preferences entirely to the original player', async () => {
+await check('boot before native readiness leaves metadata, autoplay and preferences to the original player', async () => {
   const h = harness({ nativeRun: 'off', video: { readyState: 0, duration: NaN } }); h.api.rrpBoot();
   for (const event of ['loadedmetadata', 'canplay', 'playing']) assert.equal(h.video.listenerCount(event), 0);
   h.video.readyState = 1; h.video.duration = 600; h.nativeSurface.setAttribute('data-run', 'on');
@@ -357,6 +389,72 @@ await check('start uses owned host fullscreen, native video PiP and shadow-local
   assert.equal(h.nativeHost.style.getPropertyPriority('display'), 'important');
   assert.equal(h.engines[0].loadArgs.time, 35); assert.equal(player.loaded, true);
   await player.dispose();
+});
+
+await check('startup fixes the highest available quality at or below 1080p before loading and selects it afterward', async () => {
+  for (const heights of [[360, 2160, 1080, 720], [360, 720, 480], [480], [1080, 1080, 720]]) {
+    const tracks = heights.map((height, id) => ({ id, height, bandwidth: (id + 1) * 1000000 }));
+    const h = harness({ levels: heights.map(height => ({ height })), tracks }), player = h.newPlayer();
+    await player.start(); const engine = h.engines[0], first = engine.configurations[0];
+    const expected = tracks.filter(track => track.height <= 1080)
+      .sort((a, b) => b.height - a.height || b.bandwidth - a.bandwidth)[0];
+    assert.equal(first.abr.enabled, false); assert.equal(first.abr.useNetworkInformation, false);
+    assert.equal(first.abr.restrictions.minHeight, expected.height);
+    assert.equal(first.abr.restrictions.maxHeight, expected.height);
+    assert(h.actions.indexOf('engine.configure') < h.actions.indexOf('engine.load'));
+    assert.equal(engine.selections.length, 1); assert.equal(engine.selections[0].track.id, expected.id);
+    assert.equal(engine.selections[0].clearBuffer, true);
+    assert(h.actions.indexOf('engine.selectVideoTrack') > h.actions.indexOf('engine.load'));
+    assert.equal(engine.config.abr.enabled, false);
+    assert.equal(engine.config.abr.restrictions.minHeight, 0); assert.equal(engine.config.abr.restrictions.maxHeight, Infinity);
+    await player.dispose();
+  }
+});
+
+await check('quality startup ignores invalid heights and avoids reselecting an already-active preferred track', async () => {
+  const invalid = [0, -1, NaN, Infinity, '1080', undefined, 2160];
+  for (const withPreferred of [true, false]) {
+    const tracks = invalid.map((height, id) => ({ id, height, bandwidth: 1000000 }));
+    if (withPreferred) tracks.push({ id: 100, height: 720, bandwidth: 2000000, active: true });
+    const h = harness({ levels: tracks, tracks }), player = h.newPlayer(); await player.start();
+    const engine = h.engines[0], restrictions = engine.configurations[0].abr.restrictions;
+    assert.equal(restrictions.minHeight, withPreferred ? 720 : 0);
+    assert.equal(restrictions.maxHeight, withPreferred ? 720 : 1080);
+    assert.equal(engine.selections.length, 0); assert.equal(engine.config.abr.enabled, false);
+    await player.dispose();
+  }
+});
+
+await check('loaded fixed-quality default does not overwrite later manual quality or Auto choices', async () => {
+  const h = harness(), player = h.newPlayer(); await player.start(); const engine = h.engines[0];
+  for (const height of [720, 2160]) {
+    engine.selectVideoTrack(engine.tracks.find(track => track.height === height), true);
+    const selections = engine.selections.length, configurations = engine.configurations.length;
+    for (const type of ['playing', 'waiting', 'seeked', 'loadeddata', 'canplay']) player.video.emit(type);
+    player.activity(); h.advance(20000);
+    assert.equal(engine.selections.length, selections); assert.equal(engine.configurations.length, configurations);
+    assert.equal(engine.tracks.find(track => track.active).height, height);
+  }
+  engine.configure({ abr: { enabled: true } }); const configurations = engine.configurations.length;
+  player.video.emit('playing'); player.activity(); h.advance(20000);
+  assert.equal(engine.config.abr.enabled, true); assert.equal(engine.configurations.length, configurations);
+  await player.dispose();
+});
+
+await check('recording HLS configuration retains embedded timestamps without claiming real-media timing proof', async () => {
+  const h = harness(), player = h.newPlayer(); await player.start();
+  assert.equal(h.engines[0].config.manifest.hls.ignoreManifestTimestampsInSegmentsMode, true);
+  await player.dispose();
+});
+
+await check('automatic startup preserves page focus while explicit startup retains stage keyboard focus', async () => {
+  for (const focus of [false, true]) {
+    const h = harness(), outside = new h.Node('input'); h.document.body.append(outside); outside.focus();
+    const player = h.newPlayer(); await player.start({ focus });
+    assert.equal(player.stage.focusCalls || 0, focus ? 1 : 0);
+    assert.equal(h.document.activeElement, focus ? player.host : outside);
+    await player.dispose();
+  }
 });
 
 await check('keyboard ownership uses host-filtered window capture, focused stage and disabled stock shortcuts', async () => {
@@ -651,6 +749,46 @@ await check('focus loss clears stale preview state except during an actual hover
   await player.dispose();
 });
 
+await check('idle overlay retains its hit target and buffering or seek-completion events do not wake it', async () => {
+  const h = harness(), player = h.newPlayer(); await player.start(); player.video.paused = false;
+  const idleRule = /\.rrp-stage\.rrp-idle\s+\.shaka-controls-container\s*\{([^}]+)\}/.exec(h.api.RRP_CSS);
+  assert(idleRule); assert.match(idleRule[1], /opacity\s*:\s*0/);
+  assert.doesNotMatch(idleRule[1], /pointer-events\s*:\s*none/);
+  player.activity(); h.advance(2500); assert(player.stage.classList.contains('rrp-idle'));
+  const hideTimer = player.hideTimer;
+  for (const type of ['waiting', 'playing', 'seeked']) {
+    player.video.emit(type); assert(player.stage.classList.contains('rrp-idle'), type);
+    if (type === 'waiting') assert.equal(player.hideTimer, hideTimer, 'Buffering must not restart the idle timer.');
+  }
+  player.video.emit('seeking'); assert.equal(player.video.frames.size, 1);
+  assert(player.stage.classList.contains('rrp-idle'), 'Seek metrics must not wake controls.');
+  const [frameId, frame] = [...player.video.frames][0]; player.video.frames.delete(frameId);
+  frame(0, { mediaTime: 80 }); assert.equal(player.metrics.seeks.length, 1);
+  for (const type of ['play', 'pause', 'ended']) {
+    player.video.emit(type); assert.equal(player.stage.classList.contains('rrp-idle'), false, type);
+    h.advance(2500); assert(player.stage.classList.contains('rrp-idle'));
+  }
+  player.stage.emit('pointermove'); assert.equal(player.stage.classList.contains('rrp-idle'), false);
+  await player.dispose();
+});
+
+await check('buffering and seek recovery rearm idle hiding after an expired timer without revealing hidden controls', async () => {
+  for (const type of ['playing', 'seeked']) {
+    const h = harness(), player = h.newPlayer(); await player.start(); player.video.paused = false;
+    if (type === 'playing') player.video.readyState = 2;
+    else player.video.seeking = true;
+    player.activity(); h.advance(2500);
+    assert.equal(player.stage.classList.contains('rrp-idle'), false); assert.equal(h.timers.size, 0);
+    player.video.readyState = 4; player.video.seeking = false; player.video.emit(type);
+    assert.equal(player.stage.classList.contains('rrp-idle'), false);
+    h.advance(2499); assert.equal(player.stage.classList.contains('rrp-idle'), false);
+    h.advance(1); assert.equal(player.stage.classList.contains('rrp-idle'), true);
+    player.video.emit(type); assert.equal(player.stage.classList.contains('rrp-idle'), true);
+    h.advance(2500); assert.equal(player.stage.classList.contains('rrp-idle'), true);
+    await player.dispose();
+  }
+});
+
 await check('actual Shaka overflow, submenu and context menu classes keep idle controls visible only while open', async () => {
   const h = harness(), player = h.newPlayer(); await player.start(); player.video.paused = false;
   const runIdle = () => {
@@ -690,7 +828,7 @@ await check('return to original assigns only the timestamp URL after complete pl
   assert.equal(player.returnButton.disabled, true); assert.equal(h.location.assigned.length, 0);
   assert.equal(h.actions.includes('storage.access'), false);
   h.transports[0].disposeGate.resolve(); await returning;
-  assert.deepEqual(h.location.assigned, [`https://recu.me${route}?quality=high&t=222#details`]);
+  assert.deepEqual(h.location.assigned, [`https://recu.me${route}?quality=high&t=222&rrp_player=original#details`]);
   assert.equal(h.location.reloads, 0); assert.equal(player.stage.isConnected, false); assert.equal(player.alive, false);
   assert(h.actions.indexOf('engine.destroy') < h.actions.indexOf('location.assign'));
   assert(h.actions.indexOf('transport.dispose') < h.actions.indexOf('location.assign'));
@@ -707,7 +845,7 @@ await check('return during pending or failed load uses the initial native timest
       h.engines[0].loadGate.reject(new Error('Controlled load failure'));
       assert.equal((await outcome).ok, false);
     }
-    await player.returnOriginal(); assert.deepEqual(h.location.assigned, [`https://recu.me${route}?t=35`], mode);
+    await player.returnOriginal(); assert.deepEqual(h.location.assigned, [`https://recu.me${route}?t=35&rrp_player=original`], mode);
     assert.equal(player.alive, false); assert.equal(h.actions.includes('storage.access'), false);
     if (mode === 'pending') { h.engines[0].loadGate.resolve(); await outcome; }
     assert.equal(player.loaded, undefined); assert.equal(player.video.playCalls, 0);
@@ -736,11 +874,123 @@ function bootJobs(h) {
       Object.assign(this, { video, host, message, back, route: h.location.pathname, alive: true, disposeCalls: 0,
         gate: deferred(), metrics: { originalStopped: false, seeks: [], previews: [] } }); jobs.push(this);
     }
-    start() { return this.gate.promise; }
+    start(options) { this.startOptions = options; return this.gate.promise; }
     dispose() { this.disposeCalls++; this.alive = false; return Promise.resolve(); }
   }
   h.context.replacePlayerForBootTest(Job); h.api.rrpBoot(); return jobs;
 }
+
+await check('ready owned native playback with storyboard frames starts automatically once without stealing focus', async () => {
+  for (const paused of [true, false]) {
+    const h = harness({ video: { readyState: 2, paused, muted: true, volume: 0.4, playbackRate: 1.25 }, frames: [{}] });
+    const outside = new h.Node('input'); h.document.body.append(outside); outside.focus();
+    h.api.rrpBoot(); assert.equal(h.engines.length, 0); h.advance(200); await flush();
+    assert.equal(h.engines.length, 1); assert.equal(h.host().rrpDiagnostics().loaded, true);
+    assert.equal(h.document.activeElement, outside); assert.equal(h.engines[0].video.currentTime, 35);
+    assert.equal(h.engines[0].video.paused, paused); assert.equal(h.engines[0].video.muted, true);
+    assert.equal(h.engines[0].video.volume, 0.4); assert.equal(h.engines[0].video.playbackRate, 1.25);
+    h.reconcile(); h.advance(20000); await flush(); assert.equal(h.engines.length, 1);
+    assert.equal(h.actions.filter(action => action === 'native.cleanup').length, 1);
+    h.window.emit('pagehide'); await flush(); assert.equal(h.timers.size, 0);
+  }
+});
+
+await check('automatic start waits for readyState, native HLS ownership and cleanup availability', async () => {
+  for (const mode of ['readiness', 'ownership', 'cleanup']) {
+    const h = harness({ video: { readyState: mode === 'readiness' ? 1 : 2 }, frames: [{}] });
+    const cleanup = h.context.activeStreamCleanup;
+    if (mode === 'ownership') h.window.timeline.hls.media = {};
+    if (mode === 'cleanup') delete h.context.activeStreamCleanup;
+    const jobs = bootJobs(h); h.advance(2000); assert.equal(jobs.length, 0, mode);
+    h.video.readyState = 2; h.window.timeline.hls.media = h.video; h.context.activeStreamCleanup = cleanup;
+    h.advance(200); assert.equal(jobs.length, 1, mode); assert.equal(jobs[0].startOptions.focus, false);
+    jobs[0].gate.resolve(); await flush(); h.window.emit('pagehide');
+  }
+});
+
+await check('automatic takeover waits while native fullscreen or picture-in-picture is active', async () => {
+  for (const property of ['fullscreenElement', 'pictureInPictureElement']) {
+    const h = harness({ video: { readyState: 2 }, frames: [{}] }); h.document[property] = h.video;
+    const jobs = bootJobs(h); h.advance(2000); assert.equal(jobs.length, 0, property);
+    assert.equal(h.video.pauseCalls, 0); h.document[property] = null; h.advance(200);
+    assert.equal(jobs.length, 1, property); assert.equal(jobs[0].startOptions.focus, false);
+    jobs[0].gate.resolve(); await flush(); h.window.emit('pagehide');
+  }
+});
+
+await check('missing storyboard frames receive a bounded readiness grace that resets when native readiness is lost', async () => {
+  const h = harness({ video: { readyState: 2 } }), jobs = bootJobs(h);
+  h.advance(1400); assert.equal(jobs.length, 0);
+  h.video.readyState = 1; h.advance(200); h.video.readyState = 2; h.advance(1600);
+  assert.equal(jobs.length, 0, 'The first ready period must not count toward the second.');
+  h.advance(200); assert.equal(jobs.length, 1); assert.equal(jobs[0].startOptions.focus, false);
+  jobs[0].gate.resolve(); await flush(); h.window.emit('pagehide');
+});
+
+await check('automatic readiness polling stops after 20 seconds and explicit retry still works', async () => {
+  const h = harness({ video: { readyState: 1 } }), jobs = bootJobs(h);
+  h.advance(19800); assert.equal(jobs.length, 0); assert.equal(h.timers.size, 1);
+  h.advance(200); assert.equal(jobs.length, 0); assert.equal(h.timers.size, 0);
+  assert.match(h.message().textContent, /retry/);
+  h.video.readyState = 2; h.advance(20000); assert.equal(jobs.length, 0);
+  const start = h.click(); assert.equal(jobs.length, 1); assert.equal(jobs[0].startOptions.focus, true);
+  jobs[0].gate.resolve(); await start; h.window.emit('pagehide');
+});
+
+await check('original-player URL marker prevents retake and explicit launch removes only that marker', async () => {
+  const href = `https://recu.me${route}?rrp_player=original&quality=high&t=12&tag=x&tag=y#chapter`;
+  const h = harness({ href, video: { readyState: 2 }, frames: [{}] }), jobs = bootJobs(h);
+  h.advance(40000); h.reconcile(); assert.equal(jobs.length, 0); assert.equal(h.timers.size, 0);
+  assert.equal(h.history.replacements.length, 0); assert.equal(h.video.pauseCalls, 0);
+  const state = h.history.state, start = h.click(); assert.equal(jobs.length, 1);
+  assert.equal(jobs[0].startOptions.focus, true); assert.equal(h.history.replacements.length, 1);
+  const replacement = h.history.replacements[0], url = new URL(replacement.url);
+  assert.equal(replacement.state, state); assert.equal(url.searchParams.has('rrp_player'), false);
+  assert.equal(url.pathname, route); assert.equal(url.searchParams.get('quality'), 'high');
+  assert.equal(url.searchParams.get('t'), '12'); assert.deepEqual(url.searchParams.getAll('tag'), ['x', 'y']);
+  assert.equal(url.hash, '#chapter'); assert.equal(h.location.assigned.length, 0); assert.equal(h.location.reloads, 0);
+  jobs[0].gate.resolve(); await start; h.window.emit('pagehide');
+});
+
+await check('manual launch and pagehide cancel the pending automatic takeover', async () => {
+  for (const mode of ['manual', 'pagehide']) {
+    const h = harness({ video: { readyState: 2 }, frames: [{}] }), jobs = bootJobs(h);
+    const start = mode === 'manual' ? h.click() : undefined;
+    if (mode === 'pagehide') h.window.emit('pagehide');
+    h.advance(40000); assert.equal(jobs.length, mode === 'manual' ? 1 : 0);
+    assert.equal(h.timers.size, 0);
+    if (start) { assert.equal(jobs[0].startOptions.focus, true); jobs[0].gate.resolve(); await start; h.window.emit('pagehide'); }
+  }
+});
+
+await check('automatic callback rejects a stale route or disconnected owner before delayed reconciliation runs', () => {
+  for (const mode of ['route', 'host', 'video']) {
+    const h = harness({ video: { readyState: 2 }, frames: [{}] }), jobs = bootJobs(h);
+    if (mode === 'route') { h.location.pathname = '/example/'; h.location.href = 'https://recu.me/example/'; }
+    if (mode === 'host') h.host().remove();
+    if (mode === 'video') h.video.remove();
+    h.advance(200); assert.equal(jobs.length, 0, `${mode} changed before the observer's debounce ran.`);
+    assert.equal(h.video.pauseCalls, 0); h.window.emit('pagehide'); assert.equal(h.timers.size, 0);
+  }
+});
+
+await check('automatic startup failure is not retried in a background loop', async () => {
+  const h = harness({ video: { readyState: 2 }, frames: [{}] }), jobs = bootJobs(h);
+  h.advance(200); assert.equal(jobs.length, 1);
+  jobs[0].gate.reject(new Error('Controlled auto failure')); await flush();
+  h.advance(40000); assert.equal(jobs.length, 1); assert.equal(h.timers.size, 0);
+  assert.equal(h.message().textContent, 'Controlled auto failure'); assert.equal(h.button('Use responsive player').disabled, false);
+  const retry = h.click(); assert.equal(jobs.length, 2); jobs[1].gate.resolve(); await retry;
+  h.window.emit('pagehide');
+});
+
+await check('failed original-player return navigates to an original-only URL instead of an automatic reload loop', async () => {
+  const h = harness(), jobs = bootJobs(h), start = h.click(); jobs[0].gate.resolve(); await start;
+  jobs[0].returnOriginal = () => Promise.reject(new Error('Controlled disposal failure'));
+  await h.click('Use original player');
+  assert.deepEqual(h.location.assigned, [`https://recu.me${route}?t=0&rrp_player=original`]);
+  assert.equal(h.location.reloads, 0); h.window.emit('pagehide');
+});
 
 await check('stale rejected startup cannot dispose, clear or relabel its successor', async () => {
   const h = harness(), jobs = bootJobs(h), first = h.click();

@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Recu.me Responsive Player
 // @namespace    https://github.com/linuxNoob620/chaturbate-userscripts
-// @version      0.1.0
-// @description  Opt-in replacement player with preloaded sampled timeline previews for Recu.me.
+// @version      0.2.0
+// @description  Default 1080p replacement player with preloaded sampled timeline previews for Recu.me.
 // @author       Ziggy
 // @license      MIT
 // @match        https://recu.me/*/video/*/play*
@@ -301,7 +301,7 @@ SOFTWARE.
 (() => {
 'use strict';
 if (window.top !== window.self || !rrpRoute()) return;
-const RRP_BUILD = 'e50f01a5a201';
+const RRP_BUILD = '5abb0248b147';
 const RRP_SK = (() => { const exports = {};
 /*
  @license
@@ -3029,9 +3029,9 @@ class RRPSegmentTransport {
   }
 }
 
-// This is a separate, opt-in player. It never edits Suite settings or the old
+// This is a separate player. It never edits Suite settings or the old
 // Accurate Timeline Previews script. Shaka owns media; Recu.me owns authorization.
-const RRP_VERSION = '0.1.0';
+const RRP_VERSION = '0.2.0';
 const RRP_ID = 'recu-responsive-player';
 
 function rrpRoute(path = location.pathname) {
@@ -3063,6 +3063,7 @@ function rrpOriginalURL(time, href = location.href) {
   }
   if (!Number.isFinite(time) || time < 0) throw new Error('Invalid return timestamp.');
   url.searchParams.set('t', String(Math.floor(time)));
+  url.searchParams.set('rrp_player', 'original');
   return url.href;
 }
 function rrpNode(tag, attrs = {}, text) {
@@ -3088,7 +3089,7 @@ const RRP_CSS = `
   :host(:fullscreen) .rrp-toolbar { display:none; }
   :host(:fullscreen) .rrp-stage { width:100vw; height:100dvh; max-height:none; aspect-ratio:auto; }
   .rrp-stage .shaka-controls-container { transition:opacity 120ms; }
-  .rrp-stage.rrp-idle .shaka-controls-container { opacity:0 !important; pointer-events:none; }
+  .rrp-stage.rrp-idle .shaka-controls-container { opacity:0 !important; }
   .rrp-stage.rrp-idle { cursor:none; }
   .rrp-stage .shaka-controls-button-panel button { min-width:36px; min-height:36px; }
   .rrp-stage .shaka-seek-bar-container { position:relative; }
@@ -3124,7 +3125,7 @@ class RRPPlayer {
     target.addEventListener(event, handler, { ...options, signal: this.life.signal });
   }
   setMessage(text) { if (this.alive) this.message.textContent = text; }
-  async start() {
+  async start({ focus = true } = {}) {
     const source = rrpSource(this.nativeVideo), initial = rrpSnapshot(this.nativeVideo);
     this.initial = initial;
     if (!source || !RRP_SK || !RRP_SK.Player.isBrowserSupported()) throw new Error('Unsupported player/source.');
@@ -3155,11 +3156,18 @@ class RRPPlayer {
     this.transport.install();
     await this.engine.attach(this.video);
     if (!this.alive) return;
+    const heights = (nativeEngine.levels || []).map(level => level.height)
+      .filter(height => Number.isFinite(height) && height > 0 && height <= 1080);
+    const initialHeight = heights.length ? Math.max(...heights) : 0;
     this.engine.configure({
       streaming:{ bufferingGoal:30, rebufferingGoal:1, bufferBehind:90,
         retryParameters:{ maxAttempts:2, timeout:20000, connectionTimeout:10000, stallTimeout:10000 } },
-      manifest:{ retryParameters:{ maxAttempts:2, timeout:15000 } },
-      abr:{ defaultBandwidthEstimate:1000000 },
+      // These VOD playlists round segment durations. Re-aligning every TS to
+      // EXTINF creates holes/overlaps; retain the recording's embedded clock.
+      manifest:{ retryParameters:{ maxAttempts:2, timeout:15000 },
+        hls:{ ignoreManifestTimestampsInSegmentsMode:true } },
+      abr:{ enabled:false, useNetworkInformation:false, defaultBandwidthEstimate:1000000,
+        restrictions:{ minHeight:initialHeight, maxHeight:initialHeight || 1080 } },
     });
     this.ui = new RRP_SK.ui.Overlay(this.engine, this.stage, this.video);
     this.ui.configure({
@@ -3196,9 +3204,16 @@ class RRPPlayer {
     this.setMessage('Loading replacement player…');
     await this.engine.load(source, initial.time, 'application/x-mpegurl');
     if (!this.alive) return;
+    const preferred = this.engine.getVideoTracks()
+      .filter(track => Number.isFinite(track.height) && track.height > 0 && track.height <= 1080)
+      .sort((a, b) => b.height - a.height || b.bandwidth - a.bandwidth)[0];
+    if (preferred && !preferred.active) this.engine.selectVideoTrack(preferred, true);
+    // The default is fixed, not Auto. Later explicit quality/Auto choices remain
+    // owned by Shaka's menu rather than a recurring preference enforcer.
+    this.engine.configure({ abr:{ restrictions:{ minHeight:0, maxHeight:Infinity } } });
     this.video.playbackRate = initial.rate;
     this.loaded = true;
-    this.stage.focus({preventScroll:true});
+    if (focus) this.stage.focus({preventScroll:true});
     this.board.prepare(initial.time);
     this.updateStatus();
     if (!initial.paused) {
@@ -3247,7 +3262,9 @@ class RRPPlayer {
       if (!this.pointerDown && !this.seekHost.matches(':hover')) this.hidePreview();
       else this.activity();
     });
-    for (const type of ['play','pause','waiting','playing','seeked','ended']) this.on(this.video, type, () => this.activity());
+    // Buffering/recovery is not user input: it must not wake an idle overlay.
+    for (const type of ['play','pause','ended']) this.on(this.video, type, () => this.activity());
+    for (const type of ['playing','seeked']) this.on(this.video, type, () => this.activity(false));
     this.on(this.video, 'seeking', () => this.measureSeek());
     this.on(document, 'fullscreenchange', () => { this.hidePreview(); this.activity(); });
     // Stock Shaka reads document.activeElement, which retargets shadow controls
@@ -3302,10 +3319,10 @@ class RRPPlayer {
     return [...this.stage.querySelectorAll('.shaka-overflow-menu,.shaka-sub-menu,.shaka-context-menu')]
       .some(menu => !menu.classList.contains('shaka-hidden'));
   }
-  activity() {
+  activity(reveal = true) {
     if (!this.alive || !this.stage) return;
     clearTimeout(this.hideTimer);
-    this.stage.classList.remove('rrp-idle');
+    if (reveal) this.stage.classList.remove('rrp-idle');
     this.hideTimer = setTimeout(() => {
       if (!this.alive) return;
       if (this.video.paused || this.video.seeking || this.video.readyState < 3 || this.pointerDown ||
@@ -3404,7 +3421,7 @@ class RRPPlayer {
 
 function rrpBoot() {
   if (window.top !== window.self || !rrpRoute() || document.getElementById(RRP_ID)) return;
-  let host = null, candidate = null, nativeVideo = null, timer = null, paused = false, mountLife = null;
+  let host = null, candidate = null, nativeVideo = null, timer = null, autoTimer = null, paused = false, mountLife = null;
   let mountedRoute = location.pathname;
   const life = new AbortController();
   function reconcile() {
@@ -3413,6 +3430,7 @@ function rrpBoot() {
     if (!rrpRoute()) { cleanup(); return; }
     const video = document.querySelector('#plyr_container video.video-player');
     if (host && (!host.isConnected || mountedRoute !== location.pathname || video !== nativeVideo)) {
+      clearTimeout(autoTimer); autoTimer = null;
       mountLife?.abort();
       candidate?.dispose().catch(() => {}); candidate = null;
       host?.remove(); host = null;
@@ -3427,16 +3445,25 @@ function rrpBoot() {
     const toolbar = rrpNode('div', {class:'rrp-toolbar'});
     const launch = rrpNode('button', {type:'button'}, 'Use responsive player');
     const back = rrpNode('button', {type:'button',hidden:'',title:'Reload the original player at the current timestamp'}, 'Use original player');
-    const message = rrpNode('span', {class:'rrp-message', role:'status'}, 'Experimental · sampled previews · original player remains available');
+    const originalRequested = new URL(location.href).searchParams.get('rrp_player') === 'original';
+    const message = rrpNode('span', {class:'rrp-message', role:'status'}, originalRequested
+      ? 'Original player selected · responsive player available'
+      : 'Waiting for the recording… · responsive player starts automatically');
     toolbar.append(rrpNode('strong', {}, 'Recu.me Responsive Player'), launch, back, message);
     shadow.append(rrpNode('style', {}, RRP_CSS), toolbar);
     document.getElementById('plyr_container').before(host);
-    launch.addEventListener('click', async () => {
+    const start = async (automatic = false) => {
       if (candidate) return;
+      clearTimeout(autoTimer); autoTimer = null;
+      if (!automatic && originalRequested) {
+        const url = new URL(location.href);
+        url.searchParams.delete('rrp_player');
+        history.replaceState(history.state, '', url.href);
+      }
       launch.disabled = true;
       const job = new RRPPlayer(video, host, message, back);
       candidate = job;
-      try { await job.start(); if (candidate === job && job.alive) launch.hidden = true; }
+      try { await job.start({focus:!automatic}); if (candidate === job && job.alive) launch.hidden = true; }
       catch (error) {
         if (candidate !== job || !job.alive) return;
         job.failed = true;
@@ -3447,8 +3474,31 @@ function rrpBoot() {
           if (candidate === job) { candidate = null; launch.disabled = false; }
         }
       }
-    }, {signal:mountLife.signal});
-    back.addEventListener('click', () => candidate?.returnOriginal().catch(() => location.reload()), {signal:mountLife.signal});
+    };
+    launch.addEventListener('click', () => start(), {signal:mountLife.signal});
+    back.addEventListener('click', () => candidate?.returnOriginal().catch(() => {
+      // Even a failed disposal must offer an original-only reload, not an
+      // automatic takeover loop on the same broken source.
+      location.assign(rrpOriginalURL(0));
+    }), {signal:mountLife.signal});
+    const autoDeadline = Date.now() + 20000;
+    const autoHost = host, autoLife = mountLife;
+    let readySince = null;
+    const tryAutomatic = () => {
+      autoTimer = null;
+      if (paused || autoLife.signal.aborted || candidate || originalRequested || !autoHost.isConnected ||
+          location.pathname !== mountedRoute || document.querySelector('#plyr_container video.video-player') !== video) return;
+      const ready = !document.fullscreenElement && !document.pictureInPictureElement &&
+        video.readyState >= 2 && window.timeline?.hls?.media === video &&
+        typeof rrpNativeCleanup() === 'function';
+      if (ready && readySince == null) readySince = Date.now();
+      if (!ready) readySince = null;
+      const frames = video.plyr?.previewThumbnails?.thumbnails?.[0]?.frames;
+      if (ready && (frames?.length || Date.now() - readySince >= 1500)) { start(true); return; }
+      if (Date.now() < autoDeadline) autoTimer = setTimeout(tryAutomatic, 200);
+      else message.textContent = 'Original player is still available — press Use responsive player to retry.';
+    };
+    if (!originalRequested) autoTimer = setTimeout(tryAutomatic, 200);
     // Diagnostics expose numbers/state only, never source URLs, tokens or media data.
     host.rrpDiagnostics = () => ({ version:RRP_VERSION, build:RRP_BUILD, active:!!candidate?.alive, loaded:!!candidate?.loaded,
       originalStopped:!!candidate?.metrics.originalStopped, board:candidate?.board?.status(),
@@ -3460,6 +3510,7 @@ function rrpBoot() {
   function cleanup() {
     paused = true;
     clearTimeout(timer); timer = null;
+    clearTimeout(autoTimer); autoTimer = null;
     observer.disconnect();
     life.abort();
     mountLife?.abort();

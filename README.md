@@ -40,11 +40,11 @@ The former standalone room-tab naming behavior is also integrated into the Suite
 
 ## Separate Recu.me replacement player — experimental
 
-[Install Recu.me Responsive Player](https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Recu.me%20Responsive%20Player.user.js) — **0.1.0**, an optional desktop prototype, independent of the Suite and extension builds.
+[Install Recu.me Responsive Player](https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/main/Recu.me%20Responsive%20Player.user.js) — **0.2.0**, an optional experimental desktop player, independent of the Suite and extension builds.
 
-Disable **Accurate Timeline Previews**, reload a Recu.me recording, start its original video, then click **Use responsive player**. The replacement uses Shaka Player, the site's existing authorized media transport, and preloaded sampled storyboard thumbnails. It does not decode a new video frame for each hover. **Use original player** returns through the site's timestamp link.
+Disable **Accurate Timeline Previews**, reload a Recu.me recording and start playback normally. The replacement now starts automatically when the authorized source is ready, at fixed **1080p or the highest offered lower resolution**. It uses Shaka Player, the site's existing authorized media transport, and preloaded sampled storyboard thumbnails, without decoding a new video frame for each hover. **Use original player** returns through the site's timestamp link and keeps that URL on the original player, even after reload. Manual quality/Auto selection remains available.
 
-Actual Chrome/Tampermonkey checks showed already-loaded hover previews on the next animation frame, without extra media requests. Controls stay visible while hovering the timeline or using an open settings menu. Cold media seeks still took roughly 1–3 seconds; this prototype does **not** promise faster server delivery or second-accurate images. Mobile/Firefox and site controls outside the replacement player are not accepted integration surfaces yet. See [scope, measurements, limitations and build commands](docs/RECU_RESPONSIVE_PLAYER.md).
+Actual Chrome/Tampermonkey checks showed already-loaded hover previews on the next animation frame, without extra media requests. Version 0.2.0 corrects the controls hide/reappear loop and measured recurring segment-timing gaps; bounded playback checks passed at 540p, 720p and 1080p. Controls stay visible while hovering the timeline or using an open settings menu. Cold media seeks still take roughly 1–3 seconds; this player does **not** promise faster server delivery or second-accurate images. Mobile/Firefox and site controls outside the replacement player are not accepted integration surfaces yet. See [scope, measurements, limitations and build commands](docs/RECU_RESPONSIVE_PLAYER.md).
 
 ## Separate Recu.me timeline preview script
 

@@ -233,6 +233,7 @@ test('Workshop dispatch and context-only injector never create the room quality 
       URLSearchParams, location: { search: workshop ? '?multicam_mode=1' : '' },
       GM_info: { scriptHandler: extension ? 'Ziggy Extension Adapter' : 'Tampermonkey' },
       installFollowTracking() {}, resetNativeRoomEntryPreferences() {},
+      isPhoneLikeDevice() { return false; }, installRoomRowScrolling() {},
       initWorkstation() { workstations++; },
       initInjector(options = {}) {
         const inner = vm.createContext({ contextOnly: options.contextOnly === true,

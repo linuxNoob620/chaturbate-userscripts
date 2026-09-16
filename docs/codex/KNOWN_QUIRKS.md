@@ -54,6 +54,8 @@ Keep original native children attached and render into a separate Suite-owned ch
 
 Chaturbate can return the same HLS origin and path with a changed `token` query parameter on successive status probes. Comparing the entire URL caused a healthy Workshop stream to be reattached during refresh. For a healthy loaded video, compare URLs with only `token` removed; preserve all other URL differences and the existing explicit-refresh/error recovery paths. Confirmed through live debugger inspection and video-element retention checks on 2026-09-09.
 
+Detached dropdown previews must not reuse the previous attachment's URL. On September 16, Chrome returned HTTP 403 for a previously working room's cached manifest after scrolling away/back. Its HLS instance had zero levels and stayed STOPPED after the fatal `manifestLoadError`: `startLoad()` did not reload that initial manifest. A fresh room-context check restored the still-online stream and separately identified other stale online entries as offline/private. This proves rejected stale URLs and stale status, not the exact server-side token rejection reason. Preserve healthy attached streams; renew context for new attachments and bound failed-preview recovery.
+
 ## Room-status persistence is not a settings edit
 
 The Workshop Store's debounced writer handles both configuration edits and runtime status/last-seen updates. Counting every write or treating every pending writer as an edit can falsely reject a manual import and suppress its completion reload. The 16.6.15 guard compares saved/pending semantic settings instead, including custom card sizes but excluding status fields. Confirmed by extracted-source pending/saved-status reproductions; real settings changes must still block stale replacement.

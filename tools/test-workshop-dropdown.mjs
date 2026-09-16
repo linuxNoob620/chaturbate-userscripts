@@ -227,11 +227,55 @@ async function check(name, run) {
 
 await check('closed binding is idempotent and performs no storage reads, requests or media work', () => {
   const f = fixture(); f.dropdown.bind(f.anchor); f.dropdown.sync();
-  assert.equal(f.anchor.listeners.get('mouseenter').length, 1); assert.equal(f.reads, 0);
+  assert.equal(f.anchor.listeners.get('mouseenter'), undefined); assert.equal(f.reads, 0);
+  assert.equal(f.anchor.listeners.get('keydown').length, 1);
   assert.equal(f.panel(), null); assert.equal(f.requests.length, 0); assert.equal(f.engines.length, 0);
-  f.anchor.emit('mouseenter'); f.advance(179); assert.equal(f.panel(), null);
+  f.anchor.emit('mouseenter'); f.advance(2000); assert.equal(f.panel(), null);
   f.anchor.emit('mouseleave'); f.advance(1000); assert.equal(f.panel(), null);
   f.document.hidden = true; f.open(); assert.equal(f.reads, 0); f.assertIsolated();
+});
+
+await check('returning cards obtain fresh context and do not reuse old stream URLs', async () => {
+  const f = fixture({ rooms: [room('alpha')] }); f.open(); f.intersect();
+  await f.finishRequests({ room_status: 'public', hls_source: 'https://media.example/old.m3u8' }); f.advance(100);
+  assert.equal(f.engines.at(-1).url, 'https://media.example/old.m3u8');
+  f.intersect(f.cards(), false); const count = f.engines.length;
+  f.intersect(); assert.equal(f.engines.length, count, 'No stale source may attach before the fresh response.');
+  assert.equal(f.requests.length, 2);
+  await f.finishRequests({ room_status: 'public', hls_source: 'https://media.example/new.m3u8' });
+  assert.equal(f.engines.at(-1).url, 'https://media.example/new.m3u8');
+  f.intersect(f.cards(), false); f.intersect();
+  await f.finishRequests({ room_status: 'private' }); f.advance(100);
+  assert.equal(f.cards().length, 0, 'A room that became private must leave Online now.');
+  f.dropdown.close(); await settle(); f.assertIsolated();
+});
+
+await check('fatal manifests renew context at most twice and late errors cannot recover a disposed player', async () => {
+  const f = fixture({ rooms: [room('alpha')] }); f.open(); f.intersect(); await f.finishRequests(); f.advance(100);
+  const error = { fatal: true, type: 'network', details: 'manifestLoadError', response: { code: 403 } };
+  for (let i = 1; i <= 3; i++) {
+    const engine = f.engines.at(-1), requests = f.requests.length;
+    engine.listeners.get('error')(null, error);
+    assert.equal(engine.destroyCalls, 1); f.advance(2100);
+    assert.equal(f.requests.length, requests + (i <= 2 ? 1 : 0));
+    await f.finishRequests(); f.advance(100);
+  }
+  const count = f.requests.length;
+  f.engines[0].listeners.get('error')(null, error); f.advance(10000);
+  assert.equal(f.requests.length, count, 'Obsolete engines and exhausted recovery must not loop.');
+  f.dropdown.close(); await settle(); assert.equal(f.timers.size, 0); f.assertIsolated();
+});
+
+await check('recovery is cancelled when scrolled away or closed, and returning probes share the four-worker cap', async () => {
+  const f = fixture(); f.open(); f.intersect(); await f.finishRequests(); f.advance(100);
+  const first = f.cards().slice(0, 6);
+  f.engines[0].listeners.get('error')(null, { fatal: true, type: 'network' });
+  f.intersect(first, false); await f.finishRequests(); const count = f.requests.length;
+  f.advance(2000); assert.equal(f.requests.length, count);
+  f.intersect(first); assert(f.maximumRequests <= 4); await f.finishRequests();
+  f.engines.at(-1).listeners.get('error')(null, { fatal: true, type: 'network' });
+  f.dropdown.close(); await settle(); f.advance(3000);
+  assert.equal(f.timers.size, 0); assert(f.maximumRequests <= 4); f.assertIsolated();
 });
 
 await check('opening presents categories and safe full-Workshop link without loading offscreen media', async () => {

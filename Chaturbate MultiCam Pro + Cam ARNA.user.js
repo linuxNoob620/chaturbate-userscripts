@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.19
+// @version           16.6.20
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -204,7 +204,7 @@
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.19');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.20');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -220,7 +220,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.19');
+  instanceMarker.setAttribute('data-suite-version', '16.6.20');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1414,7 +1414,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.19',
+    version: '16.6.20',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3146,7 +3146,7 @@
   /* =============================================================
    * 4. 房间服务 / RoomService —— API + HLS + 重连 + 智能轮询
    * ============================================================= */
-  function createRoomService(store, { recordHistory = true, eventBus = EventBus, isolateMedia = false } = {}) {
+  function createRoomService(store, { recordHistory = true, eventBus = EventBus, isolateMedia = false, onPoll = null, onStreamError = null } = {}) {
     const sessions = new Map();   // id -> { hls, video, status, retryCount, pollTimer, userPaused, background }
     const inFlight = new Map();   // id -> shared status request promise
     const qualityCaps = new Map(); // id -> maximum stream height for a specific virtual view/consumer
@@ -3310,7 +3310,7 @@
       }
       // 错峰：±20%
       const jitter = ms * (0.8 + Math.random() * 0.4);
-      s.pollTimer = setTimeout(() => { if (sessions.has(id)) connect(id); }, jitter);
+      s.pollTimer = setTimeout(() => { if (sessions.has(id)) onPoll ? onPoll(id) : connect(id); }, jitter);
     }
 
     function pause(id) {
@@ -3550,6 +3550,13 @@
         }
         hls.on(Hls.Events.ERROR, (_, data) => {
           if (!data.fatal || sessions.get(id)?.hls !== hls) return;
+          if (onStreamError) {
+            // Embedded previews renew failed manifests through their bounded
+            // request queue; startLoad alone cannot reload a rejected manifest.
+            destroyHls(s); clearPoll(s); s.hlsSource = null;
+            onStreamError(id);
+            return;
+          }
           // 致命错误：尝试 recover，多次失败后回到状态轮询
           s.retryCount = (s.retryCount || 0) + 1;
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
@@ -3741,6 +3748,7 @@
   const isWorkstation = new URLSearchParams(location.search).get('multicam_mode') === '1';
   const hasExtensionContextMenus = GM_info?.scriptHandler === 'Ziggy Extension Adapter';
   installFollowTracking();
+  if (!isPhoneLikeDevice()) installRoomRowScrolling();
   if (!isWorkstation) resetNativeRoomEntryPreferences();
   if (isWorkstation) {
     initWorkstation();
@@ -3751,6 +3759,41 @@
   /* =============================================================
    * 7. 普通页面注入：浮动按钮 + 快捷键
    * ============================================================= */
+  function installRoomRowScrolling() {
+    document.addEventListener('wheel', event => {
+      if (event.defaultPrevented || !event.cancelable || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey
+        || document.fullscreenElement || document.webkitFullscreenElement || event.deltaX || !event.deltaY) return;
+      // Wheel events do not identify the device. Leave fine/fractional trackpad
+      // motion native; recognize line-mode or conventional discrete wheel steps.
+      if (event.deltaMode !== 1 && (event.deltaMode !== 0 || Math.abs(event.deltaY) < 40
+        || Math.abs(event.deltaY - Math.round(event.deltaY)) > 0.01 || (event.wheelDeltaY && Math.abs(event.wheelDeltaY) % 120 !== 0))) return;
+      const target = event.target;
+      if (!target?.closest || target.isContentEditable || target.closest('input,textarea,select,button,[contenteditable],.menu-pop,[role=dialog]')) return;
+      const grid = target.closest('.RoomCardGrid,.FollowedDropdown__rooms,#ziggy-workshop-dropdown .wd-grid,body.rg-workshop-native .grid:not(.view-split)');
+      if (!grid) return;
+      const cards = [...grid.children].filter(node => node.matches('.RoomCard,.roomCard,.cam-card,.wd-card,.FollowedDropdown__room'));
+      let first = null, pitch = 0;
+      for (const card of cards.slice(0, 64)) {
+        const rect = card.getBoundingClientRect();
+        if (!rect.width || !rect.height) continue;
+        if (!first) first = rect;
+        else if (rect.top > first.top + 2) { pitch = rect.top - first.top; break; }
+      }
+      if (!pitch) return; // No second row: keep the site's own scrolling.
+      let scroller = grid;
+      while (scroller && scroller !== document.documentElement && scroller !== document.body) {
+        if (scroller.scrollHeight > scroller.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(scroller).overflowY)) break;
+        scroller = scroller.parentElement;
+      }
+      if (!scroller || scroller === document.body || scroller === document.documentElement) scroller = document.scrollingElement;
+      if (!scroller) return;
+      const next = Math.max(0, Math.min(scroller.scrollHeight - scroller.clientHeight, scroller.scrollTop + Math.sign(event.deltaY) * pitch * 2));
+      if (next === scroller.scrollTop) return;
+      event.preventDefault();
+      scroller.scrollTo({ top: next, behavior: 'instant' });
+    }, { passive: false });
+  }
+
   async function loadFollowingApiRooms(signal) {
     const rooms = new Map();
     for (let offset = 0; offset < 4500; offset += 90) {
@@ -3895,23 +3938,22 @@
   function createWorkshopDropdown() {
     let active = null;
     let selected = ONLINE_GROUP_ID;
-    let hoverTimer = 0;
-    let leaveTimer = 0;
     const bound = new WeakSet();
     const statusCache = new Map();
     const live = session => active === session && !document.hidden
       && session.anchor.isConnected && session.url === location.href;
 
     function close(restoreFocus = false) {
-      clearTimeout(hoverTimer);
-      clearTimeout(leaveTimer);
       const session = active;
       if (!session) return;
       active = null; // Invalidate callbacks before aborting their work.
       clearTimeout(session.renderTimer);
       session.observer?.disconnect();
       session.owned.forEach(id => session.service.stop(id));
-      session.cards.forEach(card => { card.image.removeAttribute('src'); });
+      session.cards.forEach(card => { clearTimeout(card.recoveryTimer); card.image.removeAttribute('src'); });
+      session.requests.forEach(job => job.resolve({ status: 'aborted' }));
+      session.requests.clear();
+      session.queue.length = 0;
       session.panel.remove();
       session.anchor.setAttribute('aria-expanded', 'false');
       if (restoreFocus && session.anchor.isConnected) session.anchor.focus();
@@ -3927,11 +3969,6 @@
         width: `${width}px`, left: `${Math.max(8, Math.min(rect.left, innerWidth - width - 8))}px`,
         top: `${top}px`, maxHeight: `${Math.max(100, innerHeight - top - 12)}px`,
       });
-    }
-
-    function scheduleClose() {
-      clearTimeout(leaveTimer);
-      if (active && !active.pinned) leaveTimer = setTimeout(() => close(), 240);
     }
 
     function ensureStyle() {
@@ -3966,11 +4003,9 @@
       document.head.append(style);
     }
 
-    function show(anchor, pinned = false) {
-      clearTimeout(hoverTimer);
-      clearTimeout(leaveTimer);
+    function show(anchor) {
       if (document.hidden || !anchor.isConnected) return;
-      if (active?.anchor === anchor) { active.pinned ||= pinned; return; }
+      if (active?.anchor === anchor) return;
       close();
       ensureStyle();
       const state = Storage.load();
@@ -3999,7 +4034,7 @@
       const status = document.createElement('div'); status.className = 'wd-status'; status.setAttribute('role', 'status');
       const grid = document.createElement('div'); grid.className = 'wd-grid'; grid.id = 'ziggy-workshop-dropdown-rooms'; grid.setAttribute('role', 'tabpanel');
       panel.append(header, tabs, status, grid);
-      const session = active = { anchor, panel, grid, pinned, url: location.href, cards: new Map(), owned: new Set(), sources: new Map(),
+      const session = active = { anchor, panel, grid, url: location.href, cards: new Map(), owned: new Set(), requests: new Map(), queue: [], workers: 0,
         visible: new Set(), renderTimer: 0, requestGeneration: 0, completed: 0, total: 0, refreshing: false };
       const previewStore = { state: { rooms: [...roomMap.values()], settings: {
         maxStreamHeight: 480, notifyOnline: false, pollMs: { online: 120000, offline: 120000, private: 120000, error: 30000 },
@@ -4010,10 +4045,10 @@
         statusCache.set(id, { patch: { lastStatus: room.lastStatus, viewerCount: room.viewerCount, lastSeenOnline: room.lastSeenOnline }, at: Date.now() });
         scheduleRender();
       } };
-      session.service = createRoomService(previewStore, { recordHistory: false, isolateMedia: true, eventBus: {
+      session.service = createRoomService(previewStore, { recordHistory: false, isolateMedia: true,
+        onPoll: id => requestRoom(id), onStreamError: recoverPreview, eventBus: {
         emit(name, payload) {
           if (!live(session) || name !== 'room:online') return;
-          session.sources.set(payload.id, payload.hlsSource);
           const card = session.cards.get(payload.id);
           if (card?.video && session.visible.has(payload.id)) session.service.startHls(payload.id, payload.hlsSource);
         },
@@ -4024,10 +4059,53 @@
       ];
       const extraGroups = state.groups.filter(group => ![ONLINE_GROUP_ID, ONLINE_FAVORITES_GROUP_ID, LIBRARY_GROUP_ID].includes(group.id));
       if (![...categoryList.map(([id]) => id), ...extraGroups.map(group => group.id)].includes(selected)) selected = ONLINE_GROUP_ID;
+      function requestRoom(id, visibleOnly = false) {
+        if (!live(session)) return Promise.resolve({ status: 'aborted' });
+        const existing = session.requests.get(id);
+        if (existing) { if (!visibleOnly) existing.visibleOnly = false; return existing.promise; }
+        const job = { id, visibleOnly };
+        job.promise = new Promise(resolve => { job.resolve = resolve; });
+        session.requests.set(id, job); session.queue.push(job);
+        pumpRequests();
+        return job.promise;
+      }
+      function pumpRequests() {
+        while (live(session) && session.workers < 4 && session.queue.length) {
+          const visibleIndex = session.queue.findIndex(job => session.visible.has(job.id));
+          const job = session.queue.splice(Math.max(0, visibleIndex), 1)[0];
+          if (job.visibleOnly && !session.visible.has(job.id)) {
+            session.requests.delete(job.id); job.resolve({ status: 'aborted' }); continue;
+          }
+          session.workers++; session.owned.add(job.id);
+          const request = session.service.probe(job.id);
+          syncMedia();
+          request.catch(() => ({ status: 'error' })).then(result => {
+            session.requests.delete(job.id); session.workers--; job.resolve(result);
+            // A shared endpoint cooldown must not start another batch now.
+            if (result?.status === 'throttled') {
+              session.queue.splice(0).forEach(queued => { session.requests.delete(queued.id); queued.resolve(result); });
+            }
+            pumpRequests();
+          });
+        }
+      }
+      function recoverPreview(id) {
+        const card = session.cards.get(id);
+        if (!live(session) || !card?.video || !session.visible.has(id)) return;
+        card.video.hidden = true; // Keep the thumbnail visible while recovering.
+        if (++card.recoveries > 2) {
+          card.previewError = true; card.root.title = 'Preview unavailable · try Refresh'; scheduleRender(); return;
+        }
+        card.recoveryTimer = setTimeout(() => {
+          card.recoveryTimer = 0;
+          if (live(session) && card.video && session.visible.has(id)) void requestRoom(id, true);
+        }, card.recoveries * 1000);
+      }
       function release(id) {
         const card = session.cards.get(id);
         if (!card) return;
         card.image.removeAttribute('src');
+        clearTimeout(card.recoveryTimer); card.recoveryTimer = 0;
         if (card.video) { session.service.detachVideo(id); card.video.remove(); card.video = null; }
       }
       function syncMedia() {
@@ -4039,15 +4117,19 @@
           if (!card.image.hasAttribute('src') && !room.sourceUrl) card.image.src = `https://thumb.live.mmcdn.com/riw/${encodeURIComponent(id)}.jpg`;
           if (room.lastStatus !== 'online' || room.sourceUrl) { if (card.video) release(id); return; }
           playing++;
-          if (card.video || !session.service.has(id)) return;
+          if (card.video) return;
+          if (!session.service.has(id)) { void requestRoom(id, true); return; }
           const video = card.video = document.createElement('video');
+          card.recoveries = 0; card.previewError = false; card.root.removeAttribute('title');
           video.muted = true; video.autoplay = true; video.playsInline = true;
+          video.hidden = true;
           video.setAttribute('aria-hidden', 'true');
+          video.addEventListener('playing', () => { if (card.video === video) video.hidden = false; });
           card.media.append(video);
           session.owned.add(id);
           session.service.attachVideo(id, video);
-          const source = session.sources.get(id);
-          if (source) session.service.startHls(id, source);
+          // Never reuse a signed URL after a card leaves the viewport.
+          void requestRoom(id, true);
         });
       }
       session.observer = new IntersectionObserver(entries => {
@@ -4084,7 +4166,7 @@
             card = { root, media, label, image, video: null };
             session.cards.set(room.id, card);
           }
-          const text = room.lastStatus === 'online' ? 'Live preview' : room.lastStatus === 'private' ? 'Private' : room.lastStatus === 'offline' ? 'Offline' : 'Checking…';
+          const text = card.previewError ? 'Preview unavailable · try Refresh' : room.lastStatus === 'online' ? 'Live preview' : room.lastStatus === 'private' ? 'Private' : room.lastStatus === 'offline' ? 'Offline' : 'Checking…';
           if (card.label.textContent !== text) card.label.textContent = text;
           if (grid.children[index] !== card.root) grid.insertBefore(card.root, grid.children[index] || null);
           session.observer.observe(card.root);
@@ -4105,21 +4187,16 @@
         if (!live(session) || session.refreshing) return;
         const generation = ++session.requestGeneration;
         const rooms = [...roomMap.values()].filter(room => !room.sourceUrl);
-        let cursor = 0;
+        session.cards.forEach(card => { card.recoveries = 0; card.previewError = false; card.root.removeAttribute('title'); });
         session.refreshing = true; session.completed = 0; session.total = rooms.length; refresh.disabled = true;
         render();
-        const worker = async () => {
-          while (live(session) && generation === session.requestGeneration && cursor < rooms.length) {
-            const room = rooms[cursor++]; session.owned.add(room.id);
-            const request = session.service.probe(room.id);
-            syncMedia();
-            const result = await request;
-            if (!live(session) || generation !== session.requestGeneration) return;
-            session.completed++; scheduleRender();
-            if (result?.status === 'throttled') return;
-          }
+        const check = async room => {
+          const result = await requestRoom(room.id);
+          if (!live(session) || generation !== session.requestGeneration) return;
+          if (result?.status !== 'throttled') session.completed++;
+          scheduleRender();
         };
-        try { await Promise.all(Array.from({ length: Math.min(4, rooms.length) }, worker)); }
+        try { await Promise.all(rooms.map(check)); }
         finally {
           if (live(session) && generation === session.requestGeneration) {
             session.refreshing = false; refresh.disabled = false; render();
@@ -4132,7 +4209,7 @@
         selected = id;
         // A category owns a fresh lifetime: cancel its old queued/probing/media
         // work together, while retaining only the read-only status cache.
-        close(); show(anchor, true);
+        close(); show(anchor);
         const target = [...(active?.panel.querySelectorAll('[role=tab]') || [])].find(tab => tab.dataset.group === id);
         (target || active?.panel.querySelector('select'))?.focus();
       }
@@ -4157,9 +4234,6 @@
       groups.addEventListener('change', () => { if (groups.value) select(groups.value); });
       tabs.append(groups);
       refresh.addEventListener('click', refreshStatus);
-      panel.addEventListener('mouseenter', () => clearTimeout(leaveTimer));
-      panel.addEventListener('mouseleave', scheduleClose);
-      panel.addEventListener('focusin', () => { session.pinned = true; });
       document.body.append(panel);
       anchor.setAttribute('aria-expanded', 'true');
       const bg = getComputedStyle(anchor.closest('#desktop-spa-header') || anchor.parentElement).backgroundColor;
@@ -4170,21 +4244,16 @@
       position(session); render(); void refreshStatus();
     }
     function toggle(anchor) {
-      if (active?.anchor === anchor && active.pinned) close(); else show(anchor, true);
+      if (active?.anchor === anchor) close(); else show(anchor);
     }
     function bind(anchor) {
       if (bound.has(anchor)) return;
       bound.add(anchor);
       anchor.setAttribute('aria-expanded', 'false'); anchor.setAttribute('aria-controls', 'ziggy-workshop-dropdown');
       anchor.setAttribute('aria-label', 'Workshop rooms'); anchor.title = 'Workshop rooms';
-      anchor.addEventListener('mouseenter', () => {
-        clearTimeout(leaveTimer); clearTimeout(hoverTimer);
-        hoverTimer = setTimeout(() => show(anchor), 180);
-      });
-      anchor.addEventListener('mouseleave', () => { clearTimeout(hoverTimer); scheduleClose(); });
       anchor.addEventListener('keydown', event => {
         if (event.key !== 'ArrowDown') return;
-        event.preventDefault(); show(anchor, true); active?.panel.querySelector('[role=tab][aria-selected=true]')?.focus();
+        event.preventDefault(); show(anchor); active?.panel.querySelector('[role=tab][aria-selected=true]')?.focus();
       });
     }
     function sync() { if (active && !live(active)) close(); }
@@ -4199,7 +4268,7 @@
     for (const eventName of ['storage', 'ryujo_multicam_storage', 'ziggy-recent-followed']) {
       window.addEventListener(eventName, event => {
         if (!active || (eventName === 'storage' && event.key !== STORE_KEY && !event.key?.startsWith(RECENT_FOLLOWED_PREFIX))) return;
-        const { anchor, pinned } = active; close(); show(anchor, pinned);
+        const { anchor } = active; close(); show(anchor);
       });
     }
     return { bind, toggle, sync, close };

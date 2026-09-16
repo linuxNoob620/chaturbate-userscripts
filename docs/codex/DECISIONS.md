@@ -63,3 +63,11 @@ Decision: Replace the dashboard-style Workshop presentation with a native-style 
 Status: Active
 
 Decision: Desktop Workshop navigation exposes saved-room categories in a native-style dropdown while retaining an explicit full-Workshop link. It must not mount the complete Workshop or alter its persisted view/settings. Closed or backgrounded dropdowns own no active preview media or queued status work. Full Workshop also releases hidden/offscreen previews; actual visible fullscreen/PiP are distinct surfaces, not a license for inactive unmuted/split previews to keep loading. Inline card preview frames are 16:9, with model names outside the media frame and themed scrollbars scoped to Suite-owned surfaces. Existing fullscreen sizing/gesture behavior is not redesigned by this change.
+
+Opening policy: click or explicit keyboard activation only; hovering does not open or load Workshop previews.
+
+## D-011 — Row-based desktop wheel navigation
+
+Status: Active
+
+Decision: Conventional mouse-wheel steps move two actual card rows in native room grids, full Workshop and room-preview dropdowns. Measure the current layout rather than assuming fixed row dimensions. Do not apply card-row scrolling to chat, text editing, dialogs, fullscreen, pinch/Ctrl-wheel zoom or mobile touch gestures; preserve fine trackpad motion where wheel-event data allows it to be distinguished.

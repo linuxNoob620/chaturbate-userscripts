@@ -3,10 +3,10 @@
 ## Deployment
 
 - Primary runtime: Tampermonkey userscript `Chaturbate MultiCam Pro + Cam ARNA.user.js`.
-- Current userscript release: 16.6.17 (`main`, tag `v16.6.17`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
+- Current userscript release: 16.6.18 (`main`, tag `v16.6.18`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
 - Extension builds remain at 16.6.7. They were not modified, rebuilt, packaged, or published for this userscript-only change.
 - Local rollback point: Git tag `backup/pre-16.6.8-workshop-doubletap-20260905` at the 16.6.7 baseline.
-- Version 16.6.17 is installed in the existing Chrome testing-profile Tampermonkey entry; its saved editor readback matched the source after reload. Quetta was last updated/tested at 16.6.16; no phone was connected for 16.6.17. No reinstall or settings reset was performed. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
+- Version 16.6.18 is installed in the existing Chrome testing-profile Tampermonkey entry; its saved editor readback matched the source after reload. Quetta was last updated/tested at 16.6.16; no phone was connected for 16.6.17/16.6.18. No reinstall or settings reset was performed. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
 - Recu.me release rollback point: local tag `backup/pre-recu-16.6.13-20260909` at 16.6.12.
 - Candidate rollback point: `backup/pre-native-portrait-20260905`. Extension outputs are unchanged.
 
@@ -115,6 +115,10 @@
 ## Normal rooms
 
 - Normal-room behavior remains on Chaturbate's native player/fullscreen path.
+- From 16.6.18, a newly detected native video/source selects the highest available numeric quality at or below 1080p through the existing native menu. Desktop overlay options and mobile Video.js options are supported. Selection waits for the source/menu to exist and runs once per video/source; subsequent manual choices remain available. It is a default, not a permanent manual-selection cap or a guarantee about packets loaded before the userscript/native menu is ready. An unrecognized or above-cap-only ladder is left untouched rather than inventing a rendition.
+- This preference does not affect Workshop or Following previews. The old desktop Video-tools first-option click was removed because it could choose an uncapped quality and interfere with the room default. No HLS source, player, media sizing, fullscreen, gesture, audio, or Workshop settings code changed; no extra polling/observer/listener was introduced.
+- Actual persistent Chrome/Tampermonkey checks selected 1080p and played 1920 x 1080 on three live rooms; manual 720p played 1280 x 720, survived reconciliation, and retained the same media source. Reload reapplied 1080p. The server-delivered mobile site under desktop CDP emulation selected 1080p through its own native Video.js menu; this is not real-phone Quetta acceptance. Sampled live rooms all offered 1080p; lower/above-cap ladders and source/room replacement are covered by 32 extracted-source checks, including ten repeated runs. Actual same-video/same-source reuse across native room navigation remains unestablished.
+- Rollback for this change: local tag `backup/pre-room-quality-20260916` at `5fca390c070c9f7291509f8550ec5767f0156b12`; baseline Suite SHA-256 `D73B8C29AF255FEAB6DEE0C06CA88EE4623B826041D028EE5A884FFAD7F865A0`. Syntax, userscript build/regression gates and independent scoped Riqor review passed. Intermittent existing native JSON parse errors were also observed; this scoped quality change neither diagnoses nor claims to resolve them.
 - The 16.6.8 Workshop fix did not change normal-room handlers.
 - The verified userscript-disabled phone baseline is recorded in `BEHAVIOR_BASELINES.md`.
 

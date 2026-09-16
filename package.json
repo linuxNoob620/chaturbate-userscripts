@@ -1,6 +1,6 @@
 {
   "name": "ziggy-chaturbate-suite",
-  "version": "16.6.17",
+  "version": "16.6.18",
   "private": true,
   "description": "Builds the maintained Tampermonkey userscript and strict-parity Chrome and Firefox/Zen extensions.",
   "scripts": {
@@ -10,7 +10,7 @@
     "build:firefox": "node ./tools/build-extensions.mjs firefox && node ./tools/verify-extension-parity.mjs firefox",
     "package": "npm run build",
     "test": "node ./tools/validate-userscripts.mjs && node ./tools/test-suite-regressions.mjs && node ./tools/test-recu-panel.mjs && node ./tools/test-github-sync.mjs && node ./tools/test-extension-adapters.mjs && node ./tools/verify-extension-parity.mjs && npm run test:mobile-view",
-    "test:userscript": "node ./tools/validate-userscripts.mjs && node ./tools/test-suite-regressions.mjs && node ./tools/test-workshop-refresh.mjs && node ./tools/test-workshop-grid.mjs && node ./tools/test-recu-panel.mjs && node ./tools/test-github-sync.mjs && node ./tools/test-stage2-persistence.mjs && node ./tools/test-stage2-legacy.mjs && node ./tools/test-stage2-ui.mjs && node ./tools/test-stage3-followups.mjs && npm run test:recu-previews",
+    "test:userscript": "node ./tools/validate-userscripts.mjs && node ./tools/test-suite-regressions.mjs && node ./tools/test-native-room-quality.mjs && node ./tools/test-workshop-refresh.mjs && node ./tools/test-workshop-grid.mjs && node ./tools/test-recu-panel.mjs && node ./tools/test-github-sync.mjs && node ./tools/test-stage2-persistence.mjs && node ./tools/test-stage2-legacy.mjs && node ./tools/test-stage2-ui.mjs && node ./tools/test-stage3-followups.mjs && npm run test:recu-previews",
     "test:mobile-view": "node ./tools/real-mobile-view/verify.mjs",
     "test:workshop": "node ./tools/test-workshop-refresh.mjs && node ./tools/test-workshop-grid.mjs",
     "test:recu": "node ./tools/test-recu-panel.mjs",

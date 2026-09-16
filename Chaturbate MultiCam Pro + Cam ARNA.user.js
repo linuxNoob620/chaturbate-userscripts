@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.17
+// @version           16.6.18
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -204,7 +204,7 @@
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.17');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.18');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -220,7 +220,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.17');
+  instanceMarker.setAttribute('data-suite-version', '16.6.18');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1414,7 +1414,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.17',
+    version: '16.6.18',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3887,6 +3887,38 @@
     return sync;
   }
 
+  function createNativeRoomQualitySync() {
+    const applied = new WeakMap();
+    return room => {
+      if (!room) return;
+      const video = document.querySelector('#TheaterModePlayer video, #basePlayer video, #VideoPanel video');
+      if (!video || !video.currentSrc) return;
+      if (applied.get(video) === video.currentSrc) return;
+      const host = video.closest('#TheaterModePlayer, #basePlayer, #VideoPanel');
+      if (!host) return;
+      // Desktop's overlay and mobile's Video.js menu invoke the native player.
+      // Do not replace its HLS source, controls, sizing or fullscreen behavior.
+      let options = [...host.querySelectorAll('[data-testid="quality-option"]')];
+      if (!options.length) options = [...host.querySelectorAll('#chat-player .vjs-menu-item')];
+      let best = null, height = 0;
+      for (const option of options) {
+        if (option.getAttribute('aria-disabled') === 'true' || option.disabled) continue;
+        const label = (option.querySelector('.vjs-menu-item-text') || option).textContent.trim();
+        const match = label.match(/^(\d{3,4})p(?:\s*\d+(?:\.\d+)?(?:\s*fps)?)?$/i);
+        const candidate = match ? Number(match[1]) : 0;
+        if (candidate > height && candidate <= 1080) { best = option; height = candidate; }
+      }
+      if (!best) return; // Options may not have hydrated yet; never choose an uncapped Auto.
+      const selected = best.getAttribute('aria-checked') === 'true'
+        || best.classList.contains('vjs-selected') || !!best.style.color;
+      // Native desktop selection completes asynchronously and rebuilds the menu.
+      // Claim this source before clicking so reconciliation cannot click twice.
+      applied.set(video, video.currentSrc);
+      try { if (!selected) best.click(); }
+      catch (_) { applied.delete(video); }
+    };
+  }
+
   function initInjector(options = {}) {
     const contextOnly = options.contextOnly === true;
     const ROOM_PATH = /^\/([a-zA-Z0-9_-]+)\/?$/;
@@ -3911,6 +3943,7 @@
     // ---- 当前房间（响应式：URL / canonical / DOM 变化时自动重算）----
     let currentRoom = null;
     let recuExplicitRoom = null;
+    const syncNativeRoomQuality = contextOnly ? () => {} : createNativeRoomQualitySync();
     const entryMutedVideos = new WeakSet();
     function muteNewNativeVideos() {
       if (!currentRoom || contextOnly) return;
@@ -3969,6 +4002,7 @@
         currentRoomSubs.forEach(fn => { try { fn(currentRoom); } catch (_) {} });
       }
       muteNewNativeVideos();
+      syncNativeRoomQuality(currentRoom);
     }
     const recalcCurrentRoomSoon = debounce(recalcCurrentRoom, 180);
     recalcCurrentRoom();
@@ -13812,7 +13846,6 @@
         if (videoControls){videoControls.style.display=tabName=="video"?"block":"none";}
         var chatControls=document.getElementById("chatcontrols");
         if (chatControls){chatControls.style.display=tabName=="chat"?"block":"none";}
-        if (tabName=="video"){setres();}
     }
 
     function setReloadedToolsMenuState(expanded,cursor){
@@ -14396,15 +14429,6 @@
         toolsPanel.style.display="block";
         setReloadedToolsMenuState(true);
         activateReloadedToolsTab("video");
-    }
-
-    function setres(){
-        if (document.querySelector('[data-testid="quality-option"]')){
-            var voptions=document.querySelectorAll('[data-testid="quality-option"]');
-            if (voptions[voptions.length-1].style.color){
-                voptions[0].click();
-            }
-        }
     }
 
     function dragMouseDown(e) {

@@ -1,5 +1,11 @@
 # Known Quirks
 
+## Embedded Workshop needs navigation isolation and frame-sized overlays
+
+A plain same-origin Chaturbate Workshop iframe redirected the parent room during the September 16 Chrome compatibility probe. A sandbox allowing scripts/same-origin/forms/popups/modals/downloads, but **not top navigation**, retained the parent room and ran the actual Tampermonkey Workshop. This is navigation isolation, not a security boundary against same-origin scripts. No CSP or extension permissions were weakened.
+
+The existing group menu was below the Groups dismissal backdrop in the compact frame: a real Rename click dismissed Groups instead of reaching Rename. Embedded-only stacking above that backdrop and viewport-clamped menu coordinates restored actual Rename/Delete clicks. Full-page stacking was not changed.
+
 ## Quetta command-line flag state is independent of the command-line file
 
 Symptom: Quetta can display an unsupported-feature warning naming `CommandLineOnNonRooted` even when `/data/local/tmp/chrome-command-line` is absent.

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.20
+// @version           16.6.21
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -204,7 +204,7 @@
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.20');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.21');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -220,7 +220,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.20');
+  instanceMarker.setAttribute('data-suite-version', '16.6.21');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1414,7 +1414,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.20',
+    version: '16.6.21',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -2358,6 +2358,7 @@
 
   let githubAutoExportQueue = Promise.resolve();
   let githubAutoExportBatch = null;
+  let trackWorkshopOperation = operation => operation;
   const suiteToastTimers = new WeakMap();
 
   function workshopMembershipSignature(state) {
@@ -2420,6 +2421,10 @@
   }
 
   function showGithubExportNotice(message, persistent = false) {
+    if (typeof isEmbeddedWorkshop === 'function' && isEmbeddedWorkshop()) {
+      window.parent.postMessage({ type: 'ziggy-workshop-export-notice', message, persistent }, location.origin);
+      return; // One notice, retained by the room even after this editor closes.
+    }
     showSuiteToast(message, { id: 'ziggy-export-notice', duration: 5000, persistent });
   }
 
@@ -2557,7 +2562,7 @@
     const withBusy = async (button, action) => {
       const buttons = [...panel.querySelectorAll('button')];
       buttons.forEach(item => { item.disabled = true; });
-      try { await action(); }
+      try { await trackWorkshopOperation(action()); }
       catch (error) { setStatus(error.message || String(error), 'error'); }
       finally { buttons.forEach(item => { item.disabled = false; }); }
     };
@@ -3933,345 +3938,153 @@
     return sync;
   }
 
-  // A lightweight, read-only view of saved rooms. It never mounts the full
-  // Workshop or writes preview status into the user's persisted configuration.
+  // One Workshop implementation, in an owned lazy same-origin frame. Its DOM,
+  // styles, dialogs and media lifecycle remain isolated from the native room.
+  function isEmbeddedWorkshop() {
+    try { return isWorkshopRoute() && window.parent !== window
+      && window.frameElement?.id === 'ziggy-workshop-frame'; } catch (_) { return false; }
+  }
+
   function createWorkshopDropdown() {
     let active = null;
-    let selected = ONLINE_GROUP_ID;
     const bound = new WeakSet();
-    const statusCache = new Map();
-    const live = session => active === session && !document.hidden
-      && session.anchor.isConnected && session.url === location.href;
-
-    function close(restoreFocus = false) {
-      const session = active;
-      if (!session) return;
-      active = null; // Invalidate callbacks before aborting their work.
-      clearTimeout(session.renderTimer);
-      session.observer?.disconnect();
-      session.owned.forEach(id => session.service.stop(id));
-      session.cards.forEach(card => { clearTimeout(card.recoveryTimer); card.image.removeAttribute('src'); });
-      session.requests.forEach(job => job.resolve({ status: 'aborted' }));
-      session.requests.clear();
-      session.queue.length = 0;
-      session.panel.remove();
+    function dispose(session, restoreFocus = false) {
+      if (active !== session) return;
+      active = null;
+      clearTimeout(session.loadTimer);
+      session.panel.remove(); // Removing the browsing context releases its owned work.
       session.anchor.setAttribute('aria-expanded', 'false');
       if (restoreFocus && session.anchor.isConnected) session.anchor.focus();
     }
-
+    function close(restoreFocus = false) {
+      const session = active;
+      if (!session || session.closing) return;
+      if (!session.ready) { dispose(session, restoreFocus); return; }
+      session.closing = true;
+      session.restoreFocus = restoreFocus;
+      session.status.hidden = false;
+      session.status.textContent = 'Saving pending changes…';
+      session.frame.contentWindow.postMessage({ type: 'ziggy-workshop-close' }, location.origin);
+    }
     function position(session) {
-      if (!live(session)) { close(); return; }
+      if (active !== session) return;
       const rect = session.anchor.getBoundingClientRect();
-      if (rect.bottom <= 0 || rect.top >= innerHeight) { close(); return; }
-      const width = Math.min(570, innerWidth - 16);
-      const top = Math.max(8, rect.bottom + 6);
+      const width = Math.min(session.expanded ? 1000 : 680, innerWidth - 16);
+      // Scrolling the native anchor away must not dismiss an editing surface.
+      const top = Math.max(8, Math.min(rect.bottom + 6, Math.max(8, innerHeight - 320)));
       Object.assign(session.panel.style, {
         width: `${width}px`, left: `${Math.max(8, Math.min(rect.left, innerWidth - width - 8))}px`,
-        top: `${top}px`, maxHeight: `${Math.max(100, innerHeight - top - 12)}px`,
+        top: `${top}px`, height: `${Math.max(80, Math.min(780, innerHeight - top - 8))}px`,
       });
     }
-
-    function ensureStyle() {
-      if (document.getElementById('ziggy-workshop-dropdown-style')) return;
-      const style = document.createElement('style');
-      style.id = 'ziggy-workshop-dropdown-style';
-      style.textContent = `
-        #ziggy-workshop-dropdown{position:fixed;z-index:10010;display:flex;flex-direction:column;box-sizing:border-box;background:var(--wd-bg,#1f2c38);color:var(--wd-text,#dce6ed);border:1px solid var(--wd-border,#354452);border-radius:8px;box-shadow:0 5px 18px #0006;font:14px/1.4 Arial,sans-serif;overflow:hidden}
-        #ziggy-workshop-dropdown *{box-sizing:border-box}
-        #ziggy-workshop-dropdown .wd-head{display:flex;align-items:center;gap:10px;padding:12px 16px 8px;flex:none}
-        #ziggy-workshop-dropdown a{color:var(--wd-link,#58b4fa);text-decoration:none}
-        #ziggy-workshop-dropdown .wd-full{font-weight:bold;margin-right:auto}
-        #ziggy-workshop-dropdown button,#ziggy-workshop-dropdown select{font:inherit;color:inherit;background:transparent;border:1px solid transparent;border-radius:4px;cursor:pointer;min-height:34px;padding:5px 8px}
-        #ziggy-workshop-dropdown button:hover,#ziggy-workshop-dropdown select:hover{background:#8882}
-        #ziggy-workshop-dropdown :focus-visible{outline:2px solid var(--wd-link,#58b4fa);outline-offset:-2px}
-        #ziggy-workshop-dropdown .wd-tabs{display:flex;flex-wrap:wrap;gap:4px;padding:0 12px 8px;border-bottom:1px solid var(--wd-border,#354452);flex:none}
-        #ziggy-workshop-dropdown [aria-selected=true]{color:var(--wd-link,#58b4fa);border-bottom-color:currentColor;font-weight:bold}
-        #ziggy-workshop-dropdown select{max-width:150px;background:var(--wd-bg,#1f2c38);border-color:var(--wd-border,#354452)}
-        #ziggy-workshop-dropdown .wd-status{padding:6px 16px;font-size:12px;color:var(--wd-muted,#a9b8c5);flex:none}
-        #ziggy-workshop-dropdown .wd-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:max-content;align-content:start;gap:10px;padding:0 16px 16px;overflow:auto;min-height:0;overscroll-behavior:contain}
-        #ziggy-workshop-dropdown .wd-card{display:block;min-width:0;border-radius:4px;overflow:hidden;background:var(--wd-card,#17212b);border:1px solid var(--wd-border,#354452)}
-        #ziggy-workshop-dropdown .wd-media{position:relative;aspect-ratio:16/9;overflow:hidden;background:#101820;display:grid;place-items:center;color:#ccd7df;font-size:12px}
-        #ziggy-workshop-dropdown .wd-media img,#ziggy-workshop-dropdown .wd-media video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;border:0}
-        #ziggy-workshop-dropdown .wd-media img:not([src]){display:none}
-        #ziggy-workshop-dropdown .wd-name{padding:9px 10px;font-weight:bold;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-        #ziggy-workshop-dropdown .wd-empty{grid-column:1/-1;padding:24px 4px;color:var(--wd-muted,#a9b8c5)}
-        #ziggy-workshop-dropdown .wd-grid{scrollbar-width:thin;scrollbar-color:var(--wd-muted,#7892a5) var(--wd-bg,#1f2c38)}
-        #ziggy-workshop-dropdown .wd-grid::-webkit-scrollbar{width:9px}
-        #ziggy-workshop-dropdown .wd-grid::-webkit-scrollbar-track{background:var(--wd-bg,#1f2c38)}
-        #ziggy-workshop-dropdown .wd-grid::-webkit-scrollbar-thumb{background:var(--wd-muted,#7892a5);border:2px solid var(--wd-bg,#1f2c38);border-radius:6px}
-      `;
-      document.head.append(style);
-    }
-
     function show(anchor) {
-      if (document.hidden || !anchor.isConnected) return;
-      if (active?.anchor === anchor) return;
-      close();
-      ensureStyle();
-      const state = Storage.load();
-      const recent = recentFollowedRooms();
-      const roomMap = new Map(state.rooms.map(room => [room.id, { ...room }]));
-      for (const room of recent) if (!roomMap.has(room.id)) roomMap.set(room.id, { ...room, groups: [], lastStatus: 'unknown' });
-      // Never retain an unbounded history of rooms removed from the library.
-      for (const id of statusCache.keys()) if (!roomMap.has(id)) statusCache.delete(id);
-      roomMap.forEach((room, id) => {
-        const cached = statusCache.get(id);
-        if (cached && Date.now() - cached.at < 60000) Object.assign(room, cached.patch);
-      });
-      const panel = document.createElement('div');
-      panel.id = 'ziggy-workshop-dropdown';
-      panel.setAttribute('role', 'region');
-      panel.setAttribute('aria-label', 'Workshop rooms');
-      const header = document.createElement('div'); header.className = 'wd-head';
+      if (active) return;
+      if (!document.getElementById('ziggy-workshop-dropdown-style')) {
+        const style = document.createElement('style'); style.id = 'ziggy-workshop-dropdown-style';
+        style.textContent = `
+          #ziggy-workshop-dropdown{position:fixed;z-index:10010;display:flex;flex-direction:column;box-sizing:border-box;background:#202c39;color:#dce6ed;border:1px solid #354452;border-radius:8px;box-shadow:0 5px 18px #0006;font:14px/1.4 Arial,sans-serif;overflow:hidden}
+          #ziggy-workshop-dropdown .wd-head{display:flex;align-items:center;gap:10px;padding:8px 12px;flex:none}
+          #ziggy-workshop-dropdown .wd-full{color:#58b4fa;text-decoration:none;font-weight:bold;margin-right:auto}
+          #ziggy-workshop-dropdown button{font:inherit;color:inherit;background:transparent;border:1px solid #354452;border-radius:4px;cursor:pointer;min-height:32px;padding:4px 8px}
+          #ziggy-workshop-dropdown :focus-visible{outline:2px solid #58b4fa;outline-offset:-2px}
+          #ziggy-workshop-dropdown .wd-status{padding:6px 12px;flex:none}
+          #ziggy-workshop-frame{display:block;width:100%;min-height:0;flex:1;border:0;background:#17202a}
+        `;
+        document.head.append(style);
+      }
+      const panel = document.createElement('section'); panel.id = 'ziggy-workshop-dropdown';
+      panel.setAttribute('role', 'region'); panel.setAttribute('aria-label', 'Workshop');
+      const head = document.createElement('div'); head.className = 'wd-head';
       const full = document.createElement('a'); full.className = 'wd-full';
-      full.href = canonicalWorkshopUrl(); full.target = '_blank'; full.rel = 'noopener';
-      full.textContent = 'Open full Workshop ↗';
-      full.addEventListener('click', () => close());
-      const refresh = document.createElement('button'); refresh.type = 'button'; refresh.textContent = '↻'; refresh.setAttribute('aria-label', 'Refresh room status');
-      const dismiss = document.createElement('button'); dismiss.type = 'button'; dismiss.textContent = '×'; dismiss.setAttribute('aria-label', 'Close Workshop menu'); dismiss.addEventListener('click', () => close(true));
-      header.append(full, refresh, dismiss);
-      const tabs = document.createElement('div'); tabs.className = 'wd-tabs'; tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'Workshop categories');
-      const status = document.createElement('div'); status.className = 'wd-status'; status.setAttribute('role', 'status');
-      const grid = document.createElement('div'); grid.className = 'wd-grid'; grid.id = 'ziggy-workshop-dropdown-rooms'; grid.setAttribute('role', 'tabpanel');
-      panel.append(header, tabs, status, grid);
-      const session = active = { anchor, panel, grid, url: location.href, cards: new Map(), owned: new Set(), requests: new Map(), queue: [], workers: 0,
-        visible: new Set(), renderTimer: 0, requestGeneration: 0, completed: 0, total: 0, refreshing: false };
-      const previewStore = { state: { rooms: [...roomMap.values()], settings: {
-        maxStreamHeight: 480, notifyOnline: false, pollMs: { online: 120000, offline: 120000, private: 120000, error: 30000 },
-      } }, patchRoom(id, patch) {
-        if (!live(session)) return;
-        const room = roomMap.get(id);
-        if (room) Object.assign(room, patch);
-        statusCache.set(id, { patch: { lastStatus: room.lastStatus, viewerCount: room.viewerCount, lastSeenOnline: room.lastSeenOnline }, at: Date.now() });
-        scheduleRender();
-      } };
-      session.service = createRoomService(previewStore, { recordHistory: false, isolateMedia: true,
-        onPoll: id => requestRoom(id), onStreamError: recoverPreview, eventBus: {
-        emit(name, payload) {
-          if (!live(session) || name !== 'room:online') return;
-          const card = session.cards.get(payload.id);
-          if (card?.video && session.visible.has(payload.id)) session.service.startHls(payload.id, payload.hlsSource);
-        },
-      } });
-      const categoryList = [
-        [ONLINE_GROUP_ID, t('groupOnline')], [ONLINE_FAVORITES_GROUP_ID, t('groupOnlineFav')],
-        [RECENT_FOLLOWED_GROUP_ID, 'Recently followed'], [LIBRARY_GROUP_ID, t('groupLibrary') || 'All saved'],
-      ];
-      const extraGroups = state.groups.filter(group => ![ONLINE_GROUP_ID, ONLINE_FAVORITES_GROUP_ID, LIBRARY_GROUP_ID].includes(group.id));
-      if (![...categoryList.map(([id]) => id), ...extraGroups.map(group => group.id)].includes(selected)) selected = ONLINE_GROUP_ID;
-      function requestRoom(id, visibleOnly = false) {
-        if (!live(session)) return Promise.resolve({ status: 'aborted' });
-        const existing = session.requests.get(id);
-        if (existing) { if (!visibleOnly) existing.visibleOnly = false; return existing.promise; }
-        const job = { id, visibleOnly };
-        job.promise = new Promise(resolve => { job.resolve = resolve; });
-        session.requests.set(id, job); session.queue.push(job);
-        pumpRequests();
-        return job.promise;
-      }
-      function pumpRequests() {
-        while (live(session) && session.workers < 4 && session.queue.length) {
-          const visibleIndex = session.queue.findIndex(job => session.visible.has(job.id));
-          const job = session.queue.splice(Math.max(0, visibleIndex), 1)[0];
-          if (job.visibleOnly && !session.visible.has(job.id)) {
-            session.requests.delete(job.id); job.resolve({ status: 'aborted' }); continue;
-          }
-          session.workers++; session.owned.add(job.id);
-          const request = session.service.probe(job.id);
-          syncMedia();
-          request.catch(() => ({ status: 'error' })).then(result => {
-            session.requests.delete(job.id); session.workers--; job.resolve(result);
-            // A shared endpoint cooldown must not start another batch now.
-            if (result?.status === 'throttled') {
-              session.queue.splice(0).forEach(queued => { session.requests.delete(queued.id); queued.resolve(result); });
-            }
-            pumpRequests();
-          });
+      full.textContent = 'Open full Workshop'; full.href = canonicalWorkshopUrl();
+      full.target = '_blank'; full.rel = 'noopener';
+      // Keep this editor alive if the full page is opened; pending work owns its lifetime.
+      const expand = document.createElement('button'); expand.type = 'button';
+      expand.textContent = 'Expand'; expand.setAttribute('aria-pressed', 'false');
+      const dismiss = document.createElement('button'); dismiss.type = 'button';
+      dismiss.textContent = '×'; dismiss.setAttribute('aria-label', 'Close Workshop');
+      const status = document.createElement('div'); status.className = 'wd-status';
+      status.setAttribute('role', 'status'); status.textContent = 'Loading Workshop…';
+      const frame = document.createElement('iframe'); frame.id = 'ziggy-workshop-frame'; frame.title = 'Workshop editor';
+      frame.style.visibility = 'hidden';
+      // Chaturbate can attempt top navigation from an ordinary frame. Do not
+      // grant top-navigation: room links retain their normal new-tab behavior.
+      frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads');
+      frame.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture');
+      const session = active = { anchor, panel, frame, status, url: location.href, ready: false, closing: false, expanded: false };
+      frame.addEventListener('load', () => {
+        if (active !== session) return;
+        // Manual imports may reload this frame. Never send a close handshake to
+        // the previous document and wait forever for a listener that is gone.
+        let currentDocument;
+        try { currentDocument = frame.contentDocument; } catch (_) {}
+        if (session.document && session.document !== currentDocument) {
+          session.ready = false; session.closing = false; status.hidden = false;
+          status.textContent = 'Loading Workshop…'; frame.style.visibility = 'hidden';
         }
-      }
-      function recoverPreview(id) {
-        const card = session.cards.get(id);
-        if (!live(session) || !card?.video || !session.visible.has(id)) return;
-        card.video.hidden = true; // Keep the thumbnail visible while recovering.
-        if (++card.recoveries > 2) {
-          card.previewError = true; card.root.title = 'Preview unavailable · try Refresh'; scheduleRender(); return;
+      });
+      expand.addEventListener('click', () => {
+        session.expanded = !session.expanded;
+        expand.textContent = session.expanded ? 'Compact' : 'Expand';
+        expand.setAttribute('aria-pressed', String(session.expanded)); position(session);
+      });
+      dismiss.addEventListener('click', () => close(true));
+      head.append(full, expand, dismiss); panel.append(head, status, frame);
+      document.body.append(panel); anchor.setAttribute('aria-expanded', 'true');
+      position(session);
+      frame.src = canonicalWorkshopUrl();
+      session.loadTimer = setTimeout(() => {
+        if (active === session && !session.ready) {
+          status.textContent = 'Workshop could not start here. Use Open full Workshop, or close and retry.';
         }
-        card.recoveryTimer = setTimeout(() => {
-          card.recoveryTimer = 0;
-          if (live(session) && card.video && session.visible.has(id)) void requestRoom(id, true);
-        }, card.recoveries * 1000);
-      }
-      function release(id) {
-        const card = session.cards.get(id);
-        if (!card) return;
-        card.image.removeAttribute('src');
-        clearTimeout(card.recoveryTimer); card.recoveryTimer = 0;
-        if (card.video) { session.service.detachVideo(id); card.video.remove(); card.video = null; }
-      }
-      function syncMedia() {
-        if (!live(session)) return;
-        let playing = 0;
-        session.cards.forEach((card, id) => {
-          const room = roomMap.get(id);
-          if (!session.visible.has(id) || playing >= 6) { release(id); return; }
-          if (!card.image.hasAttribute('src') && !room.sourceUrl) card.image.src = `https://thumb.live.mmcdn.com/riw/${encodeURIComponent(id)}.jpg`;
-          if (room.lastStatus !== 'online' || room.sourceUrl) { if (card.video) release(id); return; }
-          playing++;
-          if (card.video) return;
-          if (!session.service.has(id)) { void requestRoom(id, true); return; }
-          const video = card.video = document.createElement('video');
-          card.recoveries = 0; card.previewError = false; card.root.removeAttribute('title');
-          video.muted = true; video.autoplay = true; video.playsInline = true;
-          video.hidden = true;
-          video.setAttribute('aria-hidden', 'true');
-          video.addEventListener('playing', () => { if (card.video === video) video.hidden = false; });
-          card.media.append(video);
-          session.owned.add(id);
-          session.service.attachVideo(id, video);
-          // Never reuse a signed URL after a card leaves the viewport.
-          void requestRoom(id, true);
-        });
-      }
-      session.observer = new IntersectionObserver(entries => {
-        if (!live(session)) return;
-        entries.forEach(entry => {
-          const id = entry.target.dataset.workshopPreviewId;
-          if (entry.isIntersecting) session.visible.add(id); else session.visible.delete(id);
-        });
-        syncMedia();
-      }, { root: grid, threshold: 0.01 });
-      function render() {
-        session.renderTimer = 0;
-        if (!live(session)) return;
-        const list = selected === RECENT_FOLLOWED_GROUP_ID
-          ? recent.map(room => roomMap.get(room.id)).filter(Boolean)
-          : [...roomMap.values()].filter(room => state.rooms.some(saved => saved.id === room.id) && roomInGroup(room, selected))
-            .sort((a, b) => roomOrderInGroup(a, selected) - roomOrderInGroup(b, selected) || a.id.localeCompare(b.id));
-        const ids = new Set(list.map(room => room.id));
-        session.cards.forEach((card, id) => {
-          if (ids.has(id)) return;
-          release(id); session.observer.unobserve(card.root); session.visible.delete(id); card.root.remove(); session.cards.delete(id);
-        });
-        grid.querySelector('.wd-empty')?.remove();
-        for (let index = 0; index < list.length; index++) {
-          const room = list[index];
-          let card = session.cards.get(room.id);
-          if (!card) {
-            const root = document.createElement('a'); root.className = 'wd-card'; root.href = roomPageUrl(room.id); root.dataset.workshopPreviewId = room.id;
-            const media = document.createElement('div'); media.className = 'wd-media';
-            const label = document.createElement('span');
-            const image = document.createElement('img'); image.alt = ''; image.decoding = 'async';
-            const name = document.createElement('div'); name.className = 'wd-name'; name.textContent = room.id;
-            media.append(label, image); root.append(media, name);
-            card = { root, media, label, image, video: null };
-            session.cards.set(room.id, card);
-          }
-          const text = card.previewError ? 'Preview unavailable · try Refresh' : room.lastStatus === 'online' ? 'Live preview' : room.lastStatus === 'private' ? 'Private' : room.lastStatus === 'offline' ? 'Offline' : 'Checking…';
-          if (card.label.textContent !== text) card.label.textContent = text;
-          if (grid.children[index] !== card.root) grid.insertBefore(card.root, grid.children[index] || null);
-          session.observer.observe(card.root);
-        }
-        if (!list.length) {
-          const empty = document.createElement('div'); empty.className = 'wd-empty';
-          empty.textContent = session.refreshing ? 'Checking your rooms…' : selected === RECENT_FOLLOWED_GROUP_ID ? 'No new follows observed in the last 24 hours.' : 'No rooms in this category.';
-          grid.append(empty);
-        }
-        const message = session.refreshing ? `Checking rooms ${session.completed}/${session.total} · ${list.length} shown` : `${list.length} rooms`;
-        if (status.textContent !== message) status.textContent = message;
-        syncMedia();
-      }
-      function scheduleRender() {
-        if (!session.renderTimer) session.renderTimer = setTimeout(render, 100);
-      }
-      async function refreshStatus() {
-        if (!live(session) || session.refreshing) return;
-        const generation = ++session.requestGeneration;
-        const rooms = [...roomMap.values()].filter(room => !room.sourceUrl);
-        session.cards.forEach(card => { card.recoveries = 0; card.previewError = false; card.root.removeAttribute('title'); });
-        session.refreshing = true; session.completed = 0; session.total = rooms.length; refresh.disabled = true;
-        render();
-        const check = async room => {
-          const result = await requestRoom(room.id);
-          if (!live(session) || generation !== session.requestGeneration) return;
-          if (result?.status !== 'throttled') session.completed++;
-          scheduleRender();
-        };
-        try { await Promise.all(rooms.map(check)); }
-        finally {
-          if (live(session) && generation === session.requestGeneration) {
-            session.refreshing = false; refresh.disabled = false; render();
-            if (session.completed < session.total) status.textContent += ' · Some checks deferred; try Refresh later.';
-          }
-        }
-      }
-      function select(id) {
-        if (selected === id) return;
-        selected = id;
-        // A category owns a fresh lifetime: cancel its old queued/probing/media
-        // work together, while retaining only the read-only status cache.
-        close(); show(anchor);
-        const target = [...(active?.panel.querySelectorAll('[role=tab]') || [])].find(tab => tab.dataset.group === id);
-        (target || active?.panel.querySelector('select'))?.focus();
-      }
-      for (const [id, title] of categoryList) {
-        const tab = document.createElement('button'); tab.type = 'button'; tab.textContent = title;
-        tab.dataset.group = id; tab.setAttribute('role', 'tab'); tab.setAttribute('aria-controls', grid.id);
-        tab.setAttribute('aria-selected', String(selected === id)); tab.tabIndex = selected === id ? 0 : -1;
-        tab.addEventListener('click', () => select(id));
-        tab.addEventListener('keydown', event => {
-          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-          event.preventDefault();
-          const buttons = [...tabs.querySelectorAll('[role=tab]')]; const i = buttons.indexOf(tab);
-          const next = buttons[event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (i + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length];
-          next.click();
-        });
-        tabs.append(tab);
-      }
-      const groups = document.createElement('select'); groups.setAttribute('aria-label', 'Saved groups');
-      const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = 'Groups'; groups.append(placeholder);
-      extraGroups.forEach(group => { const option = document.createElement('option'); option.value = group.id; option.textContent = group.id === DEFAULT_GROUP_ID ? t('groupAll') : group.id === FAVORITE_GROUP_ID ? t('groupFav') : group.name; groups.append(option); });
-      groups.value = extraGroups.some(group => group.id === selected) ? selected : '';
-      groups.addEventListener('change', () => { if (groups.value) select(groups.value); });
-      tabs.append(groups);
-      refresh.addEventListener('click', refreshStatus);
-      document.body.append(panel);
-      anchor.setAttribute('aria-expanded', 'true');
-      const bg = getComputedStyle(anchor.closest('#desktop-spa-header') || anchor.parentElement).backgroundColor;
-      const rgb = bg.match(/\d+/g)?.map(Number);
-      if (rgb?.length >= 3 && rgb[0] + rgb[1] + rgb[2] > 510) {
-        for (const [key, value] of Object.entries({ bg: '#fff', text: '#222', link: '#075d95', muted: '#52606b', card: '#f3f5f7', border: '#d5dce1' })) panel.style.setProperty(`--wd-${key}`, value);
-      }
-      position(session); render(); void refreshStatus();
-    }
-    function toggle(anchor) {
-      if (active?.anchor === anchor) close(); else show(anchor);
+      }, 20000);
     }
     function bind(anchor) {
       if (bound.has(anchor)) return;
       bound.add(anchor);
-      anchor.setAttribute('aria-expanded', 'false'); anchor.setAttribute('aria-controls', 'ziggy-workshop-dropdown');
+      anchor.setAttribute('aria-expanded', String(!!active));
+      anchor.setAttribute('aria-controls', 'ziggy-workshop-dropdown');
       anchor.setAttribute('aria-label', 'Workshop rooms'); anchor.title = 'Workshop rooms';
+      // Native header hydration can replace the anchor without replacing this editor.
+      if (active && !active.anchor.isConnected) active.anchor = anchor;
       anchor.addEventListener('keydown', event => {
         if (event.key !== 'ArrowDown') return;
-        event.preventDefault(); show(anchor); active?.panel.querySelector('[role=tab][aria-selected=true]')?.focus();
+        event.preventDefault(); show(anchor); active?.frame.focus();
       });
     }
-    function sync() { if (active && !live(active)) close(); }
-    document.addEventListener('visibilitychange', sync);
-    window.addEventListener('pagehide', () => close());
+    function sync() {
+      if (active && active.url !== location.href) dispose(active);
+    }
+    window.addEventListener('message', event => {
+      const session = active;
+      if (!session || event.origin !== location.origin || event.source !== session.frame.contentWindow) return;
+      const message = event.data;
+      if (message?.type === 'ziggy-workshop-ready') {
+        session.ready = true; clearTimeout(session.loadTimer); session.status.hidden = true;
+        session.document = session.frame.contentDocument;
+        session.frame.style.visibility = 'visible';
+      } else if (message?.type === 'ziggy-workshop-closed' && session.closing) {
+        if (message.saved === true) dispose(session, session.restoreFocus);
+        else {
+          session.closing = false;
+          session.status.hidden = false;
+          session.status.textContent = 'Changes could not be saved. Keep Workshop open; retry or export a backup.';
+        }
+      } else if (message?.type === 'ziggy-workshop-export-notice' && typeof message.message === 'string') {
+        showGithubExportNotice(message.message.slice(0, 500), message.persistent === true);
+      }
+    });
+    window.addEventListener('pagehide', () => { if (active) dispose(active); });
     window.addEventListener('resize', () => { if (active) position(active); }, { passive: true });
     window.addEventListener('scroll', () => { if (active) position(active); }, { passive: true });
     document.addEventListener('pointerdown', event => {
       if (active && !active.panel.contains(event.target) && !active.anchor.contains(event.target)) close();
     }, true);
-    document.addEventListener('keydown', event => { if (active && event.key === 'Escape') { event.preventDefault(); close(true); } });
-    for (const eventName of ['storage', 'ryujo_multicam_storage', 'ziggy-recent-followed']) {
-      window.addEventListener(eventName, event => {
-        if (!active || (eventName === 'storage' && event.key !== STORE_KEY && !event.key?.startsWith(RECENT_FOLLOWED_PREFIX))) return;
-        const { anchor } = active; close(); show(anchor);
-      });
-    }
-    return { bind, toggle, sync, close };
+    document.addEventListener('keydown', event => {
+      if (active && event.key === 'Escape') { event.preventDefault(); close(true); }
+    });
+    // Child document owns its own Escape/dialogs; backgrounding preserves edits.
+    return { bind, toggle: anchor => active ? close() : show(anchor), sync, close };
   }
 
   function createNativeRoomQualitySync() {
@@ -7849,6 +7662,14 @@
    * 8. 工作台 / Workstation
    * ============================================================= */
   function initWorkstation() {
+    const embedded = isEmbeddedWorkshop();
+    const pendingOperations = new Set();
+    function holdOperation(operation) {
+      pendingOperations.add(operation);
+      Promise.resolve(operation).finally(() => pendingOperations.delete(operation)).catch(() => {});
+      return operation;
+    }
+    if (embedded) trackWorkshopOperation = holdOperation;
     document.title = t('title');
     let viewportMeta = document.querySelector('meta[name="viewport"]');
     if (!viewportMeta) {
@@ -7858,6 +7679,7 @@
     }
     viewportMeta.content = 'width=device-width,initial-scale=1,viewport-fit=cover';
     document.body.classList.add('rg-workshop-native');
+    document.body.classList.toggle('rg-workshop-embedded', embedded);
     const nativeLogoNode = document.querySelector('[data-testid="header-home-link-container"],#mheader-logo')?.cloneNode(true) || null;
     if (nativeLogoNode instanceof Element) nativeLogoNode.classList.add('rg-native-logo-source');
     // 在当前页打开工作台时，先停止原页面自带的 video/audio，避免页面清空后仍有声音。
@@ -8720,6 +8542,16 @@
         body.rg-workshop-native.rg-phone-device .cam-info-actions .rg-card-menu-button,body.rg-workshop-native.rg-phone-device .cam-info-actions .favorite-toggle { width:34px!important; height:34px!important; }
         body.rg-workshop-native.rg-phone-device .rg-refresh-progress { margin:0 8px 8px; }
         body.rg-workshop-native.rg-pure-mode > [data-ziggy-workshop-header],body.rg-workshop-native.rg-pure-mode > .rg-native-header { display:none!important; }
+        /* Only the owned dropdown frame: use the same controls without a second site header. */
+        body.rg-workshop-embedded > .rg-native-header,body.rg-workshop-embedded > [data-ziggy-workshop-header] { display:none!important; }
+        body.rg-workshop-embedded > .app-shell { height:100dvh!important; min-height:0!important; }
+        body.rg-workshop-embedded .rg-native-nav { padding:8px!important; gap:6px!important; min-height:0!important; }
+        body.rg-workshop-embedded .rg-native-categories { flex-basis:100%; }
+        body.rg-workshop-embedded .rg-native-actions { gap:8px; }
+        body.rg-workshop-embedded .rg-category-pill { padding:6px 9px!important; }
+        body.rg-workshop-embedded .grid:not(.view-split) { padding:0 8px 8px!important; }
+        body.rg-workshop-embedded .rg-refresh-progress { margin:0 8px 8px; }
+        body.rg-workshop-embedded .sidebar-group-menu { z-index:2147483001!important; max-height:calc(100dvh - 16px); overflow-y:auto; }
       `),
     }));
 
@@ -8757,6 +8589,7 @@
     // Adopt the actual desktop header, including its native search/account
     // handlers. Do not retain the hidden native listing alongside Workshop.
     const adoptNativeHeader = () => {
+      if (embedded) return;
       const header = document.querySelector('#desktop-spa-header');
       if (!header || phoneEnvironment) return;
       if (header.dataset.ziggyWorkshopHeader !== 'true') header.dataset.ziggyWorkshopHeader = 'true';
@@ -8780,7 +8613,7 @@
     adoptNativeHeader();
     // Hydration can replace the first header. Bounded retries cover that startup
     // window without adding a permanent observer to the playing preview grid.
-    const headerRetryTimers = phoneEnvironment ? [] : [300, 1200, 3000, 8000, 11900].map(delay => setTimeout(adoptNativeHeader, delay));
+    const headerRetryTimers = phoneEnvironment || embedded ? [] : [300, 1200, 3000, 8000, 11900].map(delay => setTimeout(adoptNativeHeader, delay));
     window.addEventListener('pagehide', () => headerRetryTimers.forEach(clearTimeout), { once: true });
     const progressLabel = $('span');
     const progressFill = $('i', { class: 'workshop-refresh-fill' });
@@ -9731,7 +9564,7 @@
     }
 
     function openGroupMenu(e, g) {
-      const menu = $('div', { class: 'menu-pop',
+      const menu = $('div', { class: 'menu-pop sidebar-group-menu',
         style: { left: e.clientX + 'px', top: e.clientY + 'px' } }, [
         $('button', { onclick: () => { const n = prompt(t('renameGroupPrompt'), g.name); if (n) store.renameGroup(g.id, n.trim()); menu.remove(); } }, t('renameGroup')),
         $('button', { class: 'danger', onclick: () => {
@@ -9740,6 +9573,11 @@
         } }, t('deleteGroup')),
       ]);
       document.body.appendChild(menu);
+      if (embedded) {
+        const rect = menu.getBoundingClientRect();
+        menu.style.left = Math.max(8, Math.min(e.clientX, innerWidth - rect.width - 8)) + 'px';
+        menu.style.top = Math.max(8, Math.min(e.clientY, innerHeight - rect.height - 8)) + 'px';
+      }
       const close = (ev) => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', close); } };
       setTimeout(() => document.addEventListener('click', close), 0);
     }
@@ -11268,16 +11106,16 @@
     }
 
     function exportWorkstationSettings() {
-      exportSuiteSettings(store.state);
+      return holdOperation(exportSuiteSettings(store.state));
     }
 
     function importWorkstationSettings() {
-      importSuiteSettingsFromGithub({
+      return holdOperation(importSuiteSettingsFromGithub({
         onImported: result => {
           document.querySelectorAll('.roomgrid-modal-backdrop').forEach(el => { try { el.remove(); } catch (_) {} });
           toast(t(result.roomsReplaced ? 'settingsImported' : 'settingsImportedLegacy'));
         },
-      });
+      }));
     }
 
     function openQuickRoomEntry() {
@@ -12700,6 +12538,32 @@
     renderSidebar();
     renderGrid();
     applyPureModeState();
+    if (embedded) {
+      let closing = false;
+      window.addEventListener('message', async event => {
+        if (event.origin !== location.origin || event.source !== window.parent
+          || event.data?.type !== 'ziggy-workshop-close' || closing) return;
+        closing = true;
+        document.body.inert = true;
+        suspendWorkshopMedia(true);
+        let saved = false;
+        try {
+          if (!store.flush()) throw new Error('Pending Workshop changes could not be saved');
+          // Keep the context alive until its already-started explicit operations
+          // and coalesced membership export settle. Download initiation is unchanged.
+          await Promise.allSettled([...pendingOperations]);
+          if (!store.flush()) throw new Error('Pending Workshop changes could not be saved');
+          await githubAutoExportQueue.catch(() => {});
+          saved = true;
+        } catch (error) { console.warn('[Workshop] Close deferred:', error.message); }
+        if (!saved) {
+          closing = false; document.body.inert = false; workshopPageSuspended = false;
+          resumeDeferredWorkshopRefreshes(); scheduleWorkshopMediaVisibility();
+        }
+        window.parent.postMessage({ type: 'ziggy-workshop-closed', saved }, location.origin);
+      });
+      window.parent.postMessage({ type: 'ziggy-workshop-ready' }, location.origin);
+    }
     void refreshWorkshopRooms({ scope: 'all', automatic: true });
     // 兜底：定期检查 sessions 与 rooms 是否一致（防止某些边缘 case 数据漂移）
     setInterval(() => {

@@ -58,11 +58,13 @@ Status: Active
 
 Decision: Replace the dashboard-style Workshop presentation with a native-style listing: reuse the live desktop header where available, category pills, responsive preview cards, an outside-dismissible Groups drawer, visible refresh progress and one organized menu. As authorized on September 13, desktop and mobile Grid columns adapt to available width; density is a card-size preference, not a fixed column count. Mobile retains two columns at the tested portrait width and gains columns in wider views. Retain existing saved data, groups, filters, Grid/Phone modes, previews, split view and explicit room navigation. Keep GitHub import/export discoverable in the same menu on desktop and mobile; do not recreate native account controls or redesign fullscreen as part of the presentation change.
 
-## D-010 — Lightweight Workshop dropdown and visible-only previews
+## D-010 — Editable Workshop dropdown and visible-only previews
 
 Status: Active
 
-Decision: Desktop Workshop navigation exposes saved-room categories in a native-style dropdown while retaining an explicit full-Workshop link. It must not mount the complete Workshop or alter its persisted view/settings. Closed or backgrounded dropdowns own no active preview media or queued status work. Full Workshop also releases hidden/offscreen previews; actual visible fullscreen/PiP are distinct surfaces, not a license for inactive unmuted/split previews to keep loading. Inline card preview frames are 16:9, with model names outside the media frame and themed scrollbars scoped to Suite-owned surfaces. Existing fullscreen sizing/gesture behavior is not redesigned by this change.
+Decision: Desktop Workshop navigation exposes the shared complete Workshop controls in a lazy, owned same-origin sandboxed frame, while retaining an explicit full-Workshop link. This supersedes the earlier read-only restriction: categories, groups, card actions, settings and imports/exports use the existing Workshop implementation and persistence, not a second data/action implementation. Embedded presentation omits the duplicate site header and offers compact/expanded widths. Scrolling the underlying page or backgrounding it must retain the editor and unfinished inputs; explicit outside click, toggle or Close dismisses it. Internal menus/dialogs own their own dismissal. Pending local saves and started tracked GitHub operations settle before normal close; failed persistence keeps the editor available.
+
+No frame exists while the dropdown is closed. Backgrounded/offscreen previews follow full Workshop's existing media suspension policy; actual visible fullscreen/PiP remain distinct surfaces. Pending settings exports are not preview work and may finish while closing, with one notification retained by the parent room. Inline card preview frames remain 16:9 with scoped themed scrollbars. Native normal-room video and existing fullscreen sizing/gesture behavior are not redesigned.
 
 Opening policy: click or explicit keyboard activation only; hovering does not open or load Workshop previews.
 

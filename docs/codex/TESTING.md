@@ -58,6 +58,10 @@ Re-enumerate targets after session restoration settles; IDs/URLs observed immedi
 - Keep the current test tab visible; use extra tabs only when the behavior requires them.
 - Do not call an extension or manually injected build equivalent to a final Tampermonkey test.
 
+For visibility/network-lifecycle tests, verify that the active tab reports `document.hidden === false` and the inactive tab reports `true` before interpreting request counts. The installed Playwright CDP client enables focus emulation by default, which kept inactive pages visible during the September 16 pass. Disconnect that transport and use unmodified raw CDP, or a supported `noDefaults: true` connection, then recheck the actual visibility states. A false visible state is a test artifact, not proof that the userscript ignored a hidden event. Do not replace the native visibility property and call the result live acceptance.
+
+Workshop dropdown checks: closed idle, category changes, visible-only media, close/cancel and stale-response cleanup, native-room media isolation, full-Workshop link, 16:9/name geometry, and scoped scrollbar styling. Full Workshop additionally needs genuine background/return, interrupted refresh, offscreen scroll, cold autoplay versus explicit Pause, and separate nearby fullscreen regression. `tools/test-workshop-dropdown.mjs` and `tools/test-workshop-visibility.mjs` cover deterministic ownership/race/layout mechanisms; actual site interaction and request observation remain separate evidence.
+
 ## Repository checks
 
 After userscript source edits, run the focused regression check first, then the required project gates appropriate to the userscript-only scope. `npm run build:userscript` validates and regenerates userscript metadata without rebuilding extension outputs. Run `npm test` only with awareness that its current parity checks may require existing extension artifacts to match the userscript; do not silently rebuild extensions when extension work was not authorized.

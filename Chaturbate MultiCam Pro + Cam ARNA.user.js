@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.18
+// @version           16.6.19
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -204,7 +204,7 @@
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.18');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.19');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -220,7 +220,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.18');
+  instanceMarker.setAttribute('data-suite-version', '16.6.19');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1414,7 +1414,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.18',
+    version: '16.6.19',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3146,7 +3146,7 @@
   /* =============================================================
    * 4. 房间服务 / RoomService —— API + HLS + 重连 + 智能轮询
    * ============================================================= */
-  function createRoomService(store, { recordHistory = true } = {}) {
+  function createRoomService(store, { recordHistory = true, eventBus = EventBus, isolateMedia = false } = {}) {
     const sessions = new Map();   // id -> { hls, video, status, retryCount, pollTimer, userPaused, background }
     const inFlight = new Map();   // id -> shared status request promise
     const qualityCaps = new Map(); // id -> maximum stream height for a specific virtual view/consumer
@@ -3221,13 +3221,13 @@
         if (prev !== 'online' || !lastSeen || Date.now() - lastSeen > 60000) patch.lastSeenOnline = Date.now();
       }
       store.patchRoom(id, patch);
-      EventBus.emit('room:status', { id, status, previous: prev, extra: safeExtra });
+      eventBus.emit('room:status', { id, status, previous: prev, extra: safeExtra });
       if (recordHistory && prev !== status && isStableRoomStatus(status)) addRoomStatusHistory(id, status, safeExtra);
       // 上线提醒
       const notificationEligible = !store.state.settings.notifyFavoritesOnly || roomInGroup(room, FAVORITE_GROUP_ID);
       if (prev && prev !== 'online' && status === 'online' && store.state.settings.notifyOnline && notificationEligible) {
         Notify.fire(t('notifyTitleText'), t('notifyBody', id));
-        EventBus.emit('room:flash', id);
+        eventBus.emit('room:flash', id);
       }
     }
 
@@ -3236,6 +3236,8 @@
     }
 
     function hardStopRoomVideos(id) {
+      // Embedded consumers own their session.video, never another surface's media.
+      if (isolateMedia) return;
       id = normalizeUsername(id);
       // DOM 兜底：即使 cardMap/session 已经丢失，也按 room-id 把残留 video 杀掉。
       try {
@@ -3412,7 +3414,7 @@
       const ac = new AbortController();
       s.abortController = ac;
 
-      EventBus.emit('room:loading', id);
+      eventBus.emit('room:loading', id);
       setStatus(id, 'loading');
 
       // A 429 applies to the shared Chaturbate endpoint, not just one room.
@@ -3421,7 +3423,7 @@
       if (Date.now() < rateLimitUntil) {
         const wait = Math.max(1000, rateLimitUntil - Date.now());
         setStatus(id, 'error', { errorMsg: 'request throttled', transient: true });
-        EventBus.emit('room:transient-error', { id, error: 'request throttled' });
+        eventBus.emit('room:transient-error', { id, error: 'request throttled' });
         schedulePoll(id, wait);
         return { id, status: 'throttled', retryAfterMs: wait };
       }
@@ -3435,7 +3437,7 @@
         const throttled = Number(e?.httpStatus || 0) === 429;
         const errorText = throttled ? 'request throttled' : 'request failed';
         setStatus(id, 'error', { errorMsg: errorText, transient: true });
-        EventBus.emit('room:transient-error', { id, error: errorText });
+        eventBus.emit('room:transient-error', { id, error: errorText });
         let wait;
         if (throttled) {
           const requestedWait = Math.max(0, Number(e?.retryAfterMs || 0));
@@ -3500,7 +3502,7 @@
       const viewerCount = numeric(data.num_users ?? data.viewer_count ?? data.users_in_room, 0);
       setStatus(id, 'online', viewerCount > 0 ? { viewerCount } : {});
       if (!sessions.has(id) || sessions.get(id) !== s) return { id, status: 'aborted' };
-      if (!sameActiveStream) EventBus.emit('room:online', { id, hlsSource: data.hls_source });
+      if (!sameActiveStream) eventBus.emit('room:online', { id, hlsSource: data.hls_source });
       if (sessions.has(id) && sessions.get(id) === s) schedulePoll(id, cfg.online || onlinePollMs());
       return { id, status: 'online' };
     }
@@ -3603,6 +3605,7 @@
       const worker = async (slot) => {
         while (cursor < unique.length) {
           if (slot >= adaptiveConcurrency) return;
+          if (options.shouldContinue?.() === false) return;
           const index = cursor++;
           const id = unique[index];
           let result;
@@ -3616,7 +3619,7 @@
         }
       };
       await Promise.all(Array.from({ length: Math.min(concurrency, Math.max(1, unique.length)) }, (_, slot) => worker(slot)));
-      return results;
+      return unique.map((id, index) => results[index] || { id, status: 'cancelled' });
     }
     function refreshAll() { return refreshMany([...sessions.keys()]); }
     function start(id, options = {}) {
@@ -3636,7 +3639,7 @@
       if (s) s.background = false;
     }
     function stop(id) { id = normalizeUsername(id); destroyPlayer(id); sessions.delete(id); inFlight.delete(id); }
-    function stopAll() { for (const id of [...sessions.keys()]) stop(id); stopAllPageMedia(); }
+    function stopAll() { for (const id of [...sessions.keys()]) stop(id); if (!isolateMedia) stopAllPageMedia(); }
     function has(id) { id = normalizeUsername(id); return sessions.has(id); }
 
     return { start, startBackground, promote, stop, stopAll, refresh, probe, refreshAll, refreshMany, attachVideo, detachVideo, startHls, has, pause, resume, togglePause, isPaused, pauseAll, resumeAll, refreshQuality, setQualityCap, clearQualityCaps };
@@ -3887,6 +3890,321 @@
     return sync;
   }
 
+  // A lightweight, read-only view of saved rooms. It never mounts the full
+  // Workshop or writes preview status into the user's persisted configuration.
+  function createWorkshopDropdown() {
+    let active = null;
+    let selected = ONLINE_GROUP_ID;
+    let hoverTimer = 0;
+    let leaveTimer = 0;
+    const bound = new WeakSet();
+    const statusCache = new Map();
+    const live = session => active === session && !document.hidden
+      && session.anchor.isConnected && session.url === location.href;
+
+    function close(restoreFocus = false) {
+      clearTimeout(hoverTimer);
+      clearTimeout(leaveTimer);
+      const session = active;
+      if (!session) return;
+      active = null; // Invalidate callbacks before aborting their work.
+      clearTimeout(session.renderTimer);
+      session.observer?.disconnect();
+      session.owned.forEach(id => session.service.stop(id));
+      session.cards.forEach(card => { card.image.removeAttribute('src'); });
+      session.panel.remove();
+      session.anchor.setAttribute('aria-expanded', 'false');
+      if (restoreFocus && session.anchor.isConnected) session.anchor.focus();
+    }
+
+    function position(session) {
+      if (!live(session)) { close(); return; }
+      const rect = session.anchor.getBoundingClientRect();
+      if (rect.bottom <= 0 || rect.top >= innerHeight) { close(); return; }
+      const width = Math.min(570, innerWidth - 16);
+      const top = Math.max(8, rect.bottom + 6);
+      Object.assign(session.panel.style, {
+        width: `${width}px`, left: `${Math.max(8, Math.min(rect.left, innerWidth - width - 8))}px`,
+        top: `${top}px`, maxHeight: `${Math.max(100, innerHeight - top - 12)}px`,
+      });
+    }
+
+    function scheduleClose() {
+      clearTimeout(leaveTimer);
+      if (active && !active.pinned) leaveTimer = setTimeout(() => close(), 240);
+    }
+
+    function ensureStyle() {
+      if (document.getElementById('ziggy-workshop-dropdown-style')) return;
+      const style = document.createElement('style');
+      style.id = 'ziggy-workshop-dropdown-style';
+      style.textContent = `
+        #ziggy-workshop-dropdown{position:fixed;z-index:10010;display:flex;flex-direction:column;box-sizing:border-box;background:var(--wd-bg,#1f2c38);color:var(--wd-text,#dce6ed);border:1px solid var(--wd-border,#354452);border-radius:8px;box-shadow:0 5px 18px #0006;font:14px/1.4 Arial,sans-serif;overflow:hidden}
+        #ziggy-workshop-dropdown *{box-sizing:border-box}
+        #ziggy-workshop-dropdown .wd-head{display:flex;align-items:center;gap:10px;padding:12px 16px 8px;flex:none}
+        #ziggy-workshop-dropdown a{color:var(--wd-link,#58b4fa);text-decoration:none}
+        #ziggy-workshop-dropdown .wd-full{font-weight:bold;margin-right:auto}
+        #ziggy-workshop-dropdown button,#ziggy-workshop-dropdown select{font:inherit;color:inherit;background:transparent;border:1px solid transparent;border-radius:4px;cursor:pointer;min-height:34px;padding:5px 8px}
+        #ziggy-workshop-dropdown button:hover,#ziggy-workshop-dropdown select:hover{background:#8882}
+        #ziggy-workshop-dropdown :focus-visible{outline:2px solid var(--wd-link,#58b4fa);outline-offset:-2px}
+        #ziggy-workshop-dropdown .wd-tabs{display:flex;flex-wrap:wrap;gap:4px;padding:0 12px 8px;border-bottom:1px solid var(--wd-border,#354452);flex:none}
+        #ziggy-workshop-dropdown [aria-selected=true]{color:var(--wd-link,#58b4fa);border-bottom-color:currentColor;font-weight:bold}
+        #ziggy-workshop-dropdown select{max-width:150px;background:var(--wd-bg,#1f2c38);border-color:var(--wd-border,#354452)}
+        #ziggy-workshop-dropdown .wd-status{padding:6px 16px;font-size:12px;color:var(--wd-muted,#a9b8c5);flex:none}
+        #ziggy-workshop-dropdown .wd-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:max-content;align-content:start;gap:10px;padding:0 16px 16px;overflow:auto;min-height:0;overscroll-behavior:contain}
+        #ziggy-workshop-dropdown .wd-card{display:block;min-width:0;border-radius:4px;overflow:hidden;background:var(--wd-card,#17212b);border:1px solid var(--wd-border,#354452)}
+        #ziggy-workshop-dropdown .wd-media{position:relative;aspect-ratio:16/9;overflow:hidden;background:#101820;display:grid;place-items:center;color:#ccd7df;font-size:12px}
+        #ziggy-workshop-dropdown .wd-media img,#ziggy-workshop-dropdown .wd-media video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;border:0}
+        #ziggy-workshop-dropdown .wd-media img:not([src]){display:none}
+        #ziggy-workshop-dropdown .wd-name{padding:9px 10px;font-weight:bold;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        #ziggy-workshop-dropdown .wd-empty{grid-column:1/-1;padding:24px 4px;color:var(--wd-muted,#a9b8c5)}
+        #ziggy-workshop-dropdown .wd-grid{scrollbar-width:thin;scrollbar-color:var(--wd-muted,#7892a5) var(--wd-bg,#1f2c38)}
+        #ziggy-workshop-dropdown .wd-grid::-webkit-scrollbar{width:9px}
+        #ziggy-workshop-dropdown .wd-grid::-webkit-scrollbar-track{background:var(--wd-bg,#1f2c38)}
+        #ziggy-workshop-dropdown .wd-grid::-webkit-scrollbar-thumb{background:var(--wd-muted,#7892a5);border:2px solid var(--wd-bg,#1f2c38);border-radius:6px}
+      `;
+      document.head.append(style);
+    }
+
+    function show(anchor, pinned = false) {
+      clearTimeout(hoverTimer);
+      clearTimeout(leaveTimer);
+      if (document.hidden || !anchor.isConnected) return;
+      if (active?.anchor === anchor) { active.pinned ||= pinned; return; }
+      close();
+      ensureStyle();
+      const state = Storage.load();
+      const recent = recentFollowedRooms();
+      const roomMap = new Map(state.rooms.map(room => [room.id, { ...room }]));
+      for (const room of recent) if (!roomMap.has(room.id)) roomMap.set(room.id, { ...room, groups: [], lastStatus: 'unknown' });
+      // Never retain an unbounded history of rooms removed from the library.
+      for (const id of statusCache.keys()) if (!roomMap.has(id)) statusCache.delete(id);
+      roomMap.forEach((room, id) => {
+        const cached = statusCache.get(id);
+        if (cached && Date.now() - cached.at < 60000) Object.assign(room, cached.patch);
+      });
+      const panel = document.createElement('div');
+      panel.id = 'ziggy-workshop-dropdown';
+      panel.setAttribute('role', 'region');
+      panel.setAttribute('aria-label', 'Workshop rooms');
+      const header = document.createElement('div'); header.className = 'wd-head';
+      const full = document.createElement('a'); full.className = 'wd-full';
+      full.href = canonicalWorkshopUrl(); full.target = '_blank'; full.rel = 'noopener';
+      full.textContent = 'Open full Workshop ↗';
+      full.addEventListener('click', () => close());
+      const refresh = document.createElement('button'); refresh.type = 'button'; refresh.textContent = '↻'; refresh.setAttribute('aria-label', 'Refresh room status');
+      const dismiss = document.createElement('button'); dismiss.type = 'button'; dismiss.textContent = '×'; dismiss.setAttribute('aria-label', 'Close Workshop menu'); dismiss.addEventListener('click', () => close(true));
+      header.append(full, refresh, dismiss);
+      const tabs = document.createElement('div'); tabs.className = 'wd-tabs'; tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'Workshop categories');
+      const status = document.createElement('div'); status.className = 'wd-status'; status.setAttribute('role', 'status');
+      const grid = document.createElement('div'); grid.className = 'wd-grid'; grid.id = 'ziggy-workshop-dropdown-rooms'; grid.setAttribute('role', 'tabpanel');
+      panel.append(header, tabs, status, grid);
+      const session = active = { anchor, panel, grid, pinned, url: location.href, cards: new Map(), owned: new Set(), sources: new Map(),
+        visible: new Set(), renderTimer: 0, requestGeneration: 0, completed: 0, total: 0, refreshing: false };
+      const previewStore = { state: { rooms: [...roomMap.values()], settings: {
+        maxStreamHeight: 480, notifyOnline: false, pollMs: { online: 120000, offline: 120000, private: 120000, error: 30000 },
+      } }, patchRoom(id, patch) {
+        if (!live(session)) return;
+        const room = roomMap.get(id);
+        if (room) Object.assign(room, patch);
+        statusCache.set(id, { patch: { lastStatus: room.lastStatus, viewerCount: room.viewerCount, lastSeenOnline: room.lastSeenOnline }, at: Date.now() });
+        scheduleRender();
+      } };
+      session.service = createRoomService(previewStore, { recordHistory: false, isolateMedia: true, eventBus: {
+        emit(name, payload) {
+          if (!live(session) || name !== 'room:online') return;
+          session.sources.set(payload.id, payload.hlsSource);
+          const card = session.cards.get(payload.id);
+          if (card?.video && session.visible.has(payload.id)) session.service.startHls(payload.id, payload.hlsSource);
+        },
+      } });
+      const categoryList = [
+        [ONLINE_GROUP_ID, t('groupOnline')], [ONLINE_FAVORITES_GROUP_ID, t('groupOnlineFav')],
+        [RECENT_FOLLOWED_GROUP_ID, 'Recently followed'], [LIBRARY_GROUP_ID, t('groupLibrary') || 'All saved'],
+      ];
+      const extraGroups = state.groups.filter(group => ![ONLINE_GROUP_ID, ONLINE_FAVORITES_GROUP_ID, LIBRARY_GROUP_ID].includes(group.id));
+      if (![...categoryList.map(([id]) => id), ...extraGroups.map(group => group.id)].includes(selected)) selected = ONLINE_GROUP_ID;
+      function release(id) {
+        const card = session.cards.get(id);
+        if (!card) return;
+        card.image.removeAttribute('src');
+        if (card.video) { session.service.detachVideo(id); card.video.remove(); card.video = null; }
+      }
+      function syncMedia() {
+        if (!live(session)) return;
+        let playing = 0;
+        session.cards.forEach((card, id) => {
+          const room = roomMap.get(id);
+          if (!session.visible.has(id) || playing >= 6) { release(id); return; }
+          if (!card.image.hasAttribute('src') && !room.sourceUrl) card.image.src = `https://thumb.live.mmcdn.com/riw/${encodeURIComponent(id)}.jpg`;
+          if (room.lastStatus !== 'online' || room.sourceUrl) { if (card.video) release(id); return; }
+          playing++;
+          if (card.video || !session.service.has(id)) return;
+          const video = card.video = document.createElement('video');
+          video.muted = true; video.autoplay = true; video.playsInline = true;
+          video.setAttribute('aria-hidden', 'true');
+          card.media.append(video);
+          session.owned.add(id);
+          session.service.attachVideo(id, video);
+          const source = session.sources.get(id);
+          if (source) session.service.startHls(id, source);
+        });
+      }
+      session.observer = new IntersectionObserver(entries => {
+        if (!live(session)) return;
+        entries.forEach(entry => {
+          const id = entry.target.dataset.workshopPreviewId;
+          if (entry.isIntersecting) session.visible.add(id); else session.visible.delete(id);
+        });
+        syncMedia();
+      }, { root: grid, threshold: 0.01 });
+      function render() {
+        session.renderTimer = 0;
+        if (!live(session)) return;
+        const list = selected === RECENT_FOLLOWED_GROUP_ID
+          ? recent.map(room => roomMap.get(room.id)).filter(Boolean)
+          : [...roomMap.values()].filter(room => state.rooms.some(saved => saved.id === room.id) && roomInGroup(room, selected))
+            .sort((a, b) => roomOrderInGroup(a, selected) - roomOrderInGroup(b, selected) || a.id.localeCompare(b.id));
+        const ids = new Set(list.map(room => room.id));
+        session.cards.forEach((card, id) => {
+          if (ids.has(id)) return;
+          release(id); session.observer.unobserve(card.root); session.visible.delete(id); card.root.remove(); session.cards.delete(id);
+        });
+        grid.querySelector('.wd-empty')?.remove();
+        for (let index = 0; index < list.length; index++) {
+          const room = list[index];
+          let card = session.cards.get(room.id);
+          if (!card) {
+            const root = document.createElement('a'); root.className = 'wd-card'; root.href = roomPageUrl(room.id); root.dataset.workshopPreviewId = room.id;
+            const media = document.createElement('div'); media.className = 'wd-media';
+            const label = document.createElement('span');
+            const image = document.createElement('img'); image.alt = ''; image.decoding = 'async';
+            const name = document.createElement('div'); name.className = 'wd-name'; name.textContent = room.id;
+            media.append(label, image); root.append(media, name);
+            card = { root, media, label, image, video: null };
+            session.cards.set(room.id, card);
+          }
+          const text = room.lastStatus === 'online' ? 'Live preview' : room.lastStatus === 'private' ? 'Private' : room.lastStatus === 'offline' ? 'Offline' : 'Checking…';
+          if (card.label.textContent !== text) card.label.textContent = text;
+          if (grid.children[index] !== card.root) grid.insertBefore(card.root, grid.children[index] || null);
+          session.observer.observe(card.root);
+        }
+        if (!list.length) {
+          const empty = document.createElement('div'); empty.className = 'wd-empty';
+          empty.textContent = session.refreshing ? 'Checking your rooms…' : selected === RECENT_FOLLOWED_GROUP_ID ? 'No new follows observed in the last 24 hours.' : 'No rooms in this category.';
+          grid.append(empty);
+        }
+        const message = session.refreshing ? `Checking rooms ${session.completed}/${session.total} · ${list.length} shown` : `${list.length} rooms`;
+        if (status.textContent !== message) status.textContent = message;
+        syncMedia();
+      }
+      function scheduleRender() {
+        if (!session.renderTimer) session.renderTimer = setTimeout(render, 100);
+      }
+      async function refreshStatus() {
+        if (!live(session) || session.refreshing) return;
+        const generation = ++session.requestGeneration;
+        const rooms = [...roomMap.values()].filter(room => !room.sourceUrl);
+        let cursor = 0;
+        session.refreshing = true; session.completed = 0; session.total = rooms.length; refresh.disabled = true;
+        render();
+        const worker = async () => {
+          while (live(session) && generation === session.requestGeneration && cursor < rooms.length) {
+            const room = rooms[cursor++]; session.owned.add(room.id);
+            const request = session.service.probe(room.id);
+            syncMedia();
+            const result = await request;
+            if (!live(session) || generation !== session.requestGeneration) return;
+            session.completed++; scheduleRender();
+            if (result?.status === 'throttled') return;
+          }
+        };
+        try { await Promise.all(Array.from({ length: Math.min(4, rooms.length) }, worker)); }
+        finally {
+          if (live(session) && generation === session.requestGeneration) {
+            session.refreshing = false; refresh.disabled = false; render();
+            if (session.completed < session.total) status.textContent += ' · Some checks deferred; try Refresh later.';
+          }
+        }
+      }
+      function select(id) {
+        if (selected === id) return;
+        selected = id;
+        // A category owns a fresh lifetime: cancel its old queued/probing/media
+        // work together, while retaining only the read-only status cache.
+        close(); show(anchor, true);
+        const target = [...(active?.panel.querySelectorAll('[role=tab]') || [])].find(tab => tab.dataset.group === id);
+        (target || active?.panel.querySelector('select'))?.focus();
+      }
+      for (const [id, title] of categoryList) {
+        const tab = document.createElement('button'); tab.type = 'button'; tab.textContent = title;
+        tab.dataset.group = id; tab.setAttribute('role', 'tab'); tab.setAttribute('aria-controls', grid.id);
+        tab.setAttribute('aria-selected', String(selected === id)); tab.tabIndex = selected === id ? 0 : -1;
+        tab.addEventListener('click', () => select(id));
+        tab.addEventListener('keydown', event => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+          event.preventDefault();
+          const buttons = [...tabs.querySelectorAll('[role=tab]')]; const i = buttons.indexOf(tab);
+          const next = buttons[event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (i + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length];
+          next.click();
+        });
+        tabs.append(tab);
+      }
+      const groups = document.createElement('select'); groups.setAttribute('aria-label', 'Saved groups');
+      const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = 'Groups'; groups.append(placeholder);
+      extraGroups.forEach(group => { const option = document.createElement('option'); option.value = group.id; option.textContent = group.id === DEFAULT_GROUP_ID ? t('groupAll') : group.id === FAVORITE_GROUP_ID ? t('groupFav') : group.name; groups.append(option); });
+      groups.value = extraGroups.some(group => group.id === selected) ? selected : '';
+      groups.addEventListener('change', () => { if (groups.value) select(groups.value); });
+      tabs.append(groups);
+      refresh.addEventListener('click', refreshStatus);
+      panel.addEventListener('mouseenter', () => clearTimeout(leaveTimer));
+      panel.addEventListener('mouseleave', scheduleClose);
+      panel.addEventListener('focusin', () => { session.pinned = true; });
+      document.body.append(panel);
+      anchor.setAttribute('aria-expanded', 'true');
+      const bg = getComputedStyle(anchor.closest('#desktop-spa-header') || anchor.parentElement).backgroundColor;
+      const rgb = bg.match(/\d+/g)?.map(Number);
+      if (rgb?.length >= 3 && rgb[0] + rgb[1] + rgb[2] > 510) {
+        for (const [key, value] of Object.entries({ bg: '#fff', text: '#222', link: '#075d95', muted: '#52606b', card: '#f3f5f7', border: '#d5dce1' })) panel.style.setProperty(`--wd-${key}`, value);
+      }
+      position(session); render(); void refreshStatus();
+    }
+    function toggle(anchor) {
+      if (active?.anchor === anchor && active.pinned) close(); else show(anchor, true);
+    }
+    function bind(anchor) {
+      if (bound.has(anchor)) return;
+      bound.add(anchor);
+      anchor.setAttribute('aria-expanded', 'false'); anchor.setAttribute('aria-controls', 'ziggy-workshop-dropdown');
+      anchor.setAttribute('aria-label', 'Workshop rooms'); anchor.title = 'Workshop rooms';
+      anchor.addEventListener('mouseenter', () => {
+        clearTimeout(leaveTimer); clearTimeout(hoverTimer);
+        hoverTimer = setTimeout(() => show(anchor), 180);
+      });
+      anchor.addEventListener('mouseleave', () => { clearTimeout(hoverTimer); scheduleClose(); });
+      anchor.addEventListener('keydown', event => {
+        if (event.key !== 'ArrowDown') return;
+        event.preventDefault(); show(anchor, true); active?.panel.querySelector('[role=tab][aria-selected=true]')?.focus();
+      });
+    }
+    function sync() { if (active && !live(active)) close(); }
+    document.addEventListener('visibilitychange', sync);
+    window.addEventListener('pagehide', () => close());
+    window.addEventListener('resize', () => { if (active) position(active); }, { passive: true });
+    window.addEventListener('scroll', () => { if (active) position(active); }, { passive: true });
+    document.addEventListener('pointerdown', event => {
+      if (active && !active.panel.contains(event.target) && !active.anchor.contains(event.target)) close();
+    }, true);
+    document.addEventListener('keydown', event => { if (active && event.key === 'Escape') { event.preventDefault(); close(true); } });
+    for (const eventName of ['storage', 'ryujo_multicam_storage', 'ziggy-recent-followed']) {
+      window.addEventListener(eventName, event => {
+        if (!active || (eventName === 'storage' && event.key !== STORE_KEY && !event.key?.startsWith(RECENT_FOLLOWED_PREFIX))) return;
+        const { anchor, pinned } = active; close(); show(anchor, pinned);
+      });
+    }
+    return { bind, toggle, sync, close };
+  }
+
   function createNativeRoomQualitySync() {
     const applied = new WeakMap();
     return room => {
@@ -4072,6 +4390,7 @@
       stopAllPageMedia();
       openNoopener(buildWorkstationUrl());
     };
+    const workshopDropdown = !contextOnly ? createWorkshopDropdown() : null;
     function findDesktopNavigationSlot(kind) {
       const nav = document.querySelector('[data-testid="header-nav-bar"]') || document.querySelector('#desktop-spa-header nav') || document.querySelector('header nav');
       if (!nav) return null;
@@ -4132,10 +4451,12 @@
           || button;
         label.textContent = 'WORKSHOP';
         button.addEventListener('click', event => {
+          if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
           event.preventDefault();
           event.stopPropagation();
-          openWorkstationNew();
+          workshopDropdown?.toggle(button);
         });
+        workshopDropdown?.bind(button);
         privateSlot.replaceWith(button);
         return;
       }
@@ -4151,10 +4472,12 @@
       const label = button.querySelector('.HeaderNavBar__link-text,[class*="link-text"],[class*="LinkText"]') || button;
       label.textContent = 'WORKSHOP';
       button.addEventListener('click', event => {
+        if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
         event.stopPropagation();
-        openWorkstationNew();
+        workshopDropdown?.toggle(button);
       });
+      workshopDropdown?.bind(button);
       nav.appendChild(button);
     }
 
@@ -6390,6 +6713,7 @@
 
     function syncSuitePageMounts() {
       recalcCurrentRoom();
+      workshopDropdown?.sync();
       syncNativeRoomGridPlacement();
       if (!nativeMobilePage && !contextOnly) ensureWorkshopHeaderButton();
       ensureRecuRoomTab();
@@ -7539,7 +7863,7 @@
 
     window.addEventListener('pagehide', () => {
       store.flush();
-      try { service.stopAll(); } catch (_) { stopAllPageMedia(); }
+      suspendWorkshopMedia(true);
     });
 
     // 全局样式
@@ -8292,6 +8616,10 @@
         body.rg-workshop-native .rg-refresh-progress[hidden] { display:none!important; }
         body.rg-workshop-native .rg-refresh-progress > span { display:block; padding:0 0 4px; font-size:12px; color:#b3b3b3; }
         body.rg-workshop-native .grid:not(.view-split) { min-height:0!important; padding:0 36px 24px!important; grid-auto-rows:max-content!important; }
+        body.rg-workshop-native .grid,body.rg-workshop-native .sidebar,body.rg-workshop-native .rg-native-categories { scrollbar-width:thin; scrollbar-color:#668398 #17202a; }
+        body.rg-workshop-native .grid::-webkit-scrollbar,body.rg-workshop-native .sidebar::-webkit-scrollbar,body.rg-workshop-native .rg-native-categories::-webkit-scrollbar { width:9px; height:9px; }
+        body.rg-workshop-native .grid::-webkit-scrollbar-track,body.rg-workshop-native .sidebar::-webkit-scrollbar-track,body.rg-workshop-native .rg-native-categories::-webkit-scrollbar-track { background:#17202a; }
+        body.rg-workshop-native .grid::-webkit-scrollbar-thumb,body.rg-workshop-native .sidebar::-webkit-scrollbar-thumb,body.rg-workshop-native .rg-native-categories::-webkit-scrollbar-thumb { background:#668398; border:2px solid #17202a; border-radius:6px; }
         body.rg-workshop-native:not(.rg-pure-mode) .grid:not(.view-split) .cam-card:not(:fullscreen) { height:auto!important; min-height:0!important; border:1px solid #2d3e50!important; border-radius:4px!important; box-shadow:none!important; background:#202c39!important; }
         body.rg-workshop-native:not(.rg-pure-mode) .grid:not(.view-split) .cam-card:not(:fullscreen) > .cam-media:not(:fullscreen) { flex:0 0 auto!important; width:100%!important; height:auto!important; aspect-ratio:16/9!important; }
         body.rg-workshop-native:not(.rg-pure-mode) .grid:not(.view-split) .cam-info { display:block; position:static; min-height:72px; padding:4px 7px 8px; border:0; }
@@ -8316,7 +8644,7 @@
         body.rg-workshop-native.rg-phone-device .rg-native-actions { width:100%; justify-content:flex-end; gap:16px; }
         body.rg-workshop-native.rg-phone-device .rg-native-icon { min-height:40px!important; height:40px!important; }
         body.rg-workshop-native.rg-phone-device .grid:not(.view-split) { grid-template-columns:repeat(auto-fill,minmax(min(100%,174px),1fr))!important; padding:0 4px 12px!important; gap:7px!important; }
-        body.rg-workshop-native.rg-phone-device:not(.rg-pure-mode) .grid:not(.view-split) .cam-card:not(:fullscreen) > .cam-media:not(:fullscreen) { aspect-ratio:4/3!important; }
+        body.rg-workshop-native.rg-phone-device:not(.rg-pure-mode) .grid:not(.view-split) .cam-card:not(:fullscreen) > .cam-media:not(:fullscreen) { aspect-ratio:16/9!important; }
         body.rg-workshop-native.rg-phone-device .cam-info { min-height:76px; padding:4px; }
         body.rg-workshop-native.rg-phone-device .cam-info-name { font-size:13px; }
         body.rg-workshop-native.rg-phone-device .cam-info-meta { font-size:11px; }
@@ -9355,6 +9683,8 @@
     const mediaAttachPendingIds = new Set();
     const mediaRequestQueue = [];
     const mediaRequestQueuedIds = new Set();
+    let workshopPageSuspended = false;
+    let mediaVisibilityRaf = 0;
     let mediaRequestPumpTimer = 0;
     let mediaRequestScopeSignature = '';
     // Keep request bursts controlled while allowing a nine-card page to begin
@@ -9367,19 +9697,25 @@
     const BACKGROUND_SERVICE_STAGGER_MS = 1000;
 
     function isRoomMediaProtected(roomId) {
-      const room = findRoomAny(roomId);
-      return store.state.settings.splitRoomIds.includes(roomId)
-        || !!room && room.muted === false;
+      const entry = cardMap.get(roomId);
+      if (workshopPageSuspended || !entry?.video?.isConnected) return false;
+      // PiP is a genuinely visible surface even when its owner tab is hidden.
+      if (document.pictureInPictureElement === entry.video) return true;
+      const fullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+      return !document.hidden && !!fullscreen
+        && (entry.root.contains(fullscreen) || fullscreen.contains(entry.video));
     }
 
     function isCardNearViewport(roomId) {
-      if (mediaViewportIds.has(roomId)) return true;
+      if (document.hidden || workshopPageSuspended) return false;
       const card = cardMap.get(roomId)?.root;
-      if (!card?.isConnected) return false;
+      if (!card?.isConnected || !grid.contains(card)) return false;
       const cardRect = card.getBoundingClientRect();
       const gridRect = grid.getBoundingClientRect();
-      const margin = Math.max(120, gridRect.height * .75);
-      return cardRect.bottom >= gridRect.top - margin && cardRect.top <= gridRect.bottom + margin;
+      const top = Math.max(0, gridRect.top), left = Math.max(0, gridRect.left);
+      const bottom = Math.min(innerHeight, gridRect.bottom), right = Math.min(innerWidth, gridRect.right);
+      return bottom > top && right > left && cardRect.width > 0 && cardRect.height > 0
+        && cardRect.bottom > top && cardRect.top < bottom && cardRect.right > left && cardRect.left < right;
     }
 
     function shouldAttachRoomMedia(roomId) {
@@ -9416,6 +9752,7 @@
     function pumpRoomMediaQueue() {
       clearTimeout(mediaRequestPumpTimer);
       mediaRequestPumpTimer = 0;
+      if (document.hidden || workshopPageSuspended) return;
       while (mediaRequestQueue.length) {
         const roomId = mediaRequestQueue.shift();
         mediaRequestQueuedIds.delete(roomId);
@@ -9461,6 +9798,7 @@
     function pumpBackgroundServiceQueue() {
       clearTimeout(backgroundServicePumpTimer);
       backgroundServicePumpTimer = 0;
+      if (document.hidden || workshopPageSuspended) return;
       while (backgroundServiceQueue.length) {
         const roomId = backgroundServiceQueue.shift();
         backgroundServiceQueuedIds.delete(roomId);
@@ -9473,35 +9811,95 @@
 
     function queueBackgroundServiceStart(roomId) {
       roomId = normalizeUsername(roomId);
+      if (document.hidden || workshopPageSuspended) return;
       if (!roomId || service.has(roomId) || backgroundServiceQueuedIds.has(roomId)) return;
       backgroundServiceQueuedIds.add(roomId);
       backgroundServiceQueue.push(roomId);
       if (!backgroundServicePumpTimer) backgroundServicePumpTimer = setTimeout(pumpBackgroundServiceQueue, BACKGROUND_SERVICE_STAGGER_MS);
     }
 
-    function releaseRoomMediaIfPossible(roomId) {
-      if (isRoomMediaProtected(roomId) || isCardNearViewport(roomId)) return;
+    function releaseRoomMediaIfPossible(roomId, { stopSession = false } = {}) {
+      if (shouldAttachRoomMedia(roomId)) return;
       const room = findRoomAny(roomId);
       const cardEntry = cardMap.get(roomId);
-      if (!cardEntry?.video) return;
       mediaAttachPendingIds.delete(roomId);
-      if (room?.sourceUrl) {
+      if (cardEntry?.video) {
+        const video = cardEntry.video;
+        // HTMLVideoElement.paused is true before its first autoplay frame too.
+        // Preserve explicit Pause, not an initial/loading autoplay state.
+        cardEntry.visibilityPaused = cardEntry.pauseIntent === true
+          || (video.paused && !video.ended && (cardEntry.videoHasPlayed || video.currentTime > 0));
+      }
+      if (stopSession && !room?.sourceUrl) service.stop(roomId);
+      if (!cardEntry?.video) return;
+      if (room?.sourceUrl || cardEntry.tempHls) {
         try { cardEntry.tempHls?.destroy?.(); } catch (_) {}
         cardEntry.tempHls = null;
-      } else {
+      } else if (!stopSession) {
         service.detachVideo(roomId);
       }
-      try { cardEntry.video?.pause?.(); } catch (_) {}
-      try { cardEntry.video?.remove?.(); } catch (_) {}
+      stopMediaElement(cardEntry.video, true);
       cardEntry.video = null;
       if (room) renderCardState(room);
+    }
+
+    function suspendWorkshopMedia(pageHidden = false) {
+      workshopPageSuspended = pageHidden;
+      workshopRefreshState.generation = (workshopRefreshState.generation || 0) + 1;
+      clearTimeout(mediaRequestPumpTimer);
+      clearTimeout(backgroundServicePumpTimer);
+      cancelAnimationFrame(mediaVisibilityRaf);
+      mediaRequestPumpTimer = backgroundServicePumpTimer = mediaVisibilityRaf = 0;
+      mediaRequestQueue.length = backgroundServiceQueue.length = 0;
+      mediaRequestQueuedIds.clear();
+      backgroundServiceQueuedIds.clear();
+      mediaAttachPendingIds.clear();
+      mediaViewportIds.clear();
+      mediaRequestScopeSignature = '';
+      // Only this Workshop's sessions/media are released; no page-wide stop.
+      const ownedIds = new Set([...allRoomsForView().map(room => room.id), ...cardMap.keys()]);
+      ownedIds.forEach(id => {
+        if (!isRoomMediaProtected(id)) releaseRoomMediaIfPossible(id, { stopSession: true });
+      });
+    }
+
+    function reconcileWorkshopMediaVisibility() {
+      mediaVisibilityRaf = 0;
+      if (document.hidden || workshopPageSuspended) return;
+      cardMap.forEach((entry, id) => {
+        if (shouldAttachRoomMedia(id)) {
+          mediaViewportIds.add(id);
+          requestRoomMediaIfNeeded(id);
+        } else {
+          mediaViewportIds.delete(id);
+          releaseRoomMediaIfPossible(id);
+        }
+      });
+    }
+
+    function scheduleWorkshopMediaVisibility() {
+      if (mediaVisibilityRaf || document.hidden || workshopPageSuspended) return;
+      mediaVisibilityRaf = requestAnimationFrame(reconcileWorkshopMediaVisibility);
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) suspendWorkshopMedia();
+      else { resumeDeferredWorkshopRefreshes(); scheduleWorkshopMediaVisibility(); }
+    });
+    window.addEventListener('pageshow', () => {
+      workshopPageSuspended = false;
+      resumeDeferredWorkshopRefreshes();
+      scheduleWorkshopMediaVisibility();
+    });
+    for (const name of ['fullscreenchange', 'webkitfullscreenchange']) {
+      document.addEventListener(name, scheduleWorkshopMediaVisibility);
     }
 
     const cardMediaObserver = 'IntersectionObserver' in window ? new IntersectionObserver(entries => {
       entries.forEach(entry => {
         const roomId = entry.target?.dataset?.roomId;
         if (!roomId) return;
-        if (entry.isIntersecting) {
+        if (entry.isIntersecting && shouldAttachRoomMedia(roomId)) {
           mediaViewportIds.add(roomId);
           requestRoomMediaIfNeeded(roomId);
         } else {
@@ -9509,13 +9907,15 @@
           releaseRoomMediaIfPossible(roomId);
         }
       });
-    }, { root: grid, rootMargin: '75% 0px', threshold: .01 }) : null;
+    }, { root: grid, rootMargin: '0px', threshold: .01 }) : null;
+    if (!cardMediaObserver) grid.addEventListener('scroll', scheduleWorkshopMediaVisibility, { passive: true });
+    window.addEventListener('resize', scheduleWorkshopMediaVisibility, { passive: true });
 
     function observeCardMedia(roomId) {
       const card = cardMap.get(roomId)?.root;
       if (!card) return;
       if (cardMediaObserver) cardMediaObserver.observe(card);
-      else mediaViewportIds.add(roomId);
+      else scheduleWorkshopMediaVisibility();
     }
 
     function forgetCardMedia(roomId) {
@@ -9542,8 +9942,7 @@
         try { entry.tempHls?.destroy?.(); } catch (_) {}
       } else if (stopSession) service.stop(roomId);
       else service.detachVideo(roomId);
-      try { entry.video?.pause?.(); } catch (_) {}
-      try { entry.video?.remove?.(); } catch (_) {}
+      stopMediaElement(entry.video, true);
       entry.video = null;
       entry.tempHls = null;
       try { entry.resizeObserver?.disconnect(); } catch (_) {}
@@ -9571,8 +9970,7 @@
         try { entry.tempHls?.destroy?.(); } catch (_) {}
         entry.tempHls = null;
       } else service.detachVideo(roomId);
-      try { entry.video?.pause?.(); } catch (_) {}
-      try { entry.video?.remove?.(); } catch (_) {}
+      stopMediaElement(entry.video, true);
       entry.video = null;
       entry.root.remove();
       removeParkedCardId(roomId);
@@ -9643,6 +10041,13 @@
 
     async function refreshWorkshopRooms(options = {}) {
       const scope = options.scope || 'all';
+      const defer = () => {
+        workshopRefreshState.deferred ||= new Map();
+        workshopRefreshState.deferred.set(scope, { ...options, automatic: false });
+        workshopRefreshState.message = LANG === 'zh' ? '刷新已暂停；返回工作台后继续' : 'Refresh paused — resumes when Workshop is visible';
+        updateWorkshopRefreshUi();
+      };
+      if (document.hidden || workshopPageSuspended) { defer(); return []; }
       const requestedIds = roomIdsForWorkshopRefresh(scope);
       if (workshopRefreshPromise) {
         const active = workshopRefreshPromise;
@@ -9666,12 +10071,17 @@
         refreshAllBtn.disabled = false;
         scheduleSidebarRender();
         updateWorkshopRefreshUi();
+        resumeDeferredWorkshopRefreshes();
         return [];
       }
       workshopRefreshRoomIds = new Set(ids);
+      const generation = workshopRefreshState.generation || 0;
+      const canContinue = () => !document.hidden && !workshopPageSuspended
+        && generation === (workshopRefreshState.generation || 0);
       workshopRefreshPromise = service.refreshMany(ids, {
         concurrency: 4,
         spacingMs: 0,
+        shouldContinue: canContinue,
         onProgress: ({ completed, result }) => {
           workshopRefreshState.completed = completed;
           if (result?.status === 'throttled') workshopRefreshState.throttled++;
@@ -9681,6 +10091,10 @@
       });
       try {
         const results = await workshopRefreshPromise;
+        if (!canContinue() || results.some(result => result?.status === 'cancelled' || result?.status === 'aborted')) {
+          defer();
+          return results;
+        }
         const notes = [];
         if (workshopRefreshState.throttled) notes.push(`${workshopRefreshState.throttled} deferred`);
         if (workshopRefreshState.failed) notes.push(`${workshopRefreshState.failed} failed`);
@@ -9705,7 +10119,19 @@
           workshopRefreshState.message = '';
           scheduleSidebarRender();
         }, 6000);
+        resumeDeferredWorkshopRefreshes();
       }
+    }
+
+    function resumeDeferredWorkshopRefreshes() {
+      if (document.hidden || workshopPageSuspended || workshopRefreshPromise || !workshopRefreshState.deferred?.size) return;
+      const [scope, options] = workshopRefreshState.deferred.entries().next().value;
+      workshopRefreshState.deferred.delete(scope);
+      void refreshWorkshopRooms(options).catch(error => {
+        console.warn('[Workshop] deferred refresh failed', error);
+        workshopRefreshState.message = LANG === 'zh' ? '刷新失败；请重试' : 'Refresh failed — try again';
+        updateWorkshopRefreshUi();
+      });
     }
 
     async function refreshAllSources() {
@@ -10330,12 +10756,13 @@
           previewImage.removeAttribute('src');
         }
         function refreshPreview() {
-          if (!previewRoom) return;
+          if (!previewRoom || document.hidden || workshopPageSuspended || !previewPanel.isConnected) return;
           previewFallback = false;
           previewStatus.textContent = statusMeta(previewRoom.lastStatus).label;
           previewImage.src = splitPreviewSnapshotUrl(previewRoom.id, false);
         }
         function openPreview(room) {
+          if (document.hidden || workshopPageSuspended || !body.isConnected) return;
           clearInterval(previewTimer);
           previewRoom = room;
           previewName.textContent = room.id;
@@ -10359,7 +10786,7 @@
           if (previewRoom) previewStatus.textContent = statusMeta(previewRoom.lastStatus).label;
         });
         previewImage.addEventListener('error', () => {
-          if (!previewRoom) return;
+          if (!previewRoom || document.hidden || workshopPageSuspended || !previewPanel.isConnected) return;
           if (!previewFallback) {
             previewFallback = true;
             previewImage.src = splitPreviewSnapshotUrl(previewRoom.id, true);
@@ -10451,7 +10878,24 @@
         );
         render();
         setTimeout(() => search.focus(), 0);
-        return closePreview;
+        const syncPreviewVisibility = () => {
+          clearInterval(previewTimer);
+          previewTimer = 0;
+          if (document.hidden || workshopPageSuspended) previewImage.removeAttribute('src');
+          else if (previewRoom && previewPanel.isConnected) {
+            refreshPreview();
+            previewTimer = setInterval(refreshPreview, 2200);
+          }
+        };
+        document.addEventListener('visibilitychange', syncPreviewVisibility);
+        window.addEventListener('pagehide', syncPreviewVisibility);
+        window.addEventListener('pageshow', syncPreviewVisibility);
+        return () => {
+          closePreview();
+          document.removeEventListener('visibilitychange', syncPreviewVisibility);
+          window.removeEventListener('pagehide', syncPreviewVisibility);
+          window.removeEventListener('pageshow', syncPreviewVisibility);
+        };
       });
     }
 
@@ -10549,6 +10993,7 @@
 
     function pauseCurrentPage() {
       const ids = currentPageRoomIds();
+      rememberWorkshopPause(ids, true);
       service.pauseAll(ids);
       requestAnimationFrame(() => ids.forEach(updateCardButtons));
       toast(t('pausedVisible'));
@@ -10890,7 +11335,9 @@
         onclick: () => { closeCardOpsMenu(); onclick(); },
       }, label), label);
 
-      menu.appendChild(item('', service.isPaused(roomId) ? t('opResume') : t('opPause'), () => service.togglePause(roomId)));
+      menu.appendChild(item('', service.isPaused(roomId) ? t('opResume') : t('opPause'), () => {
+        rememberWorkshopPause([roomId], service.togglePause(roomId));
+      }));
       menu.appendChild(item('', t('opRefresh'), () => service.refresh(roomId)));
       if (currentRoom && !savedRoom && isLikelyUsername(roomId)) {
         menu.appendChild(item('', 'Add room to Workshop', () => store.addRoom(roomId)));
@@ -11134,12 +11581,14 @@
         item(t('menuToggleFit'), () => toggleVideoFit(), { title: t('videoFitHint') }),
         item(t('menuPauseVisible'), () => {
           const ids = currentPageIds();
+          rememberWorkshopPause(ids, true);
           service.pauseAll(ids);
           requestAnimationFrame(() => ids.forEach(updateCardButtons));
           toast(t('pausedVisible'));
         }, { title: t('menuPauseVisible') }),
         item(t('menuResumeVisible'), () => {
           const ids = currentPageIds();
+          rememberWorkshopPause(ids, false);
           service.resumeAll(ids);
           requestAnimationFrame(() => ids.forEach(updateCardButtons));
           toast(t('resumedVisible'));
@@ -11560,9 +12009,13 @@
       });
     }
 
+    function rememberWorkshopPause(ids, paused) {
+      ids.forEach(id => { const card = cardMap.get(id); if (card) card.pauseIntent = paused; });
+    }
+
     function attachVideoElement(roomId) {
       const c = cardMap.get(roomId);
-      if (!c) return null;
+      if (!c || !shouldAttachRoomMedia(roomId)) return null;
       // 移除旧 video：必须同步销毁 HLS，否则旧 buffer 可能继续出声。
       if (c.video) {
         service.detachVideo(roomId);
@@ -11583,17 +12036,32 @@
       // Insert inside the card's native media area, immediately behind the status overlay.
       (c.media || c.root).insertBefore(video, c.statusEl);
       c.video = video;
+      c.videoHasPlayed = false;
       applyMute(roomId);
-      video.addEventListener('play', () => updateCardButtons(roomId));
+      video.addEventListener('play', () => {
+        if (c.video !== video) return;
+        c.videoHasPlayed = true;
+        c.pauseIntent = false;
+        updateCardButtons(roomId);
+      });
       video.addEventListener('pause', () => updateCardButtons(roomId));
-      service.attachVideo(roomId, video);
+      video.addEventListener('leavepictureinpicture', () => {
+        if (document.hidden || workshopPageSuspended) releaseRoomMediaIfPossible(roomId, { stopSession: true });
+        else scheduleWorkshopMediaVisibility();
+      });
+      if (!r?.sourceUrl) service.attachVideo(roomId, video);
+      if (c.visibilityPaused || c.pauseIntent) {
+        video.autoplay = false;
+        service.pause(roomId);
+      }
+      delete c.visibilityPaused;
       applyVideoTransform(roomId);
       updateCardButtons(roomId);
       return video;
     }
 
     function attachTemporarySource(room) {
-      if (!room || !room.sourceUrl) return;
+      if (!room || !room.sourceUrl || !shouldAttachRoomMedia(room.id)) return;
       const c = cardMap.get(room.id);
       if (!c) return;
       const video = attachVideoElement(room.id);
@@ -11610,7 +12078,7 @@
       } else {
         video.src = room.sourceUrl;
       }
-      video.play?.().catch?.(() => {});
+      if (video.autoplay) video.play?.().catch?.(() => {});
       renderCardState(room);
     }
 
@@ -11792,8 +12260,9 @@
         if (wantIds.has(id)) continue;
         forgetCardMedia(id);
         if (allRoomIds.has(id)) service.detachVideo(id); else service.stop(id);
-        try { c.video?.pause(); } catch (_) {}
-        try { c.video?.remove(); } catch (_) {}
+        try { c.tempHls?.destroy?.(); } catch (_) {}
+        c.tempHls = null;
+        stopMediaElement(c.video, true);
         c.video = null;
         try { c.resizeObserver?.disconnect(); } catch (_) {}
         c.resizeObserver = null;
@@ -11878,6 +12347,10 @@
       }, [positionBtn, swapBtn, fullscreenBtn, exitBtn]);
 
       grid.replaceChildren(panes[0], divider, panes[1], splitToolbar);
+      rooms.forEach(room => {
+        activateCardEntry(room.id);
+        requestRoomMediaIfNeeded(room.id);
+      });
       installSplitToolbarAutohide(splitToolbar);
       grid.style.setProperty('--split-ratio', clampInt(store.state.settings.splitRatio, 20, 80, 50) + '%');
       store.state.settings.splitRoomIds.forEach(applyMute);
@@ -12050,7 +12523,8 @@
       if (!findRoomAny(id)) { service.stop(id); return; }
       mediaAttachPendingIds.delete(id);
       if (!shouldAttachRoomMedia(id)) {
-        service.detachVideo(id);
+        if (document.hidden || workshopPageSuspended) service.stop(id);
+        else service.detachVideo(id);
         const offscreenRoom = findRoomAny(id);
         if (offscreenRoom) renderCardState(offscreenRoom);
         return;

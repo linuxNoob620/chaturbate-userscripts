@@ -88,6 +88,7 @@ for (const mode of ['completion', 'timeout', 'parent abort', 'parse failure']) t
 test('broader refresh waits for narrow refresh then checks requested scope', async () => {
   const first = deferred(), calls = [];
   const ctx = vm.createContext({ console, Date, Set, Map, Promise, LANG: 'en', ONLINE_GROUP_ID: 'online',
+    document: { hidden: false }, workshopPageSuspended: false,
     workshopRefreshPromise: first.promise, workshopRefreshRoomIds: new Set(['favorite']),
     workshopRefreshState: {}, refreshAllBtn: {}, cardMap: new Map(),
     roomIdsForWorkshopRefresh: scope => scope === 'all' ? ['favorite', 'other'] : ['favorite'],

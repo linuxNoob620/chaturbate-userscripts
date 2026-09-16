@@ -3,12 +3,22 @@
 ## Deployment
 
 - Primary runtime: Tampermonkey userscript `Chaturbate MultiCam Pro + Cam ARNA.user.js`.
-- Current userscript release: 16.6.18 (`main`, tag `v16.6.18`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
+- Current userscript release: 16.6.19 (`main`, tag `v16.6.19`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
 - Extension builds remain at 16.6.7. They were not modified, rebuilt, packaged, or published for this userscript-only change.
 - Local rollback point: Git tag `backup/pre-16.6.8-workshop-doubletap-20260905` at the 16.6.7 baseline.
-- Version 16.6.18 is installed in the existing Chrome testing-profile Tampermonkey entry; its saved editor readback matched the source after reload. Quetta was last updated/tested at 16.6.16; no phone was connected for 16.6.17/16.6.18. No reinstall or settings reset was performed. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
+- Version 16.6.19 is installed in the existing Chrome testing-profile Tampermonkey entry; after a fresh room reload, the executed userscript contained the complete candidate body exactly (line endings normalized). Quetta was last updated/tested at 16.6.16; no phone was connected for 16.6.17–16.6.19. No reinstall or settings reset was performed. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
 - Recu.me release rollback point: local tag `backup/pre-recu-16.6.13-20260909` at 16.6.12.
 - Candidate rollback point: `backup/pre-native-portrait-20260905`. Extension outputs are unchanged.
+
+## Workshop dropdown and visible-only previews — 16.6.19
+
+- The desktop Workshop navigation link opens a lightweight native-style dropdown on the homepage and normal rooms: Online now, Online Favorites, Recently followed, All saved, saved groups, and a normal **Open full Workshop** link. Hover opens temporarily; click pins, outside click/Escape closes, and keyboard category navigation restores focus. Existing mobile Rooms/Workshop entry points remain unchanged.
+- Dropdown state is read-only and lazy. It uses the existing room service with private events and scoped media ownership, four status workers, and at most six visible muted previews capped at 480p. It does not mount full Workshop, scan account Following, write preview status into settings, or stop native room playback. Closing, backgrounding, route/anchor removal and category changes invalidate and dispose owned media/requests/timers/observers.
+- Full Workshop releases offscreen and hidden-tab preview media, including temporary URL sources. Visible fullscreen and actual PiP remain distinct; an inactive split pane or unmuted preview alone is not a visibility exception. Hidden refreshes stop admitting work, retain their scope, report paused, and resume when shown. Initial autoplay loading is not mistaken for intentional Pause.
+- Inline preview frames use 16:9 on desktop and phone layouts. Fullscreen, Split View and Pure-mode sizing remain excluded. Dropdown grid rows reserve the separate model-name area. The dropdown and native-style Workshop scroll surfaces have scoped themed scrollbars.
+- Actual Chrome/Tampermonkey: homepage and model-room dropdowns, six playing previews, category switching, keyboard/Escape, close/no further status requests, and full-Workshop link passed. The native room retained the same playing 1920×1080 muted video. Full Workshop measured approximately 1.7778 aspect ratio; scroll-offscreen cleanup, double-click fullscreen/Escape retaining the same video, rapid hide/show autoplay, and explicit Pause/Resume passed. Hidden Workshop had zero video elements and no new requests in the four-second observation; mid-refresh hiding stopped further admission and resumed after return. These are bounded live observations, not an exhaustive browser/device guarantee.
+- Validation: 15 dropdown and 21 visibility extracted-source checks, targeted counterfactual failures, independent scoped review, and the full userscript build/regression gate passed. The aggregate gate ran in an isolated clean HEAD export with only these candidate files overlaid because unrelated local Accurate Timeline Previews work has unmatched metadata; that work was neither changed nor included. No real-phone or new Firefox acceptance was performed. No account actions, cloud writes, extension updates or phone-setting changes were made.
+- Rollback: local tag `backup/pre-workshop-dropdown-20260916` at `96a76e0b35c13cdca499086dd5a1413b4398c0e7`; original userscript SHA-256 `463BD2E9D106A7420386F6BC87E9031A0C830412775242AAF6D0C6FDA104ABC7`.
 
 ## Independent Recu.me replacement player — 0.2.1 experimental
 

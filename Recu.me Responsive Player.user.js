@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Recu.me Responsive Player
 // @namespace    https://github.com/linuxNoob620/chaturbate-userscripts
-// @version      0.2.0
+// @version      0.2.1
 // @description  Default 1080p replacement player with preloaded sampled timeline previews for Recu.me.
 // @author       Ziggy
 // @license      MIT
@@ -301,7 +301,7 @@ SOFTWARE.
 (() => {
 'use strict';
 if (window.top !== window.self || !rrpRoute()) return;
-const RRP_BUILD = '5abb0248b147';
+const RRP_BUILD = 'f29ba1c58771';
 const RRP_SK = (() => { const exports = {};
 /*
  @license
@@ -3031,7 +3031,7 @@ class RRPSegmentTransport {
 
 // This is a separate player. It never edits Suite settings or the old
 // Accurate Timeline Previews script. Shaka owns media; Recu.me owns authorization.
-const RRP_VERSION = '0.2.0';
+const RRP_VERSION = '0.2.1';
 const RRP_ID = 'recu-responsive-player';
 
 function rrpRoute(path = location.pathname) {
@@ -3174,6 +3174,7 @@ class RRPPlayer {
       controlPanelElements:['play_pause','time_and_duration','spacer','mute','volume','overflow_menu','fullscreen'],
       overflowMenuButtons:['quality','playback_rate','picture_in_picture','captions'],
       showUIAlways:true,
+      alwaysShowVolumeBar:true,
       fullScreenElement:this.host,
       documentPictureInPicture:{enabled:false},
       seekBarColors:{ base:'rgba(255,255,255,.25)', buffered:'rgba(255,255,255,.5)', played:'#ff9800', adBreaks:'#ffcc00' },
@@ -3268,8 +3269,8 @@ class RRPPlayer {
     this.on(this.video, 'seeking', () => this.measureSeek());
     this.on(document, 'fullscreenchange', () => { this.hidePreview(); this.activity(); });
     // Stock Shaka reads document.activeElement, which retargets shadow controls
-    // to the outer host. Own only media shortcuts; native buttons/ranges and
-    // menu navigation retain their ordinary keyboard behavior.
+    // to the outer host. Own timeline arrows and volume Up/Down; other range
+    // keys, buttons and menu navigation keep their ordinary behavior.
     // The site intercepts Space/F at document capture even for shadow inputs.
     // Run one level earlier, only for events inside our host. Buttons keep
     // their browser-default activation; hidden native playback gets no action.
@@ -3289,7 +3290,8 @@ class RRPPlayer {
     if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
     const target = event.composedPath?.()[0] || event.target;
     const key = event.key.toLowerCase();
-    if (target === this.seek) { if (key !== ' ') return; }
+    if (target === this.seek) { if (![' ','arrowleft','arrowright','arrowup','arrowdown'].includes(key)) return; }
+    else if (target?.matches?.('input.shaka-volume-bar')) { if (!['arrowup','arrowdown'].includes(key)) return; }
     else if (target?.closest?.('button,input,textarea,select,[contenteditable=""],[contenteditable="true"],[role="textbox"]')) return;
     let action;
     if (key === ' ' || key === 'k') action = () => this.video.paused ? this.video.play().catch(() => {}) : this.video.pause();

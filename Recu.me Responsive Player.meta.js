@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Recu.me Responsive Player
 // @namespace    https://github.com/linuxNoob620/chaturbate-userscripts
-// @version      0.2.0
+// @version      0.2.1
 // @description  Default 1080p replacement player with preloaded sampled timeline previews for Recu.me.
 // @author       Ziggy
 // @license      MIT

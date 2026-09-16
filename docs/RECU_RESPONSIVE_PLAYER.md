@@ -1,6 +1,6 @@
 # Recu.me Responsive Player
 
-Version **0.2.0 — experimental desktop player**. Separate from Ziggy Chaturbate Suite and the paused Accurate Timeline Previews development. No Suite source, settings or extension build is changed.
+Version **0.2.1 — experimental desktop player**. Separate from Ziggy Chaturbate Suite and the paused Accurate Timeline Previews development. No Suite source, settings or extension build is changed.
 
 ## Install and use
 
@@ -13,6 +13,8 @@ Version **0.2.0 — experimental desktop player**. Separate from Ziggy Chaturbat
 5. **Use original player** disposes the replacement and reloads the same recording with the site's `t` timestamp parameter, rounded down to a whole second. The URL also contains `rrp_player=original`, preventing automatic takeover on that URL, including reload. Explicit **Use responsive player** removes that marker. Ordinary new recording URLs default to the replacement. Native autoplay, audio preferences and speed initialization apply again; this is not preservation of the replacement's paused/volume/rate state.
 
 Disable the new script and reload to remove it. This does not erase Suite or site settings.
+
+Volume remains expanded whenever the control overlay is visible. With the video/timeline focused, Left/Right seek five seconds and Up/Down adjust volume by 5%. Up/Down also adjust a focused volume slider; mute remains a separate choice. Other inputs and menu keys are not remapped. Idle hiding still applies to the entire overlay, including volume.
 
 ## Architecture and limits
 
@@ -65,7 +67,7 @@ Same recording, three pointer seeks per player, at approximately 39%, 47%, 55%. 
 
 The replacement responds to the seek command sooner, but **cold-seek completion is not proven faster**. Sampled hover avoids this media-seek path entirely. Instrumented first-frame timestamps do not guarantee the monitor displayed that frame at exactly that instant.
 
-## Current desktop acceptance — 2026-09-16
+## Desktop acceptance — 0.2.0, 2026-09-16
 
 The actual existing Chrome-for-Testing/Tampermonkey entry was updated without reinstalling or resetting settings. Final saved editor bytes matched the generated 0.2.0 source; live build `5abb0248b147`. Three authorized recordings offered maximum renditions of 540p, 720p and 1080p respectively. No account actions, media downloads, phone changes or Suite/extension edits were performed.
 
@@ -82,6 +84,12 @@ The actual existing Chrome-for-Testing/Tampermonkey entry was updated without re
 | Fullscreen / final state | Fullscreen button entry/exit passed; actual browser Escape remains unconfirmed. Final foreground recording was left paused at fixed 1080p. |
 
 Native-fullscreen/PiP startup deferral, missing-readiness timeout, cancellation and failure fallback are additionally covered by controlled fixtures, not a complete live browser-state matrix. Audible A/V synchronization and sources with different initial timestamp offsets/discontinuities were not comprehensively validated. Mobile/Firefox and external site actions remain outside accepted coverage.
+
+## Control corrections — 0.2.1, 2026-09-16
+
+Shaka's supported `alwaysShowVolumeBar` option removes hover-dependent volume expansion without custom sizing/CSS. Timeline arrow keys now use the existing media shortcuts at window capture; vertical keys on the volume input do likewise. The live page's `En.handleKey` handler was observed cancelling volume-arrow defaults after the Shadow DOM retargeted the input to its host. Other input/menu keys, media transport, quality and idle lifecycle are unchanged.
+
+Actual saved Tampermonkey build `f29ba1c58771` passed: timeline click at 2177 seconds, Left to 2172, Right to 2177; repeated keydowns advanced once each; Up/Down adjusted volume by 0.05 without moving the timestamp, both on timeline and volume input. The volume bar retained a 100-pixel width and stationary mute-button position through pointer-hover samples in inline and fullscreen layouts. Fullscreen button exit and whole-overlay idle hiding to opacity zero while playing also passed. The existing foreground recording was left paused/muted at fixed 1080p; no extra tabs or phone work were needed. Browser/mobile coverage limitations above remain unchanged. Rollback: `backup/pre-responsive-controls-20260916`.
 
 ## Source, build and checks
 
@@ -102,7 +110,7 @@ node tools/test-recu-responsive-player.mjs
 
 The build checks pinned hashes and refuses modified dependencies. Vendored bytes and explicit LF source rules make output reproducible. These commands do not rebuild the Suite or extensions.
 
-Local tests execute the shipped modules with controlled boundaries: 13 storyboard checks, 14 transport checks and 58 player/lifecycle checks. Coverage includes cue validation/caps/abort, scoped request delegation/ranges/late callbacks, exact teardown, retry ownership, keyboard isolation, stale async jobs, persistent errors, original timestamp URLs, open-menu idle behavior and BFCache handling. New regressions cover bounded automatic startup/cancellation, original-only URLs, fixed-quality defaults/manual override, non-waking recovery and rearming the idle timer after buffering. The player checks passed ten repeated runs; baseline/counterfactual runs failed the new targeted assertions. Mocks are not evidence of live mobile or alternate-site compatibility.
+Local tests execute the shipped modules with controlled boundaries: 13 storyboard checks, 14 transport checks and 62 player/lifecycle checks. Coverage includes cue validation/caps/abort, scoped request delegation/ranges/late callbacks, exact teardown, retry ownership, keyboard isolation, stale async jobs, persistent errors, original timestamp URLs, open-menu idle behavior and BFCache handling. Regressions cover bounded automatic startup/cancellation, original-only URLs, fixed-quality defaults/manual override, non-waking recovery, rearming the idle timer after buffering, expanded volume, focused timeline arrows and native volume-key cancellation. The player checks passed ten repeated runs; the 0.2.0 baseline fails all four new control checks and removing only the volume-arrow branch fails its dedicated check. Mocks are not evidence of live mobile or alternate-site compatibility.
 
 ## Follow-up gate
 

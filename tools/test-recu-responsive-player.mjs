@@ -391,6 +391,14 @@ await check('start uses owned host fullscreen, native video PiP and shadow-local
   await player.dispose();
 });
 
+await check('volume requests the always-expanded library option with stock mute and volume controls', async () => {
+  const h = harness(), player = h.newPlayer(); await player.start();
+  assert.equal(h.overlays[0].config.alwaysShowVolumeBar, true);
+  assert(h.overlays[0].config.controlPanelElements.includes('volume'));
+  assert(h.overlays[0].config.controlPanelElements.includes('mute'));
+  await player.dispose();
+});
+
 await check('startup fixes the highest available quality at or below 1080p before loading and selects it afterward', async () => {
   for (const heights of [[360, 2160, 1080, 720], [360, 720, 480], [480], [1080, 1080, 720]]) {
     const tracks = heights.map((height, id) => ({ id, height, bandwidth: (id + 1) * 1000000 }));
@@ -534,7 +542,7 @@ await check('keyup shielding never repeats the keydown playback or fullscreen ac
   await player.dispose();
 });
 
-await check('timeline Space uses the composed inner target while all other timeline keys remain native', async () => {
+await check('timeline Space uses the composed inner target while non-arrow navigation and shortcuts remain native', async () => {
   const h = harness(), player = h.newPlayer(); await player.start();
   assert.deepEqual(press(player, ' ', { target: player.host, pathTarget: player.seek }), { prevented: 1, stopped: 1 });
   assert.equal(player.video.playCalls, 1); assert.equal(player.video.paused, false);
@@ -543,9 +551,88 @@ await check('timeline Space uses the composed inner target while all other timel
   assert.deepEqual(press(player, ' ', { target: player.seek }), { prevented: 1, stopped: 1 });
   assert.equal(player.video.paused, true);
   const snapshot = plain(h.api.rrpSnapshot(player.video));
-  for (const key of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown', 'k', 'j', 'l', 'm', 'f']) {
+  for (const key of ['Home', 'End', 'PageUp', 'PageDown', 'k', 'j', 'l', 'm', 'f', 'Enter', 'Escape', 'Tab']) {
     assert.deepEqual(press(player, key, { target: player.seek }), { prevented: 0, stopped: key === 'f' ? 1 : 0 }, key);
     assert.deepEqual(plain(h.api.rrpSnapshot(player.video)), snapshot, key);
+  }
+  await player.dispose();
+});
+
+await check('focused timeline Left and Right seek five seconds once at capture and clamp at media boundaries', async () => {
+  const h = harness(), player = h.newPlayer(); await player.start();
+  player.seek.emit('pointerdown'); h.window.emit('pointerup'); player.seek.focus();
+  assert.equal(h.document.activeElement, player.host); assert.equal(player.shadow.activeElement, player.seek);
+  let nativeKeys = 0; h.document.addEventListener('keydown', () => { nativeKeys++; }, { capture: true });
+  for (const [key, start, expected] of [['ArrowLeft', 35, 30], ['ArrowRight', 35, 40],
+    ['ArrowLeft', 2, 0], ['ArrowRight', 598, 599.9]]) {
+    player.video.currentTime = start; const volume = player.video.volume;
+    const owned = { target: player.host, pathTarget: player.seek };
+    assert.deepEqual(press(player, key, owned), { prevented: 1, stopped: 1 }, key);
+    assert.equal(player.video.currentTime, expected); assert.equal(player.video.volume, volume);
+    assert.deepEqual(press(player, key, { ...owned, type: 'keyup' }), { prevented: 0, stopped: 0 }, key);
+    assert.equal(player.video.currentTime, expected, 'Keyup must not repeat a seek.');
+  }
+  assert.equal(nativeKeys, 0, 'Timeline arrows must be handled before native document shortcuts.');
+  for (const duration of [NaN, Infinity]) {
+    player.video.duration = duration; player.video.currentTime = 50;
+    for (const key of ['ArrowLeft', 'ArrowRight']) {
+      assert.deepEqual(press(player, key, { target: player.seek }), { prevented: 0, stopped: 0 });
+      assert.equal(player.video.currentTime, 50);
+    }
+  }
+  await player.dispose();
+});
+
+await check('focused timeline Up and Down change bounded volume once without seeking or changing mute', async () => {
+  const h = harness(), player = h.newPlayer(); await player.start(); player.seek.focus();
+  for (const muted of [false, true]) for (const [key, start, expected] of [
+    ['ArrowUp', 0.5, 0.55], ['ArrowDown', 0.5, 0.45], ['ArrowUp', 0.99, 1], ['ArrowDown', 0.01, 0]]) {
+    player.video.volume = start; player.video.muted = muted;
+    const owned = { target: player.host, pathTarget: player.seek };
+    assert.deepEqual(press(player, key, owned), { prevented: 1, stopped: 1 }, key);
+    assert.equal(player.video.volume, expected); assert.equal(player.video.currentTime, 35);
+    assert.equal(player.video.muted, muted);
+    assert.deepEqual(press(player, key, { ...owned, type: 'keyup' }), { prevented: 0, stopped: 0 }, key);
+    assert.equal(player.video.volume, expected, 'Keyup must not repeat a volume adjustment.');
+  }
+  const snapshot = plain(h.api.rrpSnapshot(player.video));
+  for (const key of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) {
+    assert.deepEqual(press(player, key, { target: player.seek, withoutComposedPath: true }), { prevented: 0, stopped: 0 });
+    assert.deepEqual(plain(h.api.rrpSnapshot(player.video)), snapshot);
+  }
+  await player.dispose();
+});
+
+await check('focused stock volume Up and Down bypass native shadow-host cancellation while other keys remain native', async () => {
+  const h = harness(), player = h.newPlayer(); await player.start();
+  const volume = new h.Node('input'); volume.setAttribute('type', 'range'); volume.className = 'shaka-volume-bar';
+  player.controls.append(volume); volume.focus();
+  assert.equal(h.document.activeElement, player.host); assert.equal(player.shadow.activeElement, volume);
+  let nativeKeys = 0;
+  h.document.addEventListener('keydown', event => {
+    if (['ArrowUp', 'ArrowDown'].includes(event.key) && event.target === player.host) {
+      nativeKeys++; event.preventDefault();
+    }
+  }, { capture: true });
+  const owned = { target: player.host, pathTarget: volume };
+  for (const muted of [false, true]) for (const [key, start, expected] of [
+    ['ArrowUp', 0.49, 0.54], ['ArrowDown', 0.49, 0.44], ['ArrowUp', 0.99, 1], ['ArrowDown', 0.01, 0]]) {
+    player.video.volume = start; player.video.muted = muted;
+    assert.deepEqual(press(player, key, owned), { prevented: 1, stopped: 1 }, key);
+    assert.equal(player.video.volume, expected); assert.equal(player.video.currentTime, 35); assert.equal(player.video.muted, muted);
+    assert.deepEqual(press(player, key, { ...owned, type: 'keyup' }), { prevented: 0, stopped: 0 });
+    h.advance(500); assert.equal(player.video.volume, expected, 'No keyup repeat or delayed reversal.');
+  }
+  assert.equal(nativeKeys, 0, 'The cancelling document listener must not see owned vertical volume keys.');
+  const snapshot = plain(h.api.rrpSnapshot(player.video));
+  for (const key of [' ', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown', 'j', 'l', 'k', 'm', 'f']) {
+    assert.deepEqual(press(player, key, owned), { prevented: 0, stopped: [' ', 'f'].includes(key) ? 1 : 0 }, key);
+    assert.deepEqual(plain(h.api.rrpSnapshot(player.video)), snapshot);
+  }
+  for (const modifier of ['ctrlKey', 'metaKey', 'altKey', 'isComposing']) for (const key of ['ArrowUp', 'ArrowDown']) {
+    // Use the input as the event target here to isolate wrapper modifier handling from the modelled site listener.
+    assert.deepEqual(press(player, key, { target: volume, [modifier]: true }), { prevented: 0, stopped: 0 });
+    assert.deepEqual(plain(h.api.rrpSnapshot(player.video)), snapshot);
   }
   await player.dispose();
 });
@@ -590,7 +677,7 @@ await check('background volume and mute shortcuts have bounded values and do not
 await check('button, range and text-entry contexts keep defaults while reserved site shortcuts are shielded', async () => {
   const h = harness(), player = h.newPlayer(); await player.start();
   const contexts = [new h.Node('button'), new h.Node('input'), new h.Node('textarea'), new h.Node('select')];
-  contexts[1].setAttribute('type', 'range');
+  contexts[1].setAttribute('type', 'range'); contexts[1].className = 'shaka-playback-rate';
   for (const [attribute, value] of [['contenteditable', ''], ['contenteditable', 'true'], ['role', 'textbox']]) {
     const node = new h.Node('div'); node.setAttribute(attribute, value); contexts.push(node);
   }
@@ -598,7 +685,8 @@ await check('button, range and text-entry contexts keep defaults while reserved 
   const snapshot = plain(h.api.rrpSnapshot(player.video));
   for (const context of contexts) {
     const descendant = new h.Node('span'); context.append(descendant); player.controls.append(context);
-    for (const target of [context, descendant]) for (const key of [' ', 'k', 'ArrowRight', 'ArrowUp', 'j', 'm', 'f']) {
+    for (const target of [context, descendant]) for (const key of [' ', 'k', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
+      'Home', 'End', 'PageUp', 'PageDown', 'j', 'm', 'f']) {
       assert.deepEqual(press(player, key, { target }), { prevented: 0, stopped: [' ', 'f'].includes(key) ? 1 : 0 }, `${context.tagName} ${key}`);
       assert.deepEqual(plain(h.api.rrpSnapshot(player.video)), snapshot);
     }
@@ -609,10 +697,10 @@ await check('button, range and text-entry contexts keep defaults while reserved 
 await check('modifier shortcuts and composition preserve defaults while site-reserved propagation is blocked', async () => {
   const h = harness(), player = h.newPlayer(); await player.start();
   const snapshot = plain(h.api.rrpSnapshot(player.video));
-  for (const modifier of ['ctrlKey', 'metaKey', 'altKey', 'isComposing']) {
-    for (const key of [' ', 'k', 'ArrowRight', 'ArrowUp', 'm', 'f']) {
-      const shielded = [' ', 'f'].includes(key) || (['ctrlKey', 'metaKey'].includes(modifier) && key === 'ArrowRight');
-      assert.deepEqual(press(player, key, { [modifier]: true }), { prevented: 0, stopped: shielded ? 1 : 0 }, `${modifier} ${key}`);
+  for (const target of [player.stage, player.seek]) for (const modifier of ['ctrlKey', 'metaKey', 'altKey', 'isComposing']) {
+    for (const key of [' ', 'k', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'm', 'f']) {
+      const shielded = [' ', 'f'].includes(key) || (['ctrlKey', 'metaKey'].includes(modifier) && ['ArrowLeft', 'ArrowRight'].includes(key));
+      assert.deepEqual(press(player, key, { target, [modifier]: true }), { prevented: 0, stopped: shielded ? 1 : 0 }, `${modifier} ${key}`);
       assert.deepEqual(plain(h.api.rrpSnapshot(player.video)), snapshot);
     }
   }

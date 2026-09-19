@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.21
+// @version           16.6.22
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -204,7 +204,7 @@
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.21');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.22');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -220,7 +220,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.21');
+  instanceMarker.setAttribute('data-suite-version', '16.6.22');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -471,23 +471,58 @@
     const targets = page === window ? [window] : [page, window];
     const installed = new Set();
     const accepted = new Map();
+    const defaults = new Map();
+    const latestIntent = new Map();
+    // Bypass our own request observer for the automatic preference write.
+    const nativeFetch = window.fetch.bind(window);
     let requestSequence = 0;
     const requestInfo = (input, method) => {
       try {
         const url = new URL(typeof input === 'string' ? input : input.url, location.href);
+        if (url.origin !== location.origin || String(method || 'GET').toUpperCase() !== 'POST') return null;
+        const preference = url.pathname.match(/^\/api\/ts\/follow\/notifications\/([a-z0-9_]+)\/?$/i);
         const match = url.pathname.match(/^\/follow\/(follow|unfollow)\/([a-z0-9_]+)\/$/i);
-        if (url.origin !== location.origin || String(method || 'GET').toUpperCase() !== 'POST' || !match) return null;
-        return { account: followedAccount(), id: normalizeUsername(match[2]), following: match[1].toLowerCase() === 'follow', sequence: ++requestSequence, at: Date.now() };
+        if (!preference && !match) return null;
+        const key = followedAccount() + ':' + normalizeUsername(preference ? preference[1] : match[2]);
+        const sequence = ++requestSequence;
+        latestIntent.delete(key);
+        latestIntent.set(key, sequence);
+        if (latestIntent.size > 512) latestIntent.delete(latestIntent.keys().next().value);
+        defaults.get(key)?.abort();
+        if (preference) {
+          return null;
+        }
+        return { account: followedAccount(), id: normalizeUsername(match[2]), following: match[1].toLowerCase() === 'follow', sequence, at: Date.now() };
       } catch (_) { return null; }
     };
     const accept = (info, data) => {
-      if (!info || data?.following !== info.following) return;
+      if (!info || !info.account || info.account !== followedAccount() || data?.error) return;
+      // Current native Follow responses can contain the preference without a following boolean.
+      const following = typeof data?.following === 'boolean' ? data.following
+        : info.following && ['all', 'smart', 'none'].includes(data?.notification_frequency) ? true : undefined;
+      if (following !== info.following) return;
       const key = info.account + ':' + info.id;
       if ((accepted.get(key) || 0) > info.sequence) return;
       accepted.delete(key);
       accepted.set(key, info.sequence);
       if (accepted.size > 512) accepted.delete(accepted.keys().next().value);
-      recordFollowResult(info.account, info.id, data.following, info.at);
+      recordFollowResult(info.account, info.id, following, info.at);
+      if (!following || latestIntent.get(key) !== info.sequence) return;
+      const controller = new AbortController();
+      defaults.get(key)?.abort();
+      defaults.set(key, controller);
+      void requestNativeRoomNotifications(info.id, 'none', controller.signal, {
+        fetch: nativeFetch, preserveExplicit: true,
+        canWrite: () => info.account === followedAccount() && latestIntent.get(key) === info.sequence && !controller.signal.aborted,
+      }).then(result => {
+        if (!controller.signal.aborted && info.account === followedAccount() && result.frequency === 'none') {
+          showSuiteToast(`${info.id}: notifications set to Never.`, { duration: 3500 });
+        }
+      }).catch(() => {
+        if (!controller.signal.aborted && info.account === followedAccount()) {
+          showSuiteToast(`${info.id}: could not confirm notifications are Never. Check the model's notification bell.`, { id: 'ziggy-follow-notification-error', persistent: true });
+        }
+      }).finally(() => { if (defaults.get(key) === controller) defaults.delete(key); });
     };
     for (const target of targets) {
       const original = target.fetch;
@@ -778,7 +813,12 @@
 
   function openNativeMobileChildTab(url, options = {}) {
     if (options.preferNativeMobileGroup !== true) return null;
-    if (typeof navigator === 'undefined' || !/\bAndroid\b/i.test(String(navigator.userAgent || ''))) return null;
+    if (typeof navigator === 'undefined') return null;
+    // Request desktop site masks Android (including userAgentData.platform).
+    // Keep touch-browser navigation native so Quetta inherits the source tab's
+    // site preference and group instead of creating a mobile extension tab.
+    const touchBrowser = Number(navigator.maxTouchPoints || 0) > 0 && window.matchMedia?.('(pointer: coarse)')?.matches;
+    if (!/\bAndroid\b/i.test(String(navigator.userAgent || '')) && !touchBrowser) return null;
     try {
       const target = new URL(String(url || ''), location.href);
       if (target.protocol !== 'https:' || target.origin !== location.origin || !safeChaturbateHost(target.hostname)) return null;
@@ -1414,7 +1454,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.21',
+    version: '16.6.22',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3710,6 +3750,54 @@
       preferNativeMobileGroup: true,
       active: options.active === true,
     });
+  }
+
+  // Native account preferences: fetch on demand, never infer them from Favorites.
+  async function requestNativeRoomNotifications(name, frequency, signal, automatic = {}) {
+    const id = normalizeUsername(name);
+    if (!isLikelyUsername(id)) throw new Error('Invalid room name');
+    if (frequency !== undefined && !['all', 'smart', 'none'].includes(frequency)) throw new Error('Invalid notification setting');
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    const timer = setTimeout(abort, 15000);
+    if (signal?.aborted) abort();
+    else signal?.addEventListener('abort', abort, { once: true });
+    try {
+      const request = automatic.fetch || fetch;
+      const options = { credentials: 'same-origin', signal: controller.signal };
+      if (frequency !== undefined) {
+        const before = await request(`/api/chatvideocontext/${encodeURIComponent(id)}/`, options);
+        if (!before.ok || before.redirected) throw new Error('Could not read native notification settings');
+        const context = await before.json();
+        if (context.following !== true) throw new Error('Follow this model on Chaturbate first');
+        if (!['all', 'smart', 'none'].includes(context.follow_notification_frequency)) throw new Error('Unrecognized native notification settings');
+        if (controller.signal.aborted || (automatic.canWrite && !automatic.canWrite())) throw new Error('Notification update cancelled');
+        // Never replace an explicit Always choice, including one made on another device.
+        if (automatic.preserveExplicit && context.follow_notification_frequency !== 'smart') {
+          return { following: true, frequency: context.follow_notification_frequency };
+        }
+        const cookie = document.cookie.split(';').map(part => part.trim()).find(part => part.startsWith('csrftoken='));
+        if (!cookie) throw new Error('Sign in to Chaturbate before changing notifications');
+        const csrf = decodeURIComponent(cookie.slice('csrftoken='.length));
+        const response = await request(`/api/ts/follow/notifications/${encodeURIComponent(id)}`, {
+          ...options, method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': csrf, 'X-Requested-With': 'XMLHttpRequest' },
+          body: new URLSearchParams({ notification_frequency: frequency }),
+        });
+        if (!response.ok || response.redirected) throw new Error('Notification update was not confirmed');
+        await response.text();
+      }
+      const response = await request(`/api/chatvideocontext/${encodeURIComponent(id)}/`, options);
+      if (!response.ok || response.redirected) throw new Error('Could not read native notification settings');
+      const context = await response.json();
+      const current = context.follow_notification_frequency;
+      if (typeof context.following !== 'boolean' || !['all', 'smart', 'none'].includes(current)) throw new Error('Unrecognized native notification settings');
+      if (frequency !== undefined && (!context.following || current !== frequency)) throw new Error('The saved setting could not be confirmed. Reopen to check before retrying.');
+      return { following: context.following, frequency: current };
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
+    }
   }
 
   /* =============================================================
@@ -8517,7 +8605,9 @@
         body.rg-workshop-native .cam-info-name { padding-right:26px; font-size:14px; line-height:1.25; font-weight:600; }
         body.rg-workshop-native .cam-info-meta { font-family:UbuntuRegular,Ubuntu,Arial,sans-serif; font-size:11px; line-height:1.45; margin-top:4px; white-space:normal; min-height:30px; }
         body.rg-workshop-native .cam-info-actions { display:flex; position:static; }
-        body.rg-workshop-native .cam-info-actions .icon-btn:not(.favorite-toggle):not(.rg-card-menu-button) { display:none!important; }
+        body.rg-workshop-native .cam-info-actions .icon-btn:not(.favorite-toggle):not(.rg-card-menu-button):not(.native-notification-button) { display:none!important; }
+        body.rg-workshop-native .cam-info-actions .native-notification-button { position:absolute!important; inset:4px 38px auto auto!important; width:32px!important; height:32px!important; background:rgba(23,32,42,.65)!important; border:0!important; z-index:5; }
+        @media (pointer:coarse) { body.rg-workshop-native .cam-info-actions .native-notification-button { width:40px!important; height:40px!important; } }
         body.rg-workshop-native .cam-info-actions .favorite-toggle { position:absolute!important; inset:4px 4px auto auto!important; width:28px!important; height:28px!important; background:rgba(23,32,42,.25)!important; border:0!important; z-index:5; }
         body.rg-workshop-native .cam-info-actions .rg-card-menu-button { position:absolute!important; left:4px!important; top:4px!important; right:auto!important; bottom:auto!important; width:26px!important; height:26px!important; background:rgba(23,32,42,.4)!important; border:0!important; z-index:5; }
         body.rg-workshop-native:not(.rg-sidebar-collapsed):not(.rg-pure-mode):not(.rg-split-mode) .rg-sidebar-dismiss-backdrop { display:block; position:fixed; inset:0; z-index:2147482999; background:rgba(0,0,0,.45); }
@@ -10324,6 +10414,8 @@
         store.toggleRoomInGroup(room.id, FAVORITE_GROUP_ID);
       });
       favoriteBtn?.classList.add('favorite-toggle');
+      const nativeNotifyBtn = isLikelyUsername(room.id) ? mkOp('bell', 'Native notifications', () => openNativeNotifications(room.id)) : null;
+      nativeNotifyBtn?.classList.add('native-notification-button');
       const copyLinkBtn = isLikelyUsername(room.id) ? mkOp('copy', t('opCopyRoomLink'), () => {
         void copyRoomPageLink(room.id);
       }) : null;
@@ -10367,6 +10459,7 @@
       const infoMeta = $('div', { class: 'cam-info-meta' }, statusMeta(room.lastStatus).label);
       const infoActions = $('div', { class: 'cam-info-actions' });
       if (favoriteBtn) infoActions.appendChild(favoriteBtn);
+      if (nativeNotifyBtn) infoActions.appendChild(nativeNotifyBtn);
       if (copyLinkBtn) infoActions.appendChild(copyLinkBtn);
       if (recuProfileBtn) infoActions.appendChild(recuProfileBtn);
       infoActions.appendChild(fullBtn);
@@ -10919,6 +11012,56 @@
       currentPageRoomIds().forEach(id => store.moveToGroup(id, groupId));
     }
 
+    function openNativeNotifications(roomId) {
+      openToolPanel(`Native notifications · ${roomId}`, body => {
+        const controller = new AbortController();
+        let current = null;
+        let busy = false;
+        const status = $('div', { class: 'roomgrid-modal-hint', role: 'status', 'aria-live': 'polite' }, 'Reading Chaturbate settings…');
+        const choice = $('select', { class: 'ctrl-input', disabled: true, 'aria-label': 'Native notification frequency' }, [
+          $('option', { value: 'all' }, 'Always — notify me for this model'),
+          $('option', { value: 'none' }, 'Never — no notifications for this model'),
+          $('option', { value: 'smart' }, 'Auto — Chaturbate decides (not Off)'),
+        ]);
+        const save = $('button', { class: 'ctrl-btn primary', disabled: true, onclick: async () => {
+          if (busy || !current?.following) return;
+          busy = true;
+          save.disabled = choice.disabled = true;
+          const submitted = choice.value;
+          status.textContent = 'Saving this model’s native preference…';
+          try {
+            current = await requestNativeRoomNotifications(roomId, submitted, controller.signal);
+            if (controller.signal.aborted) return;
+            choice.value = current.frequency;
+            status.textContent = `Saved on Chaturbate: ${current.frequency === 'all' ? 'Always' : current.frequency === 'none' ? 'Never' : 'Auto'}. Email and other models were not changed.`;
+          } catch (error) {
+            if (controller.signal.aborted) return;
+            status.textContent = `${error.message} The request may have reached Chaturbate; reopen this panel to check.`;
+            current = null;
+          } finally {
+            busy = false;
+            if (!controller.signal.aborted) save.disabled = choice.disabled = !current?.following;
+          }
+        } }, 'Save preference');
+        body.append(status, choice, $('p', { class: 'roomgrid-modal-hint' },
+          'Uses the native bell setting, not Workshop Favorites. Choose Always only for models you want, and Never for others. Existing Auto preferences can still generate alerts; this panel does not change other followed models.'),
+        $('p', { class: 'roomgrid-modal-hint' },
+          'Browser permission and Chaturbate’s browser-notification subscription are also required on each device. Keep “Email me when someone I follow comes online” off. Saving here does not enable email or subscribe this browser.'), save);
+        const account = followedAccount();
+        if (account) body.append($('a', { class: 'ctrl-btn', href: `${location.origin}/p/${encodeURIComponent(account)}/?tab=settings`, target: '_blank', rel: 'noopener' }, 'Chaturbate notification settings'));
+        if (store.state.settings.notifyOnline) body.append($('p', { class: 'roomgrid-modal-hint' },
+          'Separate local Workshop alerts are currently enabled in Layout settings. Those use the Workshop/Favorites filter and can notify independently of the native bell.'));
+        void requestNativeRoomNotifications(roomId, undefined, controller.signal).then(result => {
+          if (controller.signal.aborted) return;
+          current = result;
+          choice.value = current.frequency;
+          save.disabled = choice.disabled = !current.following;
+          status.textContent = current.following ? 'Current preference loaded from Chaturbate.' : 'Follow this model on Chaturbate first. Adding it to Workshop does not follow it.';
+        }).catch(error => { if (!controller.signal.aborted) status.textContent = error.message; });
+        return () => controller.abort();
+      });
+    }
+
     function openLayoutSettings() {
       openToolPanel(t('layoutSettings'), (body, close) => {
         const layout = $('select', { class: 'ctrl-input' }, [2, 4, 6, 9].map(n => $('option', { value: String(n), selected: Number(store.state.settings.layoutSize) === n }, LANG === 'zh' ? `${n} 位可见` : `${n} visible`)));
@@ -11250,6 +11393,7 @@
         menu.appendChild(item('', 'Add room to Workshop', () => store.addRoom(roomId)));
       }
       if (isLikelyUsername(roomId)) {
+        menu.appendChild(item('', 'Native notifications', () => openNativeNotifications(roomId)));
         menu.appendChild(item('', t('opCopyRoomLink'), () => { void copyRoomPageLink(roomId); }));
         const recuItem = item('', t('opOpenRecu'), () => openRoomRecuProfile(roomId));
         recuItem.classList.add('card-menu-recu');

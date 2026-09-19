@@ -3,12 +3,21 @@
 ## Deployment
 
 - Primary runtime: Tampermonkey userscript `Chaturbate MultiCam Pro + Cam ARNA.user.js`.
-- Current userscript release: 16.6.21 (`main`, tag `v16.6.21`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
+- Current userscript release: 16.6.22 (`main`, tag `v16.6.22`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
 - Extension builds remain at 16.6.7. They were not modified, rebuilt, packaged, or published for this userscript-only change.
 - Local rollback point: Git tag `backup/pre-16.6.8-workshop-doubletap-20260905` at the 16.6.7 baseline.
-- Version 16.6.21 is installed in the existing Chrome testing-profile Tampermonkey entry; the saved editor matched the complete candidate after reload (line endings normalized). Quetta was last updated/tested at 16.6.16; no phone pass was performed for 16.6.17–16.6.21. No reinstall or settings reset was performed. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
+- Version 16.6.22 is installed in the existing Chrome testing-profile and actual OPPO/Quetta Tampermonkey entries; both saved editors matched the complete candidate after reload (line endings normalized). No reinstall or settings reset was performed. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
 - Recu.me release rollback point: local tag `backup/pre-recu-16.6.13-20260909` at 16.6.12.
 - Candidate rollback point: `backup/pre-native-portrait-20260905`. Extension outputs are unchanged.
+
+## Native notification preferences and browser-owned room navigation — 16.6.22
+
+- Workshop cards and their More menus expose the native Chaturbate notification preference through the shared tool panel, including the embedded editor and mobile. Always/Auto/Never are read from the account, not inferred from Favorites. Saving requires an existing follow, changes only that model's notification preference, and confirms the submitted value by server readback before reporting success. Closing aborts owned requests; errors remain visible. Browser push permission/subscription and email preferences are not changed by this panel.
+- Successful observed Follow requests default Auto to Never. Existing Always selections and already-Never preferences are preserved; manual preference requests, newer Follow/Unfollow intents and account changes invalidate pending automatic work. Failures show a persistent warning instead of reporting success or retrying indefinitely. This is a request-time default while the Suite is running, not periodic account enforcement or a cross-device guarantee. No following-list scan is installed. Local Workshop alerts remain an independent setting, explicitly identified in the panel.
+- Touch/coarse-pointer browsers use the native same-origin child-tab path even when Request desktop site hides Android in the user agent. Desktop mouse browsers retain the existing background-tab path. No user-agent, viewport, browser preference, cookie or room URL is rewritten.
+- Actual OPPO/Quetta: the 16.6.21 Workshop link changed a desktop source tab into a mobile child; disabled-script native navigation and native child-tab creation retained desktop. With 16.6.22, actual taps from both the dropdown and full Workshop retained desktop UA and native desktop layout. Mobile preview frames measured approximately 204.94 × 115.28 CSS pixels (16:9); the notification panel fitted the 427-pixel viewport and read the Never preference saved in Chrome. No preview/fullscreen sizing rules were changed in this release.
+- Actual Chrome/Tampermonkey: a Workshop bell opened through pointer input, read Auto, saved the authorized Never preference, and confirmed it through readback. The phone then read the same account setting. New Follow/Unfollow races were tested using controlled extracted-source fixtures, not by altering the user's follow list. Delivery of an actual online notification, background delivery and cross-device concurrent writes are not accepted by these tests.
+- Validation: 10 native-preference checks, 10 automatic-follow-default checks, 6 browser-navigation checks, syntax and the complete userscript build/regression gate. The aggregate gate used a clean HEAD export with scoped candidate overlays, preserving unrelated local Recu.me work. Scoped Riqor implementation and final code review were applied. Rollback: `backup/pre-workshop-notifications-20260919` at `5e2aedb53a8a0fd7db8e2d51a1328b0e5d6da398`.
 
 ## Editable persistent Workshop dropdown — 16.6.21
 
@@ -203,6 +212,8 @@ The editable dropdown above supersedes the following read-only ownership rules; 
 ## CommandLineOnNonRooted
 
 Expected idle state: **OFF**.
+
+Latest verification, September 19 after the notification/navigation passes: visibly `Default (Disabled)` after restart, command-line file absent and pass-specific ADB forwarding removed. The temporary child/full-Workshop tabs and generated screenshots/UI dump were removed. Request desktop site and orientation settings were not changed. Quetta's Suite entry is enabled at 16.6.22. Phone testing is finished.
 
 Latest verification, September 13 after the 16.6.16 grid passes: flag visibly `Default` after each pass/restart, command-line file absent, no pass-specific ADB forward, no unsupported-feature warning. It began OFF and was enabled only for the two bounded phone passes, never during coding/desktop work. Original rotation was restored (`accelerometer_rotation=1`, `user_rotation=0`). The temporary Workshop tab and UI dump were removed; existing tabs and saved data were preserved. Suite remains enabled at 16.6.16. Phone testing is finished and the user was told they may disconnect.
 

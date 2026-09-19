@@ -1,5 +1,9 @@
 # Known Quirks
 
+## Quetta desktop-site preference depends on how a child tab is opened
+
+On September 19, the real OPPO/Quetta desktop-site user agent omitted Android and identified Linux desktop. The Suite's Android-only native-child guard therefore fell through to `GM_openInTab`, and actual Workshop model-name taps opened mobile rooms. Script-disabled native card navigation and `window.open` retained the desktop source preference. Detecting the touch/coarse-pointer browser in addition to Android restored desktop child navigation through actual taps from the shared dropdown and full Workshop. Do not infer mobile-site preference from touch hardware, or rewrite the user agent to compensate. Navigating from an internal browser page through DevTools can also differ from entering the URL in Quetta's address bar; use actual browser navigation for this acceptance check.
+
 ## Embedded Workshop needs navigation isolation and frame-sized overlays
 
 A plain same-origin Chaturbate Workshop iframe redirected the parent room during the September 16 Chrome compatibility probe. A sandbox allowing scripts/same-origin/forms/popups/modals/downloads, but **not top navigation**, retained the parent room and ran the actual Tampermonkey Workshop. This is navigation isolation, not a security boundary against same-origin scripts. No CSP or extension permissions were weakened.

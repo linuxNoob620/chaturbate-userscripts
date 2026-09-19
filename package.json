@@ -1,6 +1,6 @@
 {
   "name": "ziggy-chaturbate-suite",
-  "version": "16.6.21",
+  "version": "16.6.22",
   "private": true,
   "description": "Builds the maintained Tampermonkey userscript and strict-parity Chrome and Firefox/Zen extensions.",
   "scripts": {
@@ -10,8 +10,9 @@
     "build:firefox": "node ./tools/build-extensions.mjs firefox && node ./tools/verify-extension-parity.mjs firefox",
     "package": "npm run build",
     "test": "node ./tools/validate-userscripts.mjs && node ./tools/test-suite-regressions.mjs && node ./tools/test-recu-panel.mjs && node ./tools/test-github-sync.mjs && node ./tools/test-extension-adapters.mjs && node ./tools/verify-extension-parity.mjs && npm run test:mobile-view",
-    "test:userscript": "node ./tools/validate-userscripts.mjs && node ./tools/test-suite-regressions.mjs && node ./tools/test-native-room-quality.mjs && node ./tools/test-workshop-refresh.mjs && node ./tools/test-workshop-grid.mjs && node ./tools/test-workshop-dropdown.mjs && node ./tools/test-workshop-visibility.mjs && node ./tools/test-room-row-scroll.mjs && node ./tools/test-recu-panel.mjs && node ./tools/test-github-sync.mjs && node ./tools/test-stage2-persistence.mjs && node ./tools/test-stage2-legacy.mjs && node ./tools/test-stage2-ui.mjs && node ./tools/test-stage3-followups.mjs && npm run test:recu-previews",
+    "test:userscript": "node ./tools/validate-userscripts.mjs && node ./tools/test-suite-regressions.mjs && node ./tools/test-native-room-quality.mjs && node ./tools/test-workshop-refresh.mjs && node ./tools/test-workshop-grid.mjs && node ./tools/test-workshop-dropdown.mjs && node ./tools/test-workshop-visibility.mjs && node ./tools/test-room-row-scroll.mjs && node ./tools/test-recu-panel.mjs && node ./tools/test-github-sync.mjs && node ./tools/test-stage2-persistence.mjs && node ./tools/test-stage2-legacy.mjs && node ./tools/test-stage2-ui.mjs && node ./tools/test-stage3-followups.mjs && npm run test:native-notifications && npm run test:recu-previews",
     "test:mobile-view": "node ./tools/real-mobile-view/verify.mjs",
+    "test:native-notifications": "node ./tools/test-native-room-notifications.mjs && node ./tools/test-follow-notification-default.mjs && node ./tools/test-room-tab-preference.mjs",
     "test:workshop": "node ./tools/test-workshop-refresh.mjs && node ./tools/test-workshop-grid.mjs && node ./tools/test-workshop-dropdown.mjs && node ./tools/test-workshop-visibility.mjs && node ./tools/test-room-row-scroll.mjs",
     "test:recu": "node ./tools/test-recu-panel.mjs",
     "test:recu-previews": "node --check \"Recu.me Accurate Timeline Previews.user.js\" && node ./tools/test-recu-accurate-previews.mjs"

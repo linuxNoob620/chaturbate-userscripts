@@ -73,3 +73,9 @@ Opening policy: click or explicit keyboard activation only; hovering does not op
 Status: Active
 
 Decision: Conventional mouse-wheel steps move two actual card rows in native room grids, full Workshop and room-preview dropdowns. Measure the current layout rather than assuming fixed row dimensions. Do not apply card-row scrolling to chat, text editing, dialogs, fullscreen, pinch/Ctrl-wheel zoom or mobile touch gestures; preserve fine trackpad motion where wheel-event data allows it to be distinguished.
+
+## D-012 — Explicit native model notifications
+
+Status: Active
+
+Decision: Expose Chaturbate's native Always/Auto/Never preference in Workshop without equating Favorites with subscriptions or enabling email. Newly observed successful follows default Auto to Never, preserving explicit Always selections and subsequent manual choices. The user's authorized one-time cleanup of existing Auto preferences is an account operation, not startup scanning or recurring enforcement. Browser permission/push subscription and legacy local Workshop alerts are separate from this per-model server preference; do not claim delivery merely from a successful preference save.

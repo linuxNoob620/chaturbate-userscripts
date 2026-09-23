@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.22
+// @version           16.6.23
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -83,15 +83,1405 @@
 (function suiteFileRuntime() {
   'use strict';
 
+  // BEGIN GENERATED SETTINGS SYNC
+// Standalone, deterministic settings protocol. Embed this exact factory in the userscript.
+function createSettingsSyncCore() {
+  'use strict';
+  const FORMAT = 'ziggy-settings-sync-v2';
+  const LIMIT = Object.freeze({ document: 2 * 1024 * 1024, value: 128 * 1024,
+    operation: 160 * 1024, fields: 10000, devices: 256, conflicts: 512, operations: 512 });
+  const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+  const fail = message => { throw new Error(`Settings sync: ${message}`); };
+  const integer = value => Number.isSafeInteger(value) && value >= 0;
+  const revision = value => integer(value) && value > 0;
+  const safeKey = key => typeof key === 'string' && key.length > 0 && key.length <= 512
+    && !/[\u0000-\u001f\u007f]/.test(key) && !['__proto__', 'constructor', 'prototype'].includes(key);
+  const identifier = value => typeof value === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(value)
+    && safeKey(value);
+  const clone = value => JSON.parse(canonical(value));
+
+  function keys(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) fail('expected a plain object');
+    const proto = Object.getPrototypeOf(value);
+    const ctor = proto && Object.getOwnPropertyDescriptor(proto, 'constructor');
+    if (proto !== null && (Object.getPrototypeOf(proto) !== null || !ctor
+      || typeof ctor.value !== 'function' || ctor.value.name !== 'Object')) fail('non-JSON object');
+    const names = Reflect.ownKeys(value);
+    for (const key of names) {
+      const desc = Object.getOwnPropertyDescriptor(value, key);
+      if (!safeKey(key) || !desc.enumerable || !own(desc, 'value')) fail('unsafe object property');
+    }
+    return names;
+  }
+
+  function shape(value, required, optional = []) {
+    const names = keys(value);
+    if (required.some(key => !own(value, key))
+      || names.some(key => !required.includes(key) && !optional.includes(key))) fail('unknown or incomplete schema');
+  }
+
+  function jsonSize(value, maximum) {
+    const seen = new Set();
+    let nodes = 0, minimumSize = 0;
+    const budget = amount => { minimumSize += amount; if (minimumSize > maximum) fail('size limit exceeded'); };
+    const visit = (item, depth) => {
+      if (++nodes > 100000 || depth > 32) fail('JSON complexity limit exceeded');
+      budget(1);
+      if (typeof item === 'string') { budget(item.length + 1); return; }
+      if (item === null || typeof item === 'boolean') return;
+      if (typeof item === 'number') { if (!Number.isFinite(item)) fail('non-JSON number'); return; }
+      if (typeof item !== 'object' || seen.has(item)) fail('non-JSON value');
+      seen.add(item);
+      if (Array.isArray(item)) {
+        if (item.length > 100000 || Reflect.ownKeys(item).length !== item.length + 1) fail('non-JSON array');
+        for (let index = 0; index < item.length; index++) {
+          const desc = Object.getOwnPropertyDescriptor(item, String(index));
+          if (!desc || !own(desc, 'value') || !desc.enumerable) fail('non-JSON array');
+          visit(desc.value, depth + 1);
+        }
+      } else for (const key of keys(item)) { budget(key.length + 3); visit(item[key], depth + 1); }
+      seen.delete(item);
+    };
+    visit(value, 0);
+    // Use our own traversal: inherited toJSON methods must not execute or change the checked payload.
+    const serialized = canonical(value);
+    let bytes = 0;
+    for (const character of serialized) {
+      const code = character.codePointAt(0);
+      bytes += code <= 0x7f ? 1 : code <= 0x7ff ? 2 : code <= 0xffff ? 3 : 4;
+      if (bytes > maximum) fail('size limit exceeded');
+    }
+    return serialized;
+  }
+
+  function state(value, withRevision, maximumRevision, allowMissing = false) {
+    shape(value, withRevision ? ['revision', 'deleted'] : ['deleted'], ['value']);
+    if (typeof value.deleted !== 'boolean' || (value.deleted ? own(value, 'value') : !own(value, 'value')))
+      fail('a state must contain a value or an explicit tombstone');
+    if (withRevision && !(allowMissing && value.revision === null && value.deleted)
+      && (!revision(value.revision) || value.revision > maximumRevision)) fail('invalid field revision');
+    if (!value.deleted) jsonSize(value.value, LIMIT.value);
+  }
+
+  function validate(document) {
+    jsonSize(document, LIMIT.document);
+    shape(document, ['format', 'syncId', 'revision', 'fields', 'acks', 'conflicts']);
+    if (document.format !== FORMAT || !identifier(document.syncId) || !revision(document.revision))
+      fail('unsupported document');
+    const fields = keys(document.fields), devices = keys(document.acks), conflicts = keys(document.conflicts);
+    if (fields.length > LIMIT.fields || devices.length > LIMIT.devices || conflicts.length > LIMIT.conflicts)
+      fail('document capacity exceeded');
+    for (const key of fields) state(document.fields[key], true, document.revision);
+    for (const device of devices) if (!identifier(device) || !revision(document.acks[device])
+      || document.acks[device] >= document.revision) fail('invalid acknowledgement');
+    for (const id of conflicts) {
+      const conflict = document.conflicts[id];
+      shape(conflict, ['id', 'key', 'device', 'seq', 'baseRevision', 'revision', 'current', 'incoming'], ['reason']);
+      if (own(conflict, 'reason') && conflict.reason !== 'structural-conflict') fail('invalid conflict reason');
+      if (!identifier(conflict.device) || !revision(conflict.seq) || id !== `${conflict.device}:${conflict.seq}`
+        || conflict.id !== id || !safeKey(conflict.key) || !(document.acks[conflict.device] >= conflict.seq)
+        || !revision(conflict.revision) || conflict.revision > document.revision
+        || !(conflict.baseRevision === null || revision(conflict.baseRevision))
+        || conflict.baseRevision >= conflict.revision) fail('invalid conflict');
+      state(conflict.current, true, conflict.revision - 1, true);
+      state(conflict.incoming, false, document.revision);
+    }
+    return true;
+  }
+
+  function fieldMap(map) {
+    const names = keys(map);
+    if (names.length > LIMIT.fields) fail('too many fields');
+    jsonSize(map, LIMIT.document);
+    for (const key of names) jsonSize(map[key], LIMIT.value);
+    return names;
+  }
+
+  // Object property insertion order is not a settings change; array order remains meaningful.
+  function canonical(value) {
+    if (value === null || typeof value !== 'object') return JSON.stringify(value);
+    if (Array.isArray(value)) return `[${Array.prototype.map.call(value, canonical).join(',')}]`;
+    return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`;
+  }
+
+  function same(a, b) {
+    return a.deleted === b.deleted && (a.deleted || canonical(a.value) === canonical(b.value));
+  }
+
+  function seed(map, syncId) {
+    if (!identifier(syncId)) fail('invalid sync identity');
+    const document = { format: FORMAT, syncId, revision: 1, fields: {}, acks: {}, conflicts: {} };
+    for (const key of fieldMap(map).sort()) document.fields[key] = { revision: 1, deleted: false, value: clone(map[key]) };
+    validate(document);
+    return document;
+  }
+
+  function values(document) {
+    validate(document);
+    const map = {};
+    for (const key of Object.keys(document.fields)) if (!document.fields[key].deleted) map[key] = clone(document.fields[key].value);
+    return map;
+  }
+
+  function diff(before, after) {
+    fieldMap(before); fieldMap(after);
+    const changes = [];
+    for (const key of [...new Set([...Object.keys(before), ...Object.keys(after)])].sort()) {
+      if (!own(after, key)) changes.push({ key, deleted: true });
+      else if (!own(before, key) || canonical(before[key]) !== canonical(after[key])) changes.push({ key, value: clone(after[key]) });
+    }
+    return changes;
+  }
+
+  function operation(op) {
+    jsonSize(op, LIMIT.operation);
+    shape(op, ['id', 'device', 'seq', 'key', 'baseRevision'], ['value', 'deleted', 'resolves', 'blocked']);
+    if (!identifier(op.device) || !revision(op.seq) || op.id !== `${op.device}:${op.seq}`
+      || !safeKey(op.key) || !(op.baseRevision === null || revision(op.baseRevision))) fail('invalid operation identity or revision');
+    if (own(op, 'deleted') && typeof op.deleted !== 'boolean') fail('invalid deletion marker');
+    if (own(op, 'blocked') && op.blocked !== 'structural-conflict') fail('invalid conflict guard');
+    const incoming = op.deleted === true ? { deleted: true } : { deleted: false, value: op.value };
+    if ((op.deleted === true && own(op, 'value')) || (op.deleted !== true && !own(op, 'value'))) fail('invalid operation value');
+    state(incoming, false, 0);
+    if (own(op, 'resolves') && (!Array.isArray(op.resolves) || !op.resolves.length
+      || op.resolves.length > LIMIT.conflicts || new Set(op.resolves).size !== op.resolves.length
+      || op.resolves.some(id => typeof id !== 'string' || !/^[A-Za-z0-9._-]{1,128}:[1-9][0-9]*$/.test(id)))) fail('invalid conflict resolution list');
+    return incoming;
+  }
+
+  function merge(original, operations) {
+    validate(original);
+    if (!Array.isArray(operations) || operations.length > LIMIT.operations) fail('operation batch limit exceeded');
+    // Work on a clone so validation/capacity failures cannot partially acknowledge a batch.
+    const document = clone(original);
+    let changed = false;
+    for (const op of operations) {
+      const incoming = operation(op);
+      const ack = own(document.acks, op.device) ? document.acks[op.device] : 0;
+      if (op.seq <= ack) continue;
+      if (op.seq !== ack + 1) fail('operation sequence gap');
+      if (op.baseRevision !== null && op.baseRevision > document.revision) fail('operation refers to a future revision');
+      const current = own(document.fields, op.key) ? document.fields[op.key] : { revision: null, deleted: true };
+      const matches = op.baseRevision === current.revision;
+      const resolving = own(op, 'resolves');
+      // A stale resolution must never clear evidence, even when its chosen value is identical.
+      const acceptable = !own(op, 'blocked') && (matches || (!resolving && same(current, incoming)));
+      if (document.revision === Number.MAX_SAFE_INTEGER) fail('revision exhausted');
+      const nextRevision = document.revision + 1;
+      if (acceptable) {
+        if (resolving) {
+          for (const id of op.resolves) {
+            if (own(document.conflicts, id) && document.conflicts[id].key !== op.key) fail('resolution names another field');
+          }
+          for (const id of op.resolves) delete document.conflicts[id];
+        }
+        // Coalescing preserves a field's revision; a real change (including a new tombstone) gets a fresh one.
+        if (!same(current, incoming) || current.revision === null) document.fields[op.key] = { revision: nextRevision, ...clone(incoming) };
+      } else {
+        document.conflicts[op.id] = { id: op.id, key: op.key, device: op.device, seq: op.seq,
+          baseRevision: op.baseRevision, revision: nextRevision, current: clone(current), incoming: clone(incoming),
+          ...(own(op, 'blocked') ? { reason: op.blocked } : {}) };
+      }
+      document.revision = nextRevision;
+      document.acks[op.device] = op.seq;
+      changed = true;
+    }
+    validate(document);
+    return { document, changed };
+  }
+
+  return Object.freeze({ seed, validate, values, diff, merge, limits: LIMIT });
+}
+
+/**
+ * Transactional canonical settings storage; no localStorage/GM fallback.
+ * read(key) resolves a detached JSON value, or null for a missing record.
+ * update(key, mutate) calls mutate(detachedCurrentOrNull) synchronously. It must
+ * return { state: JSONValue, result?: JSONValue }; the same detached envelope is
+ * returned only after the single readwrite transaction commits. Store the local
+ * state, pending operations and applied revision together inside that state.
+ * close() is terminal and waits for already-created transactions to settle.
+ */
+function createSettingsSyncStorage({ indexedDB, name = 'ziggy-suite-sync-v2' } = {}) {
+  const forbiddenKeys = new Set(['__proto__', 'prototype', 'constructor']);
+  const active = new Set();
+  let connection = null;
+  let opening = null;
+  let cancelOpen = null;
+  let terminalError = null;
+
+  function cloneJSON(value, ancestors = new Set()) {
+    if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value !== 'object' || ancestors.has(value)) throw new TypeError('Sync storage requires acyclic JSON values.');
+    const isArray = Array.isArray(value);
+    const prototype = Object.getPrototypeOf(value);
+    if (!isArray && prototype !== Object.prototype && prototype !== null) throw new TypeError('Sync storage requires plain JSON objects.');
+    ancestors.add(value);
+    const output = isArray ? [] : {};
+    const keys = Reflect.ownKeys(value);
+    if (isArray && keys.length !== value.length + 1) throw new TypeError('Sync storage requires dense JSON arrays.');
+    for (const key of keys) {
+      if (isArray && key === 'length') continue;
+      if (typeof key !== 'string' || forbiddenKeys.has(key)) throw new TypeError('Unsafe sync storage property.');
+      if (isArray && (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length)) throw new TypeError('Sync storage requires JSON arrays.');
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) throw new TypeError('Sync storage does not accept accessor or hidden properties.');
+      output[key] = cloneJSON(descriptor.value, ancestors);
+    }
+    ancestors.delete(value);
+    return output;
+  }
+
+  function validateKey(key) {
+    if (typeof key !== 'string' || !key.length || key.length > 1024 || forbiddenKeys.has(key)) throw new TypeError('Invalid sync storage key.');
+  }
+
+  function open() {
+    if (terminalError) return Promise.reject(terminalError);
+    if (opening) return opening;
+    opening = new Promise((resolve, reject) => {
+      let settled = false;
+      let timer = null;
+      const fail = (error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        cancelOpen = null;
+        reject(error);
+      };
+      cancelOpen = fail;
+      try {
+        if (!indexedDB || typeof indexedDB.open !== 'function') throw new Error('IndexedDB is unavailable; sync storage cannot commit atomically.');
+        if (typeof name !== 'string' || !name.length) throw new TypeError('Invalid sync database name.');
+        const request = indexedDB.open(name, 1);
+        timer = setTimeout(() => fail(new Error('Opening sync storage timed out.')), 5000);
+        request.onblocked = () => fail(new Error('Opening sync storage is blocked by another connection.'));
+        request.onerror = () => fail(request.error || new Error('Opening sync storage failed.'));
+        request.onupgradeneeded = () => {
+          if (settled || terminalError) {
+            request.transaction.abort();
+            request.result.close();
+            return;
+          }
+          try {
+            if (!request.result.objectStoreNames.contains('vaults')) request.result.createObjectStore('vaults');
+          } catch (error) {
+            request.transaction.abort();
+            fail(error);
+          }
+        };
+        request.onsuccess = () => {
+          const db = request.result;
+          if (settled || terminalError) {
+            db.close();
+            return;
+          }
+          if (!db.objectStoreNames.contains('vaults')) {
+            db.close();
+            fail(new Error('Sync storage is missing its vaults object store.'));
+            return;
+          }
+          connection = db;
+          db.onversionchange = () => {
+            terminalError = new Error('Sync storage version changed; reload before continuing.');
+            db.close();
+          };
+          db.onclose = () => {
+            terminalError = terminalError || new Error('Sync storage connection closed unexpectedly.');
+          };
+          settled = true;
+          clearTimeout(timer);
+          cancelOpen = null;
+          resolve(db);
+        };
+      } catch (error) {
+        fail(error);
+      }
+    });
+    return opening;
+  }
+
+  async function transact(key, mutate) {
+    validateKey(key);
+    if (terminalError) throw terminalError;
+    const db = await open();
+    if (terminalError) throw terminalError;
+    const transaction = db.transaction('vaults', mutate ? 'readwrite' : 'readonly');
+    let resolveOperation;
+    let rejectOperation;
+    const operation = new Promise((resolve, reject) => {
+      resolveOperation = resolve;
+      rejectOperation = reject;
+    });
+    active.add(operation);
+    let outcome;
+    let failure = null;
+    let abortRequested = false;
+    const finish = (error) => {
+      active.delete(operation);
+      if (error) rejectOperation(error);
+      else resolveOperation(outcome);
+    };
+    const abort = (error) => {
+      failure = failure || error;
+      if (abortRequested) return;
+      abortRequested = true;
+      try { transaction.abort(); } catch (_) { finish(failure); }
+    };
+    transaction.oncomplete = () => finish(failure);
+    transaction.onabort = () => finish(failure || transaction.error || new Error('Sync storage transaction aborted.'));
+    transaction.onerror = (event) => abort(event.target.error || transaction.error || new Error('Sync storage transaction failed.'));
+    try {
+      const store = transaction.objectStore('vaults');
+      const request = store.get(key);
+      request.onerror = () => abort(request.error || new Error('Reading sync storage failed.'));
+      request.onsuccess = () => {
+        try {
+          const current = request.result === undefined ? null : cloneJSON(request.result);
+          if (!mutate) {
+            outcome = current;
+            return;
+          }
+          const proposed = mutate(current);
+          if (proposed && typeof proposed.then === 'function') {
+            Promise.resolve(proposed).catch(() => {});
+            throw new TypeError('Sync storage mutators must be synchronous.');
+          }
+          if (!proposed || Array.isArray(proposed) || !Object.prototype.hasOwnProperty.call(proposed, 'state')) throw new TypeError('Sync storage mutators must return { state, result? }.');
+          outcome = cloneJSON(proposed);
+          const write = store.put(outcome.state, key);
+          write.onerror = () => abort(write.error || new Error('Writing sync storage failed.'));
+        } catch (error) {
+          abort(error);
+        }
+      };
+    } catch (error) {
+      abort(error);
+    }
+    return operation;
+  }
+
+  return {
+    read(key) { return transact(key, null); },
+    update(key, mutate) {
+      if (typeof mutate !== 'function') return Promise.reject(new TypeError('Sync storage requires a mutator function.'));
+      return transact(key, mutate);
+    },
+    async close() {
+      terminalError = terminalError || new Error('Sync storage is closed.');
+      if (cancelOpen) cancelOpen(terminalError);
+      if (connection) connection.close();
+      await Promise.allSettled(Array.from(active));
+      connection = null;
+    },
+  };
+}
+
+/** Shared settings only. apply() replaces shared fields, preserving local UI/runtime.
+ * Flat keys: room/id, group/id, multicam/field, reloaded/key, chat/field,
+ * ignored/username, mobile/field. Dynamic identifiers use encodeURIComponent.
+ * Missing room/group/member keys mean deletion; built-in groups always remain.
+ * Payload input is the complete exported v4 shape, not a partial legacy import.
+ */
+function createSettingsSyncCodec() {
+  const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+  const unsafe = new Set(['__proto__', 'constructor', 'prototype']);
+  const sharedMulticam = ['favoriteFirst', 'notifyFavoritesOnly', 'notifyOnline', 'pollMs', 'maxStreamHeight', 'startupGroup', 'startOnOnlineFavorites', 'startupView', 'shortcuts', 'videoFit', 'freeZoom'];
+  const sharedReloaded = ['animationoff', 'bigthumb', 'hidemt', 'newtabon', 'pclean', 'refreshoff', 'smallsnap', 'zoomoff'];
+  const sharedMobile = ['enabled', 'hidePromos', 'compactBrowse', 'autoHideSeconds'];
+  const chatFields = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c7a', 'c8', 'c10', 'language'];
+  const chatKey = 'reloadedGlobalChatSettingsV1';
+  const multicamKey = 'ryujo_multicam_v8';
+  const mobileKey = 'cb_desktop_mobile_comfort_v1';
+  const storageKeys = Object.freeze([multicamKey, mobileKey, ...sharedReloaded, chatKey, 'ignoredusers']);
+  const systemGroups = [
+    { id: 'library', name: '__library__', order: 0, system: true },
+    { id: 'all', name: '__all__', order: 1, system: true },
+    { id: 'online-favorites', name: '__online_favorites__', order: 2, system: true },
+    { id: 'online', name: '__online__', order: 3, system: true },
+    { id: 'fav', name: '__fav__', order: 4, system: true },
+  ];
+  const aggregateGroups = new Set(['library', 'online', 'online-favorites', 'online-following']);
+  const reservedUsers = new Set(('tags,tag,auth,followed-cams,multicam,events,jobs,terms,privacy,support,billing,accounts,b,p,apps,affiliates,static,feedback,sitemap,home,about,rules,login,logout,signup,female-cams,male-cams,couple-cams,trans-cams,s,shortcuts,roomlist,photo_videos,in-private-show,external_link,dmca,contact,mobile,tipping,tokens,token-purchase,social,wiki,directory,spy-on-cams,private-shows,app,photos-videos,pm,inbox,find-friends,broadcasters,broadcast,discover,top,new,gold-shows,language,settings,en,es,de,fr,it,ja,ko,pt,ru,zh').split(','));
+  const invalid = (message) => { throw new TypeError(`Invalid shared settings: ${message}`); };
+  const object = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+  const string = (value, max) => typeof value === 'string' && value.length <= max;
+  const integer = (value, max, min = 0) => Number.isSafeInteger(value) && value >= min && value <= max;
+  const groupId = (value) => string(value, 48) && /^[a-z0-9_-]+$/i.test(value) && !unsafe.has(value) && value !== 'online-following';
+  const username = (value) => string(value, 32) && /^[a-z0-9_-]{2,32}$/.test(value) && !/^\d+$/.test(value) && !unsafe.has(value) && !reservedUsers.has(value);
+  const exactKeys = (value, keys) => object(value) && Object.keys(value).length === keys.length && keys.every((key) => own(value, key));
+
+  function copy(value, ancestors = new Set(), depth = 0) {
+    if (value === null || typeof value === 'boolean' || typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value))) return value;
+    if (!value || typeof value !== 'object' || ancestors.has(value) || depth > 64) return invalid('expected bounded acyclic JSON');
+    const array = Array.isArray(value);
+    if (!array && Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) return invalid('expected a plain JSON object');
+    ancestors.add(value);
+    const output = array ? [] : {};
+    const keys = Reflect.ownKeys(value);
+    if (array && keys.length !== value.length + 1) return invalid('sparse array');
+    for (const key of keys) {
+      if (array && key === 'length') continue;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (typeof key !== 'string' || unsafe.has(key) || !descriptor.enumerable || !own(descriptor, 'value')) return invalid('unsafe property');
+      if (array && (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length)) return invalid('non-JSON array');
+      output[key] = copy(descriptor.value, ancestors, depth + 1);
+    }
+    ancestors.delete(value);
+    return output;
+  }
+
+  function boundedCopy(value) {
+    const output = copy(value);
+    if (JSON.stringify(output).length > 2 * 1024 * 1024) return invalid('document exceeds size limit');
+    return output;
+  }
+
+  function payloadCopy(payload) {
+    const output = boundedCopy(payload);
+    const components = output?.components;
+    if (output?.format !== 'chaturbate-suite-settings-v4' || !exactKeys(components, ['multicamPro', 'reloaded', 'mobileCleanView'])) return invalid('complete v4 components are required');
+    for (const [name, major] of [['multicamPro', 16], ['reloaded', 1], ['mobileCleanView', 2]]) {
+      const component = components[name];
+      if (!object(component) || !new RegExp(`^${major}\\.\\d+\\.\\d+(?:[-+][a-zA-Z0-9.-]+)?$`).test(component.version)) return invalid(`incompatible ${name} version`);
+    }
+    const multicam = components.multicamPro;
+    if (!Array.isArray(multicam.rooms) || multicam.rooms.length > 1200 || !Array.isArray(multicam.groups) || multicam.groups.length > 80 || !object(multicam.settings)) return invalid('multicam schema');
+    if (!object(components.reloaded.storage) || !object(components.mobileCleanView.settings)) return invalid('component settings schema');
+    return output;
+  }
+
+  function validateValue(prefix, id, value) {
+    if (prefix === 'room') {
+      if (!username(id) || !exactKeys(value, ['id', 'addedAt', 'groups', 'groupOrder', 'order', 'notes']) || value.id !== id) return invalid('room record');
+      if (!integer(value.addedAt, Number.MAX_SAFE_INTEGER) || !integer(value.order, 1000000) || !string(value.notes, 65536)) return invalid('room field');
+      if (!Array.isArray(value.groups) || value.groups.length > 80 || new Set(value.groups).size !== value.groups.length || value.groups.some((group) => !groupId(group) || aggregateGroups.has(group))) return invalid('room membership');
+      if (!exactKeys(value.groupOrder, value.groups) || Object.values(value.groupOrder).some((order) => !integer(order, 1000000))) return invalid('room group order');
+    } else if (prefix === 'group') {
+      if (!groupId(id) || !exactKeys(value, ['id', 'name', 'order', 'system']) || value.id !== id || !string(value.name, 80) || !value.name.trim() || /[\u0000-\u001f\u007f]/.test(value.name) || !integer(value.order, 10000) || typeof value.system !== 'boolean') return invalid('group record');
+      const builtin = systemGroups.find((group) => group.id === id);
+      if (builtin ? Object.keys(builtin).some((key) => builtin[key] !== value[key]) : value.system) return invalid('built-in group invariant');
+    } else if (prefix === 'multicam') {
+      if (!sharedMulticam.includes(id)) return invalid('unknown multicam field');
+      if (['favoriteFirst', 'notifyFavoritesOnly', 'notifyOnline', 'startOnOnlineFavorites', 'freeZoom'].includes(id)) {
+        if (typeof value !== 'boolean') return invalid('multicam boolean');
+      } else if (id === 'pollMs') {
+        if (!exactKeys(value, ['offline', 'private', 'error', 'online']) || Object.values(value).some((ms) => !integer(ms, 300000, 5000))) return invalid('poll intervals');
+      } else if (id === 'shortcuts') {
+        if (!exactKeys(value, ['focusAdd', 'refreshAll', 'gridView', 'pureMode']) || Object.values(value).some((key) => !string(key, 80) || /[\u0000-\u001f\u007f]/.test(key))) return invalid('shortcuts');
+      } else if (id === 'maxStreamHeight' && ![0, 240, 360, 480, 720, 1080, 1440, 2160].includes(value)) return invalid('stream height');
+      else if (id === 'startupGroup' && value !== 'last' && !groupId(value)) return invalid('startup group');
+      else if (id === 'startupView' && !['last', 'auto', 'grid', 'phone'].includes(value)) return invalid('startup view');
+      else if (id === 'videoFit' && !['contain', 'cover'].includes(value)) return invalid('video fit');
+    } else if (prefix === 'reloaded') {
+      if (!sharedReloaded.includes(id) || !string(value, 128)) return invalid('Reloaded preference');
+    } else if (prefix === 'chat') {
+      if (!chatFields.includes(id)) return invalid('unknown chat field');
+      if (id === 'language' ? !string(value, 8) || (value !== '' && !/^[a-z-]{2,8}$/i.test(value)) : id === 'c7a' ? !integer(value, 1000, 2) : value !== 0 && value !== 1) return invalid('chat field');
+    } else if (prefix === 'ignored') {
+      if (!username(id) || value !== true) return invalid('ignored username');
+    } else if (prefix === 'mobile') {
+      if (!sharedMobile.includes(id) || (id === 'autoHideSeconds' ? !integer(value, 30) : typeof value !== 'boolean')) return invalid('mobile field');
+    } else return invalid('unknown record type');
+  }
+
+  function mapCopy(map) {
+    const output = boundedCopy(map);
+    if (!object(output) || Object.keys(output).length > 5000) return invalid('shared map');
+    const counts = { room: 0, group: 0, ignored: 0 };
+    for (const [key, value] of Object.entries(output)) {
+      const parts = key.split('/');
+      if (parts.length !== 2 || !parts[1]) return invalid('record key');
+      let id;
+      try { id = decodeURIComponent(parts[1]); } catch (_) { return invalid('encoded record key'); }
+      if (encodeURIComponent(id) !== parts[1] || unsafe.has(id)) return invalid('noncanonical record key');
+      validateValue(parts[0], id, value);
+      if (own(counts, parts[0])) counts[parts[0]] += 1;
+    }
+    const missingBuiltins = systemGroups.filter((group) => !own(output, `group/${encodeURIComponent(group.id)}`)).length;
+    if (counts.room > 1200 || counts.group + missingBuiltins > 80 || counts.ignored > 1200) return invalid('record count');
+    return output;
+  }
+
+  function orphanReferences(map) {
+    const builtins = new Set(systemGroups.map((group) => group.id));
+    const orphans = [];
+    for (const [key, value] of Object.entries(map)) {
+      if (!key.startsWith('room/')) continue;
+      for (const id of value.groups) {
+        const groupKey = `group/${encodeURIComponent(id)}`;
+        if (!builtins.has(id) && !own(map, groupKey)) orphans.push({ referenceKey: key, groupKey });
+      }
+    }
+    const startup = map['multicam/startupGroup'];
+    if (startup !== undefined && startup !== 'last' && !builtins.has(startup)) {
+      const groupKey = `group/${encodeURIComponent(startup)}`;
+      if (!own(map, groupKey)) orphans.push({ referenceKey: 'multicam/startupGroup', groupKey });
+    }
+    return orphans;
+  }
+
+  function validateReferences(map) {
+    const output = mapCopy(map);
+    const orphan = orphanReferences(output)[0];
+    if (orphan) return invalid(`orphan group reference: ${orphan.referenceKey} -> ${orphan.groupKey}`);
+    return output;
+  }
+
+  // Select against the core's actual merged candidate. The client must remerge
+  // after marking these operation keys blocked and rerun until this returns [].
+  // Rolling fields back here would misrepresent same-key causal operation chains.
+  function structuralConflictKeys(candidateMap, remoteMap, operations) {
+    const candidate = mapCopy(candidateMap);
+    const remote = validateReferences(remoteMap);
+    const batch = boundedCopy(operations);
+    if (!Array.isArray(batch) || batch.length > 512) return invalid('structural operation batch');
+    const deletions = new Set();
+    const referenceUpdates = new Set();
+    for (const operation of batch) {
+      if (!object(operation) || typeof operation.key !== 'string') return invalid('structural operation');
+      if (own(operation, 'blocked')) {
+        if (operation.blocked !== 'structural-conflict') return invalid('structural block marker');
+        continue;
+      }
+      if (operation.key.startsWith('group/') && operation.deleted === true) deletions.add(operation.key);
+      if ((operation.key.startsWith('room/') || operation.key === 'multicam/startupGroup')
+        && operation.deleted !== true && own(operation, 'value')) referenceUpdates.add(operation.key);
+    }
+    const conflicts = new Set();
+    for (const { referenceKey, groupKey } of orphanReferences(candidate)) {
+      // Preserve concurrent memberships by refusing the local group deletion.
+      if (own(remote, groupKey) && deletions.has(groupKey)) conflicts.add(groupKey);
+      // A remote deletion cannot silently erase a newly submitted membership.
+      else if (referenceUpdates.has(referenceKey)) conflicts.add(referenceKey);
+      else return invalid(`unattributable orphan group reference: ${referenceKey} -> ${groupKey}`);
+    }
+    return [...conflicts].sort();
+  }
+
+  function capture(payload) {
+    const current = payloadCopy(payload);
+    const { multicamPro, reloaded, mobileCleanView } = current.components;
+    const map = {};
+    function put(prefix, id, value) {
+      const key = `${prefix}/${encodeURIComponent(id)}`;
+      if (own(map, key)) return invalid('duplicate record');
+      map[key] = value;
+    }
+    for (const room of multicamPro.rooms) {
+      if (!object(room)) return invalid('room');
+      put('room', room.id, { id: room.id, addedAt: room.addedAt, groups: room.groups, groupOrder: room.groupOrder, order: room.order, notes: own(room, 'notes') ? room.notes : '' });
+    }
+    for (const group of multicamPro.groups) {
+      if (!object(group)) return invalid('group');
+      put('group', group.id, { id: group.id, name: group.name, order: group.order, system: group.system });
+    }
+    for (const key of sharedMulticam) if (own(multicamPro.settings, key)) put('multicam', key, multicamPro.settings[key]);
+    for (const key of sharedReloaded) if (own(reloaded.storage, key)) put('reloaded', key, reloaded.storage[key]);
+    for (const key of sharedMobile) if (own(mobileCleanView.settings, key)) put('mobile', key, mobileCleanView.settings[key]);
+    if (own(reloaded.storage, chatKey)) {
+      const raw = reloaded.storage[chatKey];
+      if (!string(raw, 4096)) return invalid('chat settings size');
+      let chat;
+      try { chat = boundedCopy(JSON.parse(raw)); } catch (_) { return invalid('chat JSON'); }
+      if (!exactKeys(chat, ['version', ...chatFields]) || chat.version !== 1) return invalid('chat schema version');
+      for (const key of chatFields) put('chat', key, chat[key]);
+    }
+    if (own(reloaded.storage, 'ignoredusers')) {
+      if (!string(reloaded.storage.ignoredusers, 65536)) return invalid('ignored users size');
+      const users = new Set(reloaded.storage.ignoredusers.split(',').map((id) => id.trim().replace(/^@+/, '').replace(/^\/+|\/+$/g, '').toLowerCase()).filter(Boolean));
+      for (const id of users) put('ignored', id, true);
+    }
+    return mapCopy(map);
+  }
+
+  function apply(payload, sharedMap) {
+    const output = payloadCopy(payload);
+    const map = mapCopy(sharedMap);
+    const { multicamPro, reloaded, mobileCleanView } = output.components;
+    const previousRooms = new Map(multicamPro.rooms.map((room) => [room.id, room]));
+    multicamPro.rooms = [];
+    multicamPro.groups = copy(systemGroups);
+    for (const key of sharedMulticam) delete multicamPro.settings[key];
+    for (const key of sharedReloaded) delete reloaded.storage[key];
+    for (const key of sharedMobile) delete mobileCleanView.settings[key];
+    delete reloaded.storage[chatKey];
+    delete reloaded.storage.ignoredusers;
+    const chat = { version: 1 };
+    const ignored = [];
+    for (const key of Object.keys(map).sort()) {
+      const [prefix, encodedId] = key.split('/');
+      const id = decodeURIComponent(encodedId);
+      const value = map[key];
+      if (prefix === 'room') multicamPro.rooms.push({ ...(previousRooms.get(id) || { muted: true, lastStatus: 'unknown', lastSeenOnline: 0 }), ...value, group: value.groups[0] || null });
+      else if (prefix === 'group' && !systemGroups.some((group) => group.id === id)) multicamPro.groups.push(value);
+      else if (prefix === 'multicam') multicamPro.settings[id] = value;
+      else if (prefix === 'reloaded') reloaded.storage[id] = value;
+      else if (prefix === 'mobile') mobileCleanView.settings[id] = value;
+      else if (prefix === 'chat') chat[id] = value;
+      else if (prefix === 'ignored') ignored.push(id);
+    }
+    multicamPro.rooms.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+    multicamPro.groups.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+    if (Object.keys(chat).length > 1) {
+      const defaults = { version: 1, c1: 0, c2: 0, c3: 0, c4: 0, c5: 0, c6: 0, c7: 0, c7a: 100, c8: 0, c10: 0, language: '' };
+      reloaded.storage[chatKey] = JSON.stringify({ ...defaults, ...chat });
+    }
+    if (ignored.length) reloaded.storage.ignoredusers = ignored.join(',');
+    return output;
+  }
+
+  function stable(value) {
+    if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
+    if (object(value)) return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stable(value[key])}`).join(',')}}`;
+    return JSON.stringify(value);
+  }
+
+  function rebase(basePayload, draftPayload, incomingPayload) {
+    const base = capture(basePayload);
+    const draft = capture(draftPayload);
+    const merged = capture(incomingPayload);
+    for (const key of new Set([...Object.keys(base), ...Object.keys(draft)])) {
+      if (own(base, key) === own(draft, key) && stable(base[key]) === stable(draft[key])) continue;
+      if (own(draft, key)) merged[key] = draft[key];
+      else delete merged[key];
+    }
+    return apply(draftPayload, merged);
+  }
+
+  function withStorageValue(payload, key, nextRaw) {
+    if (!storageKeys.includes(key) || (nextRaw !== null && typeof nextRaw !== 'string')) return invalid('storage key or raw value');
+    const output = payloadCopy(payload);
+    if (key === multicamKey || key === mobileKey) {
+      let parsed = null;
+      if (nextRaw !== null) {
+        if (nextRaw.length > 2 * 1024 * 1024) return invalid('stored JSON size');
+        try { parsed = boundedCopy(JSON.parse(nextRaw)); } catch (_) { return invalid('stored JSON'); }
+        if (!object(parsed)) return invalid('stored settings object');
+      }
+      if (key === multicamKey) {
+        if (parsed && (!Array.isArray(parsed.rooms) || !Array.isArray(parsed.groups) || !object(parsed.settings))) return invalid('stored multicam schema');
+        const component = output.components.multicamPro;
+        component.rooms = parsed ? parsed.rooms : [];
+        component.groups = parsed ? parsed.groups : [];
+        if (parsed) component.settings = parsed.settings;
+      } else output.components.mobileCleanView.settings = parsed || {};
+    } else if (nextRaw === null) delete output.components.reloaded.storage[key];
+    else output.components.reloaded.storage[key] = nextRaw;
+    capture(output);
+    return output;
+  }
+
+  return {
+    capture, apply, rebase, withStorageValue, storageKeys, validateReferences, structuralConflictKeys,
+    validate: mapCopy,
+    isStorageKey(key) { return storageKeys.includes(key); },
+    sharedKeys: Object.freeze({ multicam: Object.freeze(sharedMulticam.slice()), reloaded: Object.freeze(sharedReloaded.slice()), mobile: Object.freeze(sharedMobile.slice()), chat: Object.freeze(chatFields.slice()) }),
+  };
+}
+
+// Pure durable-queue coordinator. The caller persists returned state before attempting a PUT.
+function createSettingsSyncClient(core) {
+  'use strict';
+  const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+  const fail = message => { throw new Error(`Settings sync client: ${message}`); };
+  const limits = Object.freeze({ intents: 512, seen: 10000, state: 8 * 1024 * 1024 });
+  const positive = value => Number.isSafeInteger(value) && value > 0;
+  const id = value => typeof value === 'string' && /^[A-Za-z0-9._:-]{1,180}$/.test(value)
+    && !['__proto__', 'prototype', 'constructor'].includes(value);
+  const deviceId = value => id(value) && /^[A-Za-z0-9._-]{1,128}$/.test(value);
+  const copy = value => value === null || typeof value !== 'object' ? value : Array.isArray(value)
+    ? Array.prototype.map.call(value, copy) : Object.fromEntries(Object.keys(value).map(key => [key, copy(value[key])]));
+  const stable = value => value === null || typeof value !== 'object' ? JSON.stringify(value) : Array.isArray(value)
+    ? `[${Array.prototype.map.call(value, stable).join(',')}]`
+    : `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stable(value[key])}`).join(',')}}`;
+  const equal = (left, right) => stable(left) === stable(right);
+
+  function shape(value, required, optional = []) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) fail('invalid object');
+    const proto = Object.getPrototypeOf(value), ctor = proto && Object.getOwnPropertyDescriptor(proto, 'constructor');
+    if (proto !== null && (Object.getPrototypeOf(proto) !== null || !ctor || typeof ctor.value !== 'function'
+      || ctor.value.name !== 'Object')) fail('invalid object prototype');
+    for (const key of Reflect.ownKeys(value)) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (typeof key !== 'string' || !descriptor.enumerable || !own(descriptor, 'value')
+        || (!required.includes(key) && !optional.includes(key))) fail('unknown or unsafe property');
+    }
+    if (required.some(key => !own(value, key))) fail('incomplete object');
+  }
+
+  function array(value, maximum) {
+    if (!Array.isArray(value) || value.length > maximum || Reflect.ownKeys(value).length !== value.length + 1)
+      fail('invalid list or list capacity exceeded');
+    for (let i = 0; i < value.length; i++) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(i));
+      if (!descriptor || !own(descriptor, 'value') || !descriptor.enumerable) fail('unsafe list');
+    }
+  }
+
+  function field(value) {
+    shape(value, ['deleted'], ['value']);
+    if (typeof value.deleted !== 'boolean' || (value.deleted ? own(value, 'value') : !own(value, 'value')))
+      fail('invalid field state');
+    if (!value.deleted) core.diff({}, { value: value.value });
+  }
+
+  function change(value, intent = false) {
+    shape(value, intent ? ['id', 'batchId', 'key', 'before', 'after', 'baseRevision']
+      : ['key', 'before', 'after', 'baseRevision'], intent ? ['dependsOn', 'resolves'] : ['resolves']);
+    if (typeof value.key !== 'string') fail('invalid field key');
+    core.diff({ [value.key]: null }, {});
+    field(value.before); field(value.after);
+    if (value.baseRevision !== null && !positive(value.baseRevision)) fail('invalid captured revision');
+    if (intent && (!id(value.id) || !id(value.batchId) || !value.id.startsWith(`${value.batchId}:`)
+      || !/^(0|[1-9][0-9]*)$/.test(value.id.slice(value.batchId.length + 1))
+      || (own(value, 'dependsOn') && !id(value.dependsOn))))
+      fail('invalid intent identity');
+    if (own(value, 'resolves')) {
+      array(value.resolves, core.limits.conflicts);
+      if (!value.resolves.length || new Set(value.resolves).size !== value.resolves.length
+        || value.resolves.some(item => !/^[A-Za-z0-9._-]{1,128}:[1-9][0-9]*$/.test(item))) fail('invalid resolution list');
+    }
+  }
+
+  function bounded(value) {
+    // Bound before serialization, then check actual UTF-8 bytes (without platform APIs).
+    let minimum = 0;
+    const visit = item => {
+      minimum += typeof item === 'string' ? item.length + 2 : 1;
+      if (minimum > limits.state) fail('local state capacity exceeded');
+      if (item && typeof item === 'object') for (const key of Object.keys(item)) { minimum += key.length + 3; visit(item[key]); }
+    };
+    visit(value);
+    let bytes = 0;
+    for (const character of stable(value)) {
+      const code = character.codePointAt(0);
+      bytes += code < 128 ? 1 : code < 2048 ? 2 : code < 65536 ? 3 : 4;
+      if (bytes > limits.state) fail('local state capacity exceeded');
+    }
+  }
+
+  function validate(state) {
+    shape(state, ['device', 'confirmed', 'pending', 'flight', 'nextSeq', 'seen']);
+    core.validate(state.confirmed);
+    if (!deviceId(state.device) || !positive(state.nextSeq)
+      || (state.confirmed.acks[state.device] || 0) >= state.nextSeq) fail('invalid device sequence');
+    array(state.pending, limits.intents); array(state.seen, limits.seen);
+    if (state.seen.some(item => !id(item)) || new Set(state.seen).size !== state.seen.length) fail('invalid batch history');
+    let all = state.pending;
+    if (state.flight !== null) {
+      const flight = state.flight;
+      shape(flight, ['intents', 'seqStart', 'operations', 'outcomes', 'candidateRevision']);
+      array(flight.intents, limits.intents); array(flight.operations, limits.intents);
+      if (!flight.intents.length || !positive(flight.seqStart)
+        || flight.seqStart + flight.intents.length !== state.nextSeq
+        || flight.seqStart <= (state.confirmed.acks[state.device] || 0)
+        || !(flight.candidateRevision === null || positive(flight.candidateRevision))) fail('invalid flight sequence');
+      // Operations/outcomes are predictions only. Rebuild operations from original intents on every attempt.
+      if (flight.operations.length && flight.operations.length !== flight.intents.length) fail('invalid flight operations');
+      flight.operations.forEach((operation, index) => {
+        shape(operation, ['device', 'id', 'seq', 'key', 'baseRevision'], ['value', 'deleted', 'resolves', 'blocked']);
+        const intent = flight.intents[index], seq = flight.seqStart + index;
+        if (operation.device !== state.device || operation.id !== `${state.device}:${seq}` || operation.seq !== seq
+          || operation.key !== intent.key || !(operation.baseRevision === null || positive(operation.baseRevision)))
+          fail('invalid staged operation');
+        if (own(operation, 'blocked') && operation.blocked !== 'structural-conflict') fail('invalid staged conflict guard');
+        const target = own(operation, 'deleted') ? { deleted: operation.deleted } : { deleted: false, value: operation.value };
+        field(target);
+        if ((own(operation, 'deleted') && own(operation, 'value')) || !equal(target, intent.after)
+          || !equal(operation.resolves || [], intent.resolves || [])) fail('staged operation changed intent');
+      });
+      const outcomeIds = Object.keys(flight.outcomes || {});
+      shape(flight.outcomes, [], flight.intents.map(item => item.id));
+      for (const outcomeId of outcomeIds) {
+        const outcome = flight.outcomes[outcomeId];
+        shape(outcome, ['accepted', 'revision', 'after']); field(outcome.after);
+        if (typeof outcome.accepted !== 'boolean' || !(outcome.revision === null || positive(outcome.revision))) fail('invalid outcome');
+      }
+      all = [...flight.intents, ...state.pending];
+    }
+    if (all.length > limits.intents || new Set(all.map(item => item.id)).size !== all.length) fail('intent capacity or identity conflict');
+    for (const item of all) change(item, true);
+    bounded(state);
+    return true;
+  }
+
+  function initialize(document, device) {
+    core.validate(document);
+    const state = { device, confirmed: copy(document), pending: [], flight: null,
+      nextSeq: (document.acks[device] || 0) + 1, seen: [] };
+    validate(state);
+    return state;
+  }
+
+  function ingest(original, batch) {
+    validate(original);
+    shape(batch, ['id', 'changes']);
+    if (!id(batch.id) || batch.id.length > 150) fail('invalid batch identity');
+    array(batch.changes, limits.intents);
+    for (const item of batch.changes) change(item);
+    const state = copy(original);
+    if (state.seen.includes(batch.id) || [...(state.flight?.intents || []), ...state.pending]
+      .some(item => item.batchId === batch.id)) return state;
+    if (state.seen.length >= limits.seen) fail('batch history capacity exceeded; journal retained');
+    state.seen.push(batch.id);
+    batch.changes.forEach((item, index) => {
+      const pending = state.pending;
+      const previous = [...(state.flight?.intents || []), ...pending].reverse().find(candidate => candidate.key === item.key);
+      const linked = previous && equal(previous.after, item.before);
+      if (linked && pending.includes(previous) && !own(previous, 'resolves') && !own(item, 'resolves')) {
+        previous.after = copy(item.after);
+      } else {
+        const intent = { id: `${batch.id}:${index}`, batchId: batch.id, ...copy(item) };
+        if (linked) intent.dependsOn = previous.id;
+        pending.push(intent);
+      }
+    });
+    validate(state);
+    return state;
+  }
+
+  function remoteCheck(state, remote) {
+    core.validate(remote);
+    if (remote.syncId !== state.confirmed.syncId) fail('remote sync identity changed');
+    if (remote.revision < state.confirmed.revision || (remote.revision === state.confirmed.revision
+      && !equal(remote, state.confirmed))) fail('remote document rolled back or forked');
+    for (const [device, seq] of Object.entries(state.confirmed.acks))
+      if (!(remote.acks[device] >= seq)) fail('remote acknowledgement regressed');
+    for (const [key, value] of Object.entries(state.confirmed.fields)) {
+      const next = remote.fields[key];
+      if (!next || next.revision < value.revision || (next.revision === value.revision && !equal(next, value)))
+        fail('remote field history regressed');
+    }
+    if ((remote.acks[state.device] || 0) >= state.nextSeq) fail('device identity is in use by another writer');
+  }
+
+  function accept(original, remote) {
+    validate(original); remoteCheck(original, remote);
+    const state = copy(original), flight = state.flight;
+    if (flight) {
+      const ack = remote.acks[state.device] || 0;
+      const count = Math.max(0, Math.min(flight.intents.length, ack - flight.seqStart + 1));
+      const completed = flight.intents.slice(0, count);
+      for (const intent of [...flight.intents.slice(count), ...state.pending]) {
+        const predecessor = completed.find(item => item.id === intent.dependsOn);
+        if (!predecessor) continue;
+        const outcome = flight.outcomes[predecessor.id], current = remote.fields[predecessor.key];
+        const seq = flight.seqStart + flight.intents.indexOf(predecessor);
+        if (outcome?.accepted && !own(remote.conflicts, `${state.device}:${seq}`) && current
+          && current.revision === outcome.revision && equal(outcome.after, predecessor.after)
+          && equal(predecessor.after, intent.before)
+          && equal({ deleted: current.deleted, ...(!current.deleted ? { value: current.value } : {}) }, outcome.after))
+          intent.baseRevision = outcome.revision;
+        // Unknown historical outcomes retain their captured base; never guess through an ABA or resolved conflict.
+        delete intent.dependsOn;
+      }
+      if (count === flight.intents.length) state.flight = null;
+      else if (count) {
+        flight.intents = flight.intents.slice(count);
+        flight.seqStart += count;
+        flight.operations = [];
+        flight.outcomes = {};
+        flight.candidateRevision = null;
+      }
+    }
+    state.confirmed = copy(remote);
+    validate(state);
+    return state;
+  }
+
+  function prepare(original, remote, conflictKeys) {
+    if (conflictKeys !== undefined && typeof conflictKeys !== 'function') fail('invalid conflict selector');
+    const state = accept(original, remote);
+    if (!state.flight && state.pending.length) {
+      if (!Number.isSafeInteger(state.nextSeq + state.pending.length)) fail('device sequence exhausted');
+      state.flight = { intents: state.pending, seqStart: state.nextSeq, operations: [], outcomes: {}, candidateRevision: null };
+      state.nextSeq += state.pending.length;
+      state.pending = [];
+    }
+    let document;
+    const blocked = new Set();
+    // Each pass either returns a validated candidate or blocks at least one additional local key.
+    for (;;) {
+      document = copy(remote);
+      const operations = [], outcomes = {}, flight = state.flight;
+      if (flight) {
+        flight.intents.forEach((intent, index) => {
+          const previous = intent.dependsOn && outcomes[intent.dependsOn];
+          const baseRevision = previous?.accepted && equal(intent.before, previous.after) ? previous.revision : intent.baseRevision;
+          const seq = flight.seqStart + index;
+          const operation = { device: state.device, id: `${state.device}:${seq}`, seq, key: intent.key, baseRevision,
+            ...(intent.after.deleted ? { deleted: true } : { value: copy(intent.after.value) }),
+            ...(own(intent, 'resolves') ? { resolves: copy(intent.resolves) } : {}),
+            ...(blocked.has(intent.key) ? { blocked: 'structural-conflict' } : {}) };
+          document = core.merge(document, [operation]).document;
+          operations.push(operation);
+          outcomes[intent.id] = { accepted: !own(document.conflicts, operation.id),
+            revision: document.fields[intent.key]?.revision ?? null, after: copy(intent.after) };
+        });
+        flight.operations = operations;
+        flight.outcomes = outcomes;
+        flight.candidateRevision = document.revision;
+      }
+      if (!conflictKeys) break;
+      const keys = conflictKeys(copy(document), copy(remote), copy(operations));
+      array(keys, limits.intents);
+      if (!keys.length) break;
+      if (new Set(keys).size !== keys.length || keys.some(key => typeof key !== 'string'
+        || !operations.some(operation => operation.key === key))) fail('conflict selector named an unknown or duplicate local key');
+      const added = keys.filter(key => !blocked.has(key));
+      if (!added.length) fail('structural conflict cannot be resolved without discarding remote data');
+      for (const key of added) blocked.add(key);
+    }
+    validate(state);
+    return { state, document, operations: copy(state.flight?.operations || []) };
+  }
+
+  function view(state) {
+    validate(state);
+    const map = core.values(state.confirmed);
+    for (const intent of [...(state.flight?.intents || []), ...state.pending]) {
+      if (intent.after.deleted) delete map[intent.key];
+      else map[intent.key] = copy(intent.after.value);
+    }
+    return map;
+  }
+
+  return Object.freeze({ initialize, ingest, prepare, accept, view, validate, limits });
+}
+
+// I/O coordinator. Canonical state/outbox are transactional; legacy stores are replayable projections.
+function createSettingsSyncController(deps) {
+  'use strict';
+  const { core, client, codec, vault, storage, locks, capture, apply, account,
+    credentials, readRemote, writeRemote, readLegacy, notify, randomId } = deps;
+  const CONFIG = 'ziggy_suite_sync_v2_config';
+  const MIRROR = 'ziggy_suite_sync_v2_view';
+  const JOURNAL = 'ziggy_suite_sync_v2_wal_';
+  const BACKUP = 'ziggy_suite_sync_v2_enrollment_backup';
+  const now = deps.now || Date.now;
+  const writer = randomId();
+  let sequence = 0;
+  let projecting = false;
+  let timer = null;
+  let disposed = false;
+  let lastStatus = '';
+  const same = (a, b) => core.diff({ v: a }, { v: b }).length === 0;
+  const value = (map, key) => Object.hasOwn(map, key) ? { deleted: false, value: map[key] } : { deleted: true };
+  const parse = key => {
+    const raw = storage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  };
+  const config = () => parse(CONFIG);
+  const enabled = () => config()?.enabled === true;
+  const enrolled = () => !!config()?.account;
+  function identity() {
+    const saved = config();
+    if (!saved?.enabled) throw new Error('Automatic sync is not enabled on this browser.');
+    if (!saved.account || account() !== saved.account) throw new Error('Sync paused: sign in to the account used during setup.');
+    if (!locks?.request) throw new Error('Sync paused: this browser does not provide safe cross-tab locking.');
+    return saved;
+  }
+  function report(message, persistent = false) {
+    if (lastStatus === message) return;
+    lastStatus = message;
+    notify(message, persistent);
+  }
+  function journalEntries(owner) {
+    const entries = [];
+    for (let index = 0; index < storage.length; index++) {
+      const key = storage.key(index);
+      if (!key?.startsWith(JOURNAL)) continue;
+      const item = parse(key);
+      if (item?.account === owner) entries.push({ key, item });
+    }
+    if (entries.length > 512) throw new Error('Sync queue is full. Pending changes are preserved; open sync settings.');
+    // Order known predecessors first, including another tab's edit. UUID order and clocks
+    // cannot describe a user observing and then reversing a change in a different tab.
+    const remaining = entries.sort((a, b) => a.item.writer.localeCompare(b.item.writer) || a.item.sequence - b.item.sequence);
+    const ordered = [];
+    while (remaining.length) {
+      const ids = new Set(remaining.map(entry => entry.item.id));
+      const index = remaining.findIndex(entry => !(entry.item.parents || []).some(id => ids.has(id)));
+      if (index < 0) throw new Error('Sync journal ordering is invalid. Queued changes are retained for recovery.');
+      ordered.push(...remaining.splice(index, 1));
+    }
+    return ordered;
+  }
+  function queue(changes, owner) {
+    if (!changes.length) return null;
+    const id = randomId();
+    const key = JOURNAL + id;
+    const item = { id, account: owner, writer, sequence: ++sequence, changes };
+    // Write-ahead, synchronous: closing the page immediately after Save cannot lose the intent.
+    const existing = journalEntries(owner);
+    const ancestors = new Set(existing.flatMap(entry => entry.item.parents || []));
+    item.parents = existing.filter(entry => !ancestors.has(entry.item.id)).map(entry => entry.item.id);
+    const queued = existing.reduce((sum, entry) => sum + entry.item.changes.length, 0);
+    if (existing.length >= 512 || changes.length + queued > 512)
+      throw new Error('Sync queue capacity reached. This edit was not queued; sync existing changes before retrying.');
+    storage.setItem(key, JSON.stringify(item));
+    return key;
+  }
+  function beforeWrite(key, nextRaw) {
+    if (projecting || !enabled() || !codec.storageKeys.includes(key)) return null;
+    if (storage.getItem(key) === nextRaw) return null;
+    const before = capture();
+    const after = codec.withStorageValue(before, key, nextRaw);
+    const from = codec.capture(before), to = codec.capture(after);
+    const delta = core.diff(from, to);
+    if (!delta.length) return null;
+    const saved = identity();
+    const mirror = parse(MIRROR);
+    if (!mirror || mirror.account !== saved.account || mirror.document.syncId !== saved.syncId)
+      throw new Error('Sync is starting. Your existing settings are safe; retry this edit shortly.');
+    core.validate(mirror.document);
+    const changes = delta.map(change => ({
+      key: change.key, before: value(from, change.key), after: value(to, change.key),
+      baseRevision: mirror.document.fields[change.key]?.revision ?? null,
+    }));
+    return queue(changes, saved.account);
+  }
+  function afterWrite(key, succeeded) {
+    if (!key) return;
+    if (!succeeded) { storage.removeItem(key); return; }
+    schedule(3000);
+  }
+  async function ingest(owner) {
+    const entries = journalEntries(owner);
+    if (!entries.length) return (await vault.read(owner));
+    const consumed = [];
+    const result = await vault.update(owner, state => {
+      if (!state) throw new Error('Sync journal has no enrolled base; recovery is required.');
+      for (const { key, item } of entries) {
+        const active = [...(state.client.flight?.intents || []), ...state.client.pending];
+        const replay = state.client.seen.includes(item.id) || active.some(intent => intent.batchId === item.id);
+        // Keep excess WAL intact while the earlier canonical batch drains. Never let a full
+        // offline backlog prevent the request that can acknowledge and release it.
+        if (!replay && active.length + item.changes.length > 512) break;
+        state.client = client.ingest(state.client, { id: item.id, changes: item.changes });
+        consumed.push(key);
+      }
+      return { state };
+    });
+    // Canonical commit completed before removal. Failure here is replay-safe through batch identities.
+    for (const key of consumed) storage.removeItem(key);
+    return result.state;
+  }
+  async function project(owner) {
+    const state = await ingest(owner);
+    if (identity().account !== owner) throw new Error('Account changed; settings projection cancelled.');
+    if (!state) throw new Error('Sync state is missing. Re-enroll without discarding your local settings.');
+    const fields = client.view(state.client);
+    const deferred = journalEntries(owner).flatMap(entry => entry.item.changes);
+    // Un-ingested edits are still the user's current view, not permission to restore an
+    // older canonical value while uploading a full batch.
+    for (const change of deferred) {
+      if (change.after.deleted) delete fields[change.key];
+      else fields[change.key] = change.after.value;
+    }
+    codec.validate(fields);
+    try { codec.validateReferences(fields); }
+    catch (_) {
+      report('Sync is checking overlapping group changes. Existing local settings are retained until the structural conflict is resolved.', true);
+      return state; // Let the merge classify it; never sanitize away an orphan membership.
+    }
+    const currentMap = codec.capture(capture());
+    const mirror = parse(MIRROR);
+    if (mirror?.map && mirror.account === owner) {
+      const active = [...(state.client.flight?.intents || []), ...state.client.pending, ...deferred];
+      for (const change of core.diff(mirror.map, currentMap)) {
+        const current = value(currentMap, change.key);
+        if (same(current, value(fields, change.key)) || active.some(intent => intent.key === change.key && same(intent.after, current))) continue;
+        throw new Error('Sync paused: untracked local settings changes were found, possibly from an older open tab. Both local and cloud data are kept. Reload old Suite tabs and review before syncing.');
+      }
+    }
+    projecting = true;
+    try {
+      apply(codec.apply(capture(), fields));
+      storage.setItem(MIRROR, JSON.stringify({ account: owner, document: state.client.confirmed, map: codec.capture(capture()) }));
+    } finally { projecting = false; }
+    // Only the exclusive lock holder reads/removes WAL entries; discarded seen IDs cannot race a stale reader.
+    const remaining = new Set(journalEntries(owner).map(entry => entry.item.id));
+    await vault.update(owner, current => {
+      current.client.seen = current.client.seen.filter(id => remaining.has(id));
+      return { state: current };
+    });
+    return state;
+  }
+  function rebaseDeferred(owner, local, remote) {
+    const flight = local.flight;
+    if (!flight) return;
+    const active = [...flight.intents, ...local.pending];
+    for (const { key, item } of journalEntries(owner)) {
+      let changed = false;
+      for (const change of item.changes) {
+        const previous = [...active].reverse().find(intent => intent.key === change.key);
+        const index = previous ? flight.intents.indexOf(previous) : -1;
+        if (index < 0) continue;
+        const outcome = flight.outcomes[previous.id], field = remote.fields[change.key];
+        const seq = flight.seqStart + index;
+        // Proof is this exact acknowledged flight outcome/revision, not coincidental equal
+        // values. An intervening device edit/ABA/conflict must still require review.
+        if (outcome?.accepted && (remote.acks[local.device] || 0) >= seq && !remote.conflicts[`${local.device}:${seq}`]
+          && field?.revision === outcome.revision && same(value(core.values(remote), change.key), outcome.after)
+          && same(previous.after, change.before) && same(outcome.after, previous.after)
+          && change.baseRevision === (local.confirmed.fields[change.key]?.revision ?? null)) {
+          change.baseRevision = outcome.revision; changed = true;
+        }
+      }
+      if (changed) storage.setItem(key, JSON.stringify(item));
+    }
+  }
+  function checkRemote(state, remote, saved) {
+    if (!remote || remote.account !== saved.account || remote.document.syncId !== saved.syncId)
+      throw new Error('Cloud sync identity changed or is missing. No settings were replaced.');
+    core.validate(remote.document);
+    codec.validateReferences(core.values(remote.document));
+    if (remote.document.revision < state.client.confirmed.revision)
+      throw new Error('Cloud sync revision moved backwards. Automatic replacement was stopped.');
+  }
+  async function run({ force = false } = {}) {
+    if (!enabled() || disposed) return false;
+    deps.flush?.();
+    const saved = identity();
+    return locks.request(`ziggy-suite-sync-v2:${saved.account}`, { ifAvailable: true }, async lock => {
+      if (!lock) return false;
+      let state = await project(saved.account);
+      if (!force && now() < (state.retryAt || 0)) return false;
+      const hasWork = state.client.pending.length || state.client.flight;
+      if (!force && !hasWork && now() - (state.checkedAt || 0) < 25000) return false;
+      const auth = credentials();
+      if (!auth.token || auth.passphrase?.length < 8) throw new Error('Sync paused: save the GitHub token and encryption passphrase on this device.');
+      try {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          identity();
+          const remote = await readRemote(auth, state.etag || '', state);
+          checkRemote(state, remote, saved);
+          identity();
+          state = await ingest(saved.account);
+          rebaseDeferred(saved.account, state.client, remote.document);
+          const prepared = client.prepare(state.client, remote.document, (candidate, base, operations) =>
+            codec.structuralConflictKeys(core.values(candidate), core.values(base), operations));
+          codec.validateReferences(core.values(prepared.document));
+          state = (await vault.update(saved.account, current => {
+            current.client = prepared.state;
+            current.sha = remote.sha;
+            current.etag = remote.etag || '';
+            return { state: current };
+          })).state;
+          if (prepared.operations.length) {
+            report('Syncing settings…', true);
+            identity();
+            const result = await writeRemote(auth, { account: saved.account, document: prepared.document }, remote.sha);
+            if (result.conflict) { state.etag = ''; await new Promise(resolve => setTimeout(resolve, 1000)); continue; }
+            identity();
+            // Edits made during encryption/upload join while the flight's causal outcomes still exist.
+            state = await ingest(saved.account);
+            rebaseDeferred(saved.account, state.client, prepared.document);
+            state = (await vault.update(saved.account, current => {
+              current.client = client.accept(current.client, prepared.document);
+              current.sha = result.sha; current.etag = '';
+              current.checkedAt = now(); current.retryAt = 0; current.failures = 0;
+              return { state: current };
+            })).state;
+          } else {
+            state = (await vault.update(saved.account, current => {
+              current.client = client.accept(current.client, remote.document);
+              current.checkedAt = now(); current.retryAt = 0; current.failures = 0;
+              return { state: current };
+            })).state;
+          }
+          state = await project(saved.account);
+          const conflicts = Object.keys(state.client.confirmed.conflicts).length;
+          const pending = state.client.pending.length || state.client.flight || journalEntries(saved.account).length;
+          if (conflicts) report(`Settings sync needs review: ${conflicts} conflicting change(s). Both versions are kept. Open GitHub cloud settings.`, true);
+          else if (pending) { report('Uploaded earlier changes. Newer changes are queued.'); schedule(3000); }
+          else if (prepared.operations.length) report('Settings synced to GitHub.');
+          return true;
+        }
+        throw new Error('Other devices are updating settings. Your changes remain queued for retry.');
+      } catch (error) {
+        await vault.update(saved.account, current => {
+          current.failures = Math.min(8, (current.failures || 0) + 1);
+          current.retryAt = now() + Math.max(error.retryMs || 0, Math.min(15 * 60000, 15000 * 2 ** (current.failures - 1)));
+          return { state: current };
+        });
+        throw error;
+      }
+    });
+  }
+  function schedule(delay = 0) {
+    if (disposed || !enabled()) return;
+    if (timer !== null) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      run().catch(error => report(error.message || 'Sync paused. Local changes are retained.', true));
+    }, delay);
+  }
+  async function enrollmentPreview() {
+    if (!locks?.request) throw new Error('Safe automatic sync requires Web Locks in this browser.');
+    const owner = account();
+    if (!owner) throw new Error('Wait for your signed-in account to load before enabling sync.');
+    const auth = credentials();
+    if (!auth.token || auth.passphrase?.length < 8 || !auth.rememberPassphrase)
+      throw new Error('Save a token and remember the encryption passphrase for unattended sync.');
+    const payload = capture(), map = codec.capture(payload);
+    const remote = await readRemote(auth);
+    let document = remote?.document;
+    if (remote && remote.account !== owner) throw new Error('The cloud sync file belongs to a different account.');
+    if (!document) {
+      // Start from the existing recoverable cloud backup, never from an unreviewed empty default.
+      const legacy = await readLegacy(auth);
+      document = core.seed(codec.capture(legacy), randomId());
+    }
+    core.validate(document); codec.validateReferences(core.values(document));
+    return { owner, payload, map, document, sha: remote?.sha || '',
+      differences: core.diff(core.values(document), map).length };
+  }
+  async function enroll(preview) {
+    const owner = preview.owner;
+    return locks.request(`ziggy-suite-sync-v2:${owner}`, async () => {
+      if (account() !== owner || !same(codec.capture(capture()), preview.map))
+        throw new Error('Local settings/account changed during setup. Review again.');
+      if (enabled()) throw new Error('This browser is already enrolled. Use Sync now or review conflicts.');
+      const existing = await vault.read(owner);
+      if (account() !== owner) throw new Error('Account changed during setup.');
+      if (existing) throw new Error('A previous sync queue exists. Resume it instead of replacing it.');
+      storage.setItem(BACKUP, JSON.stringify({ account: owner, savedAt: now(), payload: preview.payload }));
+      let local = client.initialize(preview.document, randomId());
+      const remoteMap = core.values(preview.document);
+      const changes = Object.keys(preview.map).filter(key => !Object.hasOwn(remoteMap, key) || !same(remoteMap[key], preview.map[key])).map(key => ({
+        key, before: value(remoteMap, key), after: value(preview.map, key),
+        // Differing existing fields are conflicts, not silently chosen by setup order.
+        baseRevision: null,
+      }));
+      if (changes.length) local = client.ingest(local, { id: randomId(), changes });
+      const auth = credentials();
+      const latest = await readRemote(auth);
+      if (account() !== owner) throw new Error('Account changed during setup.');
+      if ((latest?.sha || '') !== preview.sha) throw new Error('Cloud settings changed during setup. Review again.');
+      if (!latest) {
+        const created = await writeRemote(auth, { account: owner, document: preview.document }, '');
+        if (created.conflict) throw new Error('Another device initialized sync. Review the new cloud state.');
+      }
+      if (account() !== owner) throw new Error('Account changed during setup. Cloud state was preserved; setup remains disabled.');
+      storage.setItem(CONFIG, JSON.stringify({ enabled: false, enrolling: true, account: owner, syncId: preview.document.syncId }));
+      await vault.update(owner, old => {
+        if (old) throw new Error('An existing queue cannot be overwritten.');
+        return { state: { client: local, sha: '', etag: '', checkedAt: 0, retryAt: 0, failures: 0 } };
+      });
+      if (account() !== owner) throw new Error('Account changed during setup. Local enrollment was retained but not activated.');
+      storage.setItem(CONFIG, JSON.stringify({ enabled: true, account: owner, syncId: preview.document.syncId }));
+      await project(owner);
+      schedule();
+    });
+  }
+  async function status() {
+    const saved = config();
+    const state = saved?.account ? await vault.read(saved.account) : null;
+    return { enabled: !!saved?.enabled, account: saved?.account || '',
+      queued: (state?.client.pending.length || 0) + (state?.client.flight?.intents?.length || 0)
+        + (saved?.account ? journalEntries(saved.account).reduce((sum, entry) => sum + entry.item.changes.length, 0) : 0),
+      conflicts: state?.client.confirmed.conflicts || {}, document: state?.client.confirmed || null };
+  }
+  function resolveConflict(key, revision, ids, chosen) {
+    const saved = identity();
+    const mirror = parse(MIRROR);
+    revision = revision ?? null;
+    if ((mirror?.document.fields[key]?.revision ?? null) !== revision) throw new Error('This setting changed again. Refresh the conflict list.');
+    queue([{ key, before: value(core.values(mirror.document), key), after: chosen,
+      baseRevision: revision, resolves: ids }], saved.account);
+    schedule();
+  }
+  function pause() {
+    const saved = config();
+    if (saved) storage.setItem(CONFIG, JSON.stringify({ ...saved, enabled: false }));
+    clearTimeout(timer); timer = null;
+  }
+  async function resume({ reviewedMap = null } = {}) {
+    const saved = config();
+    if (!saved || account() !== saved.account || !locks?.request) throw new Error('No matching enrolled state to resume.');
+    return locks.request(`ziggy-suite-sync-v2:${saved.account}`, async () => {
+      const state = await vault.read(saved.account);
+      if (!state || account() !== saved.account) throw new Error('No matching enrolled state to resume.');
+      const local = codec.capture(capture()), mirror = parse(MIRROR);
+      const expected = saved.enrolling ? codec.capture(parse(BACKUP)?.payload) : mirror?.map;
+      if (!expected) throw new Error('The local review baseline is missing. Settings are retained; restore/review the enrollment backup before resuming.');
+      const delta = core.diff(expected, local);
+      if (delta.length && (!reviewedMap || !same(local, reviewedMap))) {
+        const error = new Error(`Review ${delta.length} local change(s), including ${delta.filter(change => change.deleted).length} deletion(s), before resuming.`);
+        error.reviewedMap = local;
+        throw error;
+      }
+      if (delta.length) {
+        storage.setItem(BACKUP + '_resume', JSON.stringify({ account: saved.account, savedAt: now(), payload: capture() }));
+        const document = mirror?.document || state.client.confirmed;
+        queue(delta.map(change => ({ key: change.key, before: value(expected, change.key), after: value(local, change.key),
+          baseRevision: document.fields[change.key]?.revision ?? null })), saved.account);
+      }
+      storage.setItem(CONFIG, JSON.stringify({ ...saved, enrolling: false, enabled: true })); schedule();
+    });
+  }
+  return Object.freeze({ enabled, enrolled, beforeWrite, afterWrite, schedule, run, status, enrollmentPreview, enroll,
+    resolveConflict, pause, resume, dispose() { disposed = true; clearTimeout(timer); vault.close(); } });
+}
+  // END GENERATED SETTINGS SYNC
+
+  // Intercept only this userscript's writes. Never patch the site's Storage prototype.
+  const suiteNativeStorage = window.localStorage;
+  let suiteSettingsSyncBridge = null;
+  const localStorage = {
+    get length() { return suiteNativeStorage.length; },
+    key: index => suiteNativeStorage.key(index),
+    getItem: key => suiteNativeStorage.getItem(key),
+    setItem(key, value) {
+      const receipt = suiteSettingsSyncBridge?.beforeWrite(String(key), String(value));
+      try { suiteNativeStorage.setItem(key, value); }
+      catch (error) { suiteSettingsSyncBridge?.afterWrite(receipt, false); throw error; }
+      suiteSettingsSyncBridge?.afterWrite(receipt, true);
+    },
+    removeItem(key) {
+      const receipt = suiteSettingsSyncBridge?.beforeWrite(String(key), null);
+      try { suiteNativeStorage.removeItem(key); }
+      catch (error) { suiteSettingsSyncBridge?.afterWrite(receipt, false); throw error; }
+      suiteSettingsSyncBridge?.afterWrite(receipt, true);
+    },
+  };
+
   const RECU_BRIDGE_PARAM = 'ziggy_suite_bridge';
   const RECU_BRIDGE_KEY_PREFIX = 'ziggy_recu_bridge_v1_';
   const RECU_BRIDGE_TIMEOUT = 90000;
 
-  function extractRecuPerformerPayload(doc, room, pageUrl = '') {
+  const RECU_CATEGORIES = Object.freeze({ recordings: 'Recordings', clips: 'Clips', kinks: 'Kinks' });
+  function recuCategoryUrl(room, category = 'recordings') {
+    const name = String(room || '').toLowerCase();
+    if (!/^[a-z0-9_-]+$/.test(name) || !Object.hasOwn(RECU_CATEGORIES, category)) return '';
+    return `https://recu.me${category === 'clips' ? `/clips/${name}/latest` : `/performer/${name}/${category === 'kinks' ? 'kinks' : 'latest'}`}`;
+  }
+
+  function recuPageIdentity(raw, room, category = 'recordings') {
+    if (!String(raw || '').trim() || !recuCategoryUrl(room, category)) return null;
+    try {
+      const url = new URL(raw, 'https://recu.me/');
+      if (url.origin !== 'https://recu.me' || url.username || url.password) return null;
+      const path = url.pathname.replace(/\/$/, '').toLowerCase();
+      const base = new URL(recuCategoryUrl(room, category)).pathname;
+      const overview = category === 'recordings' && path === `/performer/${room.toLowerCase()}`;
+      if (!overview && path !== base && !(category !== 'kinks' && path.startsWith(`${base}/page/`)
+        && /^[1-9]\d*$/.test(path.slice(`${base}/page/`.length)))) return null;
+      return { category, url: `https://recu.me${path}`, overview };
+    } catch (_) { return null; }
+  }
+
+  function extractRecuPerformerPayload(doc, room, pageUrl = '', category = 'recordings') {
     const normalizedRoom = String(room || '').trim().toLowerCase();
     if (!/^[a-z0-9_-]+$/.test(normalizedRoom)) return null;
     const profilePath = `/performer/${normalizedRoom}`;
     const sourceUrl = pageUrl || `https://recu.me${profilePath}`;
+    const source = recuPageIdentity(sourceUrl, normalizedRoom, category);
+    if (!source) return null;
     const recuUrl = raw => {
       if (!String(raw || '').trim()) return null;
       try {
@@ -100,23 +1490,30 @@
       } catch (_) { return null; }
     };
     const identity = recuUrl(doc.querySelector('.page-h1 .performer-link')?.getAttribute('href'));
-    if (identity?.pathname.replace(/\/$/, '').toLowerCase() !== profilePath
-        || !doc.querySelector('.performer-attrs,.performer-overview,.performer-page-videos')) return null;
+    const regionSelector = category === 'clips' ? '.performer-page-clips' : category === 'kinks' ? '.performer-kinks'
+      : source.overview ? '.performer-overview' : '.performer-page-videos';
+    if (identity?.pathname.replace(/\/$/, '').toLowerCase() !== profilePath || !doc.querySelector(regionSelector)) return null;
     const details = [...doc.querySelectorAll('.performer-attrs .performer-attr')]
       .map(node => node.textContent.replace(/\bSee statistics\b/gi, '').replace(/\s+/g, ' ').trim())
       .filter(text => text && !/^[\w\s]+:$/.test(text))
       .slice(0, 12);
     const recordings = [];
     const seen = new Set();
-    for (const card of doc.querySelectorAll('.performer-overview .video-thumb[data-id],.performer-page-videos .video-thumb[data-id]')) {
+    for (const card of doc.querySelectorAll(`${regionSelector} .video-thumb[data-id]`)) {
       const id = String(card.dataset.id || '').trim();
-      if (!/^\d{1,24}$/.test(id) || seen.has(id)) continue;
+      const performer = String(card.dataset.performer || '').toLowerCase();
+      if (!/^\d{1,24}$/.test(id) || (performer && performer !== normalizedRoom)
+          || (category === 'clips' && performer !== normalizedRoom)) continue;
       const anchor = card.querySelector('a[href]');
       const url = recuUrl(anchor?.getAttribute('href'))?.href || '';
       if (!url) continue;
+      const parsed = new URL(url);
+      const key = category === 'kinks' ? `${id}:${parsed.searchParams.get('t') || ''}:${parsed.searchParams.get('k') || ''}` : id;
+      if (seen.has(key)) continue;
       const splash = card.querySelector('.video-splash');
       recordings.push({
         id,
+        performer: normalizedRoom,
         url,
         image: splash?.dataset.bg || '',
         previewImage: card.querySelector('.video-splash.animate-on-hover')?.dataset.src || '',
@@ -125,19 +1522,15 @@
           || [...card.querySelectorAll('.video-info-sub span')].map(node => node.textContent.trim()).find(text => /^\d{4}-\d{2}-\d{2}/.test(text)) || '',
         views: card.querySelector('.video-views')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       });
-      seen.add(id);
+      seen.add(key);
       if (recordings.length >= 72) break;
     }
-    const isLatest = recuUrl(sourceUrl)?.pathname.toLowerCase().startsWith(`${profilePath}/latest`);
-    const nextLink = isLatest
+    const nextLink = !source.overview
       ? doc.querySelector('.pagination a[aria-label="Next"]')
       : [...doc.querySelectorAll('.performer-overview a[href]')].find(node => /^show all$/i.test(node.textContent.trim()));
     const next = recuUrl(nextLink?.getAttribute('href'));
-    const nextPath = next?.pathname.replace(/\/$/, '').toLowerCase() || '';
-    const nextUrl = next && (isLatest
-      ? nextPath.startsWith(`${profilePath}/latest/page/`) && /^[1-9]\d*$/.test(nextPath.slice(`${profilePath}/latest/page/`.length))
-      : nextPath === `${profilePath}/latest`) ? next.href : '';
-    return { room: normalizedRoom, details, recordings, nextUrl };
+    const nextUrl = next && category !== 'kinks' ? recuPageIdentity(next.href, normalizedRoom, category)?.url || '' : '';
+    return { room: normalizedRoom, category, pageUrl: source.url, details, recordings, nextUrl };
   }
 
   // Recu.me rejects background HTTP requests behind Cloudflare. A specially
@@ -146,8 +1539,10 @@
   if (location.hostname === 'recu.me') {
     const token = new URLSearchParams(location.search).get(RECU_BRIDGE_PARAM) || '';
     if (/^[a-f0-9-]{20,80}$/i.test(token)) {
-      const roomMatch = location.pathname.match(/^\/performer\/([A-Za-z0-9_-]+)(?:\/latest(?:\/page\/[1-9]\d*)?)?\/?$/);
+      const roomMatch = location.pathname.match(/^\/(?:performer|clips)\/([A-Za-z0-9_-]+)(?:\/(?:latest(?:\/page\/[1-9]\d*)?|kinks))?\/?$/);
       const room = (roomMatch?.[1] || '').toLowerCase();
+      const category = location.pathname.startsWith('/clips/') ? 'clips' : /\/kinks\/?$/.test(location.pathname) ? 'kinks' : 'recordings';
+      const source = recuPageIdentity(location.href, room, category);
       const key = `${RECU_BRIDGE_KEY_PREFIX}${token}`;
       const startedAt = Date.now();
       const closeHelper = () => { try { window.close(); } catch (_) {} };
@@ -155,21 +1550,21 @@
         try {
           const pending = JSON.parse(GM_getValue(key, ''));
           const age = Date.now() - pending.at;
-          return !!room && pending.token === token && pending.room === room && pending.pending === true
+          return !!source && pending.token === token && pending.room === room && pending.category === category
+            && pending.pageUrl === source.url && pending.pending === true
             && Number.isFinite(pending.at) && age >= 0 && age < RECU_BRIDGE_TIMEOUT;
         } catch (_) { return false; }
       };
       const finish = (payload, error = '') => {
         if (requestIsPending()) {
-          try { GM_setValue(key, JSON.stringify({ token, room, payload, error, at: Date.now() })); } catch (_) {}
+          try { GM_setValue(key, JSON.stringify({ token, room, category, pageUrl: source.url, payload, error, at: Date.now() })); } catch (_) {}
         }
         setTimeout(closeHelper, 80);
       };
       const inspect = () => {
         if (!requestIsPending()) { closeHelper(); return; }
-        const payload = extractRecuPerformerPayload(document, room, location.href);
-        const region = document.querySelector(location.pathname.toLowerCase().startsWith(`/performer/${room}/latest`) ? '.performer-page-videos' : '.performer-overview');
-        if (payload && region && document.readyState !== 'loading') { finish(payload); return; }
+        const payload = extractRecuPerformerPayload(document, room, location.href, category);
+        if (payload && document.readyState !== 'loading') { finish(payload); return; }
         const heading = (document.querySelector('.page-h1,h1')?.textContent || '').replace(/\s+/g, ' ').trim();
         const pageText = `${document.title || ''} ${heading}`;
         if (!payload && !document.querySelector('.page-h1 .performer-link')
@@ -204,7 +1599,7 @@
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.22');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.23');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -220,7 +1615,7 @@
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.22');
+  instanceMarker.setAttribute('data-suite-version', '16.6.23');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1454,7 +2849,7 @@
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.22',
+    version: '16.6.23',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -1782,6 +3177,7 @@
       };
       if (r.privateLabel) safe.privateLabel = String(r.privateLabel).slice(0, 40);
       if (r.errorMsg) safe.errorMsg = String(r.errorMsg).slice(0, 120);
+      if (typeof r.notes === 'string') safe.notes = r.notes.slice(0, 65536);
       for (const g of groups) safe.groupOrder[g] = clampInt(r.groupOrder?.[g], 0, 1000000, safe.order);
       const sizeMap = normalizeCardSizeMap(r.cardSizeByGroup);
       if (Object.keys(sizeMap).length) safe.cardSizeByGroup = sizeMap;
@@ -2232,6 +3628,7 @@
   }
 
   function clearGithubSyncConfig() {
+    suiteSettingsSyncBridge?.pause();
     githubSessionPassphrase = '';
     if (typeof GM_setValue === 'function') GM_setValue(GITHUB_SYNC_CONFIG_KEY, '');
     try { localStorage.removeItem(GITHUB_SYNC_STATE_KEY); } catch (_) {}
@@ -2321,7 +3718,7 @@
     }
   }
 
-  function githubApiRequest(config, method, url, data = null) {
+  function githubApiRequest(config, method, url, data = null, extraHeaders = {}) {
     return new Promise((resolve, reject) => {
       if (typeof GM_xmlhttpRequest !== 'function') {
         reject(new Error('Tampermonkey network access is unavailable'));
@@ -2331,18 +3728,22 @@
         Accept: 'application/vnd.github+json',
         Authorization: `Bearer ${config.token}`,
         'X-GitHub-Api-Version': GITHUB_API_VERSION,
+        ...(method === 'GET' ? { 'Cache-Control': 'no-cache' } : {}),
+        ...extraHeaders,
       };
       if (data != null) headers['Content-Type'] = 'application/json';
       GM_xmlhttpRequest({
         method,
         url,
         headers,
+        // Revalidate mutable branch contents after an upload; never accept a fresh HTTP cache hit as the current revision.
+        nocache: method === 'GET',
         data: data == null ? undefined : JSON.stringify(data),
         timeout: 30000,
         onload: response => {
           let parsed = null;
           try { parsed = response.responseText ? JSON.parse(response.responseText) : null; } catch (_) {}
-          resolve({ status: Number(response.status), data: parsed, text: response.responseText || '' });
+          resolve({ status: Number(response.status), data: parsed, text: response.responseText || '', headers: response.responseHeaders || '' });
         },
         onerror: () => reject(new Error('Unable to reach GitHub')),
         ontimeout: () => reject(new Error('GitHub request timed out')),
@@ -2469,6 +3870,11 @@
   }
 
   function queueGithubSettingsAutoExport(reason = 'settings changed') {
+    if (typeof suiteSettingsSyncBridge !== 'undefined' && suiteSettingsSyncBridge?.enrolled()) {
+      if (suiteSettingsSyncBridge.enabled()) suiteSettingsSyncBridge.schedule(3000);
+      else showGithubExportNotice('Settings saved locally. Automatic sync is paused; resume and review local changes to upload them.', true);
+      return Promise.resolve({ queued: suiteSettingsSyncBridge.enabled(), paused: !suiteSettingsSyncBridge.enabled() });
+    }
     if (githubAutoExportBatch) return githubAutoExportBatch;
     const upload = githubAutoExportQueue
       .catch(() => {})
@@ -2577,6 +3983,170 @@
     (document.head || document.documentElement).appendChild(style);
   }
 
+  function initializeAutomaticSettingsSync() {
+    const core = createSettingsSyncCore();
+    const codec = createSettingsSyncCodec();
+    const target = { ...GITHUB_SYNC_TARGET, path: 'settings/sync-v2.enc.json' };
+    const header = (response, name) => String(response.headers || '').split(/\r?\n/)
+      .find(line => line.toLowerCase().startsWith(name.toLowerCase() + ':'))?.split(':').slice(1).join(':').trim() || '';
+    const networkError = response => {
+      const error = githubResponseError(response, 'Settings sync request failed');
+      if (response.status === 429 || (response.status === 403 && header(response, 'x-ratelimit-remaining') === '0')) {
+        error.message = 'GitHub rate limit reached. Local changes are kept and will retry later.';
+        error.retryMs = Math.max(60000, Number(header(response, 'retry-after')) * 1000 || 0,
+          Number(header(response, 'x-ratelimit-reset')) * 1000 - Date.now() || 0);
+      }
+      return error;
+    };
+    const capture = () => {
+      const state = Storage.load({ strict: true });
+      const payload = buildSuiteSettingsPayload(state);
+      payload.components.multicamPro.settings = state.settings; // never reset active search/page during sync
+      return payload;
+    };
+    const changedKeys = [];
+    const apply = payload => {
+      const component = payload.components;
+      const next = sanitizeState(component.multicamPro);
+      const raw = JSON.stringify(next);
+      if (suiteNativeStorage.getItem(STORE_KEY) !== raw) {
+        writeStoreRaw(raw);
+        window.dispatchEvent(new CustomEvent('ryujo_multicam_storage', { detail: { state: next, syncProjection: true } }));
+      }
+      changedKeys.length = 0;
+      for (const key of RELOADED_SETTING_KEYS) {
+        const value = component.reloaded.storage[key] ?? null;
+        if (suiteNativeStorage.getItem(key) === value) continue;
+        if (value === null) suiteNativeStorage.removeItem(key); else suiteNativeStorage.setItem(key, value);
+        changedKeys.push(key);
+      }
+      const mobile = JSON.stringify(sanitizeMobileCleanViewSettings(component.mobileCleanView.settings));
+      if (suiteNativeStorage.getItem(MOBILE_CLEAN_VIEW_SETTINGS_KEY) !== mobile) {
+        if (typeof GM_setValue === 'function') GM_setValue(MOBILE_CLEAN_VIEW_SETTINGS_KEY, mobile);
+        suiteNativeStorage.setItem(MOBILE_CLEAN_VIEW_SETTINGS_KEY, mobile);
+        document.dispatchEvent(new CustomEvent('ziggy-mobile-clean-view:import-settings', { detail: JSON.parse(mobile) }));
+      }
+      if (changedKeys.length) document.dispatchEvent(new CustomEvent('ziggy-suite:shared-settings-applied', { detail: changedKeys.slice() }));
+    };
+    const controller = createSettingsSyncController({
+      core, codec, client: createSettingsSyncClient(core),
+      vault: createSettingsSyncStorage({ indexedDB: window.indexedDB }),
+      storage: suiteNativeStorage, locks: navigator.locks,
+      capture, apply, account: followedAccount, flush: flushPendingSuiteSettings,
+      credentials: loadGithubSyncConfig,
+      randomId: () => crypto.randomUUID(),
+      notify: showGithubExportNotice,
+      async readRemote(auth, etag = '', state = null) {
+        const config = { ...auth, ...target };
+        const response = await githubApiRequest(config, 'GET', `${githubContentsApiUrl(config)}?ref=${encodeURIComponent(config.branch)}`,
+          null, etag ? { 'If-None-Match': etag } : {});
+        if (response.status === 404) {
+          await testGithubSyncConnection(config); // distinguish a missing path from inaccessible repository
+          return null;
+        }
+        if (response.status === 304 && state?.sha && state?.client?.confirmed)
+          return { account: followedAccount(), document: state.client.confirmed, sha: state.sha, etag };
+        if (response.status !== 200 || !response.data?.content) throw networkError(response);
+        const envelope = JSON.parse(new TextDecoder().decode(base64ToBytes(response.data.content)));
+        const payload = await decryptSuiteSettingsEnvelope(envelope, auth.passphrase);
+        if (payload?.format !== 'ziggy-suite-sync-payload-v2' || typeof payload.account !== 'string')
+          throw new Error('Unsupported automatic sync file. No local settings were replaced.');
+        return { account: payload.account, document: payload.document, sha: response.data.sha, etag: header(response, 'etag') };
+      },
+      async writeRemote(auth, data, sha) {
+        const config = { ...auth, ...target };
+        const activeConfig = suiteNativeStorage.getItem('ziggy_suite_sync_v2_config');
+        const envelope = await encryptSuiteSettingsPayload({ format: 'ziggy-suite-sync-payload-v2', ...data }, auth.passphrase, auth.deviceName);
+        if (followedAccount() !== data.account) throw new Error('Account changed during sync; upload cancelled.');
+        const currentAuth = loadGithubSyncConfig();
+        if (suiteNativeStorage.getItem('ziggy_suite_sync_v2_config') !== activeConfig || currentAuth.token !== auth.token || currentAuth.passphrase !== auth.passphrase)
+          throw new Error('Sync setup changed while preparing the upload. Changes are retained for review.');
+        const request = { message: 'Synchronize encrypted Suite settings', branch: config.branch,
+          content: bytesToBase64(new TextEncoder().encode(JSON.stringify(envelope))), ...(sha ? { sha } : {}) };
+        const response = await githubApiRequest(config, 'PUT', githubContentsApiUrl(config), request);
+        if (response.status === 409 || response.status === 422) return { conflict: true };
+        if (![200, 201].includes(response.status) || !response.data?.content?.sha) throw networkError(response);
+        return { sha: response.data.content.sha };
+      },
+      async readLegacy(auth) { return (await downloadSuiteSettingsFromGithub(auth, auth.passphrase)).payload; },
+    });
+    suiteSettingsSyncBridge = controller;
+    const wake = () => controller.schedule(250);
+    window.addEventListener('online', wake);
+    window.addEventListener('pageshow', wake);
+    window.addEventListener('focus', wake);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) wake(); });
+    window.addEventListener('storage', event => {
+      if (event.key?.startsWith('ziggy_suite_sync_v2_')) controller.schedule(event.key.includes('_wal_') ? 3000 : 250);
+    });
+    let poll;
+    const tick = () => { controller.schedule(); poll = setTimeout(tick, document.hidden ? 120000 : 30000); };
+    poll = setTimeout(tick, 1500);
+    window.addEventListener('pagehide', event => { if (!event.persisted) { clearTimeout(poll); controller.dispose(); } });
+    return controller;
+  }
+
+  function appendAutomaticSyncControls(panel, setStatus, withBusy, readAndSave) {
+    const controller = suiteSettingsSyncBridge;
+    if (!controller) return;
+    const summary = $('div', { class: 'roomgrid-github-status', role: 'status' });
+    const list = $('div');
+    const buttons = $('div', { class: 'roomgrid-github-actions' });
+    const refresh = async () => {
+      const state = await controller.status();
+      summary.textContent = `Automatic sync: ${state.enabled ? 'enabled' : 'not enabled'} · ${state.queued} queued · ${Object.keys(state.conflicts).length} conflicts`;
+      list.replaceChildren();
+      for (const [id, conflict] of Object.entries(state.conflicts)) {
+        const current = state.document.fields[conflict.key] || { deleted: true };
+        const card = $('div', { class: 'roomgrid-github-status' });
+        const describe = item => item.deleted ? '(deleted)' : JSON.stringify(item.value);
+        const pre = $('pre', { style: { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: '180px', overflow: 'auto' } });
+        pre.textContent = `${conflict.key}\nShared: ${describe(current)}\nConflicting version: ${describe(conflict.incoming)}`;
+        card.append(pre);
+        for (const [label, chosen] of [['Keep shared value', { deleted: current.deleted, ...(!current.deleted ? { value: current.value } : {}) }], ['Use conflicting version', conflict.incoming]]) {
+          const button = $('button', { type: 'button' }, label);
+          button.addEventListener('click', () => withBusy(button, async () => {
+            controller.resolveConflict(conflict.key, current.revision, [id], chosen);
+            await controller.run({ force: true }); await refresh();
+          }));
+          card.append(button);
+        }
+        list.append(card);
+      }
+    };
+    const add = (label, action) => {
+      const button = $('button', { type: 'button' }, label);
+      button.addEventListener('click', () => withBusy(button, async () => { await action(); await refresh(); }));
+      buttons.append(button);
+    };
+    add('Enable automatic sync', async () => {
+      readAndSave(); flushPendingSuiteSettings();
+      const preview = await controller.enrollmentPreview();
+      if (!confirm(`Enable safe automatic sync for this account?\n${preview.differences} shared setting differences found. Existing cloud and local data are retained; differing values require review.\nA recoverable local enrollment backup is kept. Device layout and playback remain local.`)) return;
+      await controller.enroll(preview); setStatus('Automatic sync enabled. Other devices need this one-time setup with the same repository and passphrase.', 'success');
+    });
+    add('Sync now / refresh status', async () => {
+      const completed = await controller.run({ force: true });
+      const state = await controller.status();
+      setStatus(!completed ? 'No check completed: sync is paused or another tab is syncing.'
+        : state.queued || Object.keys(state.conflicts).length ? 'Check completed. Review the queued changes or conflicts below.'
+        : 'Settings are synchronized with GitHub.', completed && !state.queued && !Object.keys(state.conflicts).length ? 'success' : '');
+    });
+    add('Pause automatic sync', () => { controller.pause(); setStatus('Automatic sync paused. Queued changes are retained.'); });
+    add('Resume / review local changes', async () => {
+      try { await controller.resume(); }
+      catch (error) {
+        if (!error.reviewedMap) throw error;
+        if (!confirm(`${error.message}\nQueue these local edits for safe merging? A local backup is kept. Concurrent cloud changes require conflict review.`)) return;
+        await controller.resume({ reviewedMap: error.reviewedMap });
+      }
+      setStatus('Automatic sync resumed. Local edits are queued, not yet confirmed uploaded.');
+    });
+    panel.append($('h3', {}, 'Safe automatic device sync'), $('p', { class: 'roomgrid-github-copy' },
+      'Uses a separate encrypted sync-v2 file. Only changed shared settings are merged. Conflicts keep both versions. Closed or suspended browsers catch up when reopened; this is not instant push.'), buttons, summary, list);
+    refresh().catch(error => setStatus(error.message, 'error'));
+  }
+
   function openGithubSyncSetup(initialMessage = '') {
     ensureGithubSyncStyle();
     document.getElementById('roomgrid-github-sync-backdrop')?.remove();
@@ -2666,6 +4236,7 @@
       $('div', { class: 'roomgrid-github-actions' }, [saveButton, testButton, exportButton, importButton, localExportButton, localImportButton, clearButton]),
       status,
     );
+    appendAutomaticSyncControls(panel, setStatus, withBusy, readAndSave);
     backdrop.appendChild(panel);
     backdrop.addEventListener('click', event => { if (event.target === backdrop) backdrop.remove(); });
     document.body.appendChild(backdrop);
@@ -2717,6 +4288,8 @@
   }
 
   function applySuiteSettingsPayload(parsed) {
+    if (typeof suiteSettingsSyncBridge !== 'undefined' && suiteSettingsSyncBridge?.enabled())
+      throw new Error('Pause automatic sync before replacing settings with a snapshot. Download a backup first; a paused edited device requires review before resuming.');
     const multicamComponent = parsed?.components?.multicamPro;
     const rawMulticam = multicamComponent?.settings || parsed?.settings;
     const rawRooms = Array.isArray(multicamComponent?.rooms)
@@ -2844,6 +4417,7 @@
    * ============================================================= */
   function createStore() {
     let state = Storage.load();
+    let persistedBase = JSON.parse(JSON.stringify(state));
     const subs = new Set();
     let persistTimer = null;
     let persistence = 'saved';
@@ -2851,8 +4425,18 @@
       clearTimeout(persistTimer);
       persistTimer = null;
       if (persistence === 'saved') return true;
-      const saved = Storage.save(state);
+      let candidate;
+      try {
+        candidate = typeof createSettingsSyncCodec === 'function'
+          ? rebaseSuiteStoreState(persistedBase, state, Storage.load({ strict: true })) : state;
+      } catch (_) {
+        persistence = 'failed';
+        try { window.dispatchEvent(new CustomEvent('ryujo_multicam_persistence', { detail: { status: 'failed' } })); } catch (_) {}
+        return false;
+      }
+      const saved = Storage.save(candidate);
       persistence = saved ? 'saved' : 'failed';
+      if (saved) { state = candidate; persistedBase = JSON.parse(JSON.stringify(candidate)); }
       if (saved && pendingStoreWriter === flush) pendingStoreWriter = null;
       return saved;
     };
@@ -2861,6 +4445,10 @@
     const notify = (path) => { for (const fn of subs) fn(state, path); };
 
     const update = (mutator, path = 'all') => {
+      const sharedPath = ['all', 'rooms', 'groups'].includes(path)
+        || (path.startsWith('settings') && (typeof createSettingsSyncCodec !== 'function'
+          || !path.includes(':') || path.slice(path.indexOf(':') + 1).split(',').some(key => createSettingsSyncCodec().sharedKeys.multicam.includes(key))));
+      const before = sharedPath && typeof createSettingsSyncCodec === 'function' ? sharedStoreSnapshot(state) : '';
       try {
         const result = mutator(state);
         // v15.5: mutator 返回 false 表示没有实际变化，避免同状态反复写 localStorage，
@@ -2872,6 +4460,8 @@
       pendingStoreWriter = flush;
       clearTimeout(persistTimer);
       persistTimer = setTimeout(flush, 800);
+      // Shared edits are durable immediately. Status, drag transforms and local UI remain debounced.
+      if (before && before !== sharedStoreSnapshot(state)) flush();
       notify(path);
     };
 
@@ -2881,12 +4471,19 @@
       flush,
       subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
       update,
-      replaceState(nextState, path = 'all') {
+      replaceState(nextState, path = 'all', { preservePending = false } = {}) {
+        const incoming = sanitizeState(nextState || defaultState());
+        if (preservePending) incoming.settings.pureMode = !!state.settings.pureMode;
+        const dirty = preservePending && persistence !== 'saved';
+        const merged = dirty && typeof createSettingsSyncCodec === 'function'
+          ? rebaseSuiteStoreState(persistedBase, state, incoming) : incoming;
         clearTimeout(persistTimer);
         persistTimer = null;
         if (pendingStoreWriter === flush) pendingStoreWriter = null;
-        persistence = 'saved';
-        state = sanitizeState(nextState || defaultState());
+        persistedBase = JSON.parse(JSON.stringify(incoming));
+        persistence = dirty ? 'pending' : 'saved';
+        state = merged;
+        if (dirty) { pendingStoreWriter = flush; persistTimer = setTimeout(flush, 800); }
         notify(path);
       },
 
@@ -3160,6 +4757,26 @@
         update(s => { Object.assign(s.settings.filter, clean); }, keys.length ? 'settings:' + keys.join(',') : 'settings');
       },
     };
+  }
+
+  function sharedStoreSnapshot(state) {
+    return JSON.stringify(createSettingsSyncCodec().capture(storeSyncPayload(state)));
+  }
+
+  function storeSyncPayload(state) {
+    return { format: 'chaturbate-suite-settings-v4', components: {
+      multicamPro: { ...sanitizeState(state), version: META.version },
+      reloaded: { version: RELOADED_VERSION, storage: {}, themeName: '' },
+      mobileCleanView: { version: '2.2.0', settings: {} },
+    } };
+  }
+
+  function rebaseSuiteStoreState(base, draft, incoming) {
+    const codec = createSettingsSyncCodec();
+    const rebased = sanitizeState(codec.rebase(storeSyncPayload(base), storeSyncPayload(draft),
+      storeSyncPayload(incoming)).components.multicamPro);
+    rebased.settings.pureMode = !!draft.settings.pureMode;
+    return rebased;
   }
 
   /* =============================================================
@@ -3840,8 +5457,11 @@
 
   const isWorkstation = new URLSearchParams(location.search).get('multicam_mode') === '1';
   const hasExtensionContextMenus = GM_info?.scriptHandler === 'Ziggy Extension Adapter';
+  if (!hasExtensionContextMenus && location.hostname === 'chaturbate.com') {
+    try { initializeAutomaticSettingsSync(); }
+    catch (_) { showGithubExportNotice('Automatic sync could not initialize. Local settings are unchanged; open GitHub cloud settings.', true); }
+  }
   installFollowTracking();
-  if (!isPhoneLikeDevice()) installRoomRowScrolling();
   if (!isWorkstation) resetNativeRoomEntryPreferences();
   if (isWorkstation) {
     initWorkstation();
@@ -3852,41 +5472,6 @@
   /* =============================================================
    * 7. 普通页面注入：浮动按钮 + 快捷键
    * ============================================================= */
-  function installRoomRowScrolling() {
-    document.addEventListener('wheel', event => {
-      if (event.defaultPrevented || !event.cancelable || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey
-        || document.fullscreenElement || document.webkitFullscreenElement || event.deltaX || !event.deltaY) return;
-      // Wheel events do not identify the device. Leave fine/fractional trackpad
-      // motion native; recognize line-mode or conventional discrete wheel steps.
-      if (event.deltaMode !== 1 && (event.deltaMode !== 0 || Math.abs(event.deltaY) < 40
-        || Math.abs(event.deltaY - Math.round(event.deltaY)) > 0.01 || (event.wheelDeltaY && Math.abs(event.wheelDeltaY) % 120 !== 0))) return;
-      const target = event.target;
-      if (!target?.closest || target.isContentEditable || target.closest('input,textarea,select,button,[contenteditable],.menu-pop,[role=dialog]')) return;
-      const grid = target.closest('.RoomCardGrid,.FollowedDropdown__rooms,#ziggy-workshop-dropdown .wd-grid,body.rg-workshop-native .grid:not(.view-split)');
-      if (!grid) return;
-      const cards = [...grid.children].filter(node => node.matches('.RoomCard,.roomCard,.cam-card,.wd-card,.FollowedDropdown__room'));
-      let first = null, pitch = 0;
-      for (const card of cards.slice(0, 64)) {
-        const rect = card.getBoundingClientRect();
-        if (!rect.width || !rect.height) continue;
-        if (!first) first = rect;
-        else if (rect.top > first.top + 2) { pitch = rect.top - first.top; break; }
-      }
-      if (!pitch) return; // No second row: keep the site's own scrolling.
-      let scroller = grid;
-      while (scroller && scroller !== document.documentElement && scroller !== document.body) {
-        if (scroller.scrollHeight > scroller.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(scroller).overflowY)) break;
-        scroller = scroller.parentElement;
-      }
-      if (!scroller || scroller === document.body || scroller === document.documentElement) scroller = document.scrollingElement;
-      if (!scroller) return;
-      const next = Math.max(0, Math.min(scroller.scrollHeight - scroller.clientHeight, scroller.scrollTop + Math.sign(event.deltaY) * pitch * 2));
-      if (next === scroller.scrollTop) return;
-      event.preventDefault();
-      scroller.scrollTo({ top: next, behavior: 'instant' });
-    }, { passive: false });
-  }
-
   async function loadFollowingApiRooms(signal) {
     const rooms = new Map();
     for (let offset = 0; offset < 4500; offset += 90) {
@@ -4512,6 +6097,8 @@
     const RECU_TAB_LABEL = 'Recu.me';
     const recuBoundTabs = new WeakSet();
     const recuPanelRooms = new WeakMap();
+    const recuPanelIds = new WeakMap();
+    let recuPanelSerial = 0;
     const recuImageRequests = new Set();
     let recuProfileRequest = null;
     let recuBridgeCancel = null;
@@ -4546,6 +6133,12 @@
       #shareTab.ziggy-recu-host > :not(#ziggy-recu-desktop-panel) { display:none !important; }
       .ziggy-recu-panel { box-sizing:border-box; min-height:220px; padding:18px; color:#f1f1f1; background:#17202a; font-family:UbuntuRegular,Helvetica,Arial,sans-serif; }
       .ziggy-recu-actions { display:flex; flex-wrap:wrap; gap:8px; }
+      .ziggy-recu-subtabs { display:flex; gap:4px; margin:14px 0 4px; padding:3px; border:1px solid #2d3e50; border-radius:5px; }
+      .ziggy-recu-subtab { flex:1; min-width:0; min-height:38px; padding:8px 10px; border:1px solid transparent; border-radius:3px; color:#cbd5e1; background:transparent; font:700 13px/1.2 UbuntuRegular,Arial,sans-serif; cursor:pointer; }
+      .ziggy-recu-subtab[aria-selected="true"] { color:#fff; background:#0c6a93; border-color:#0c6a93; }
+      .ziggy-recu-subtab:hover { background:#253648; }
+      .ziggy-recu-subtab:focus-visible { outline:2px solid #68b5f0; outline-offset:2px; }
+      .ziggy-recu-content { min-width:0; }
       .ziggy-recu-button:disabled { opacity:.55; cursor:wait; }
       .ziggy-recu-status { min-height:18px; margin:10px 0; color:#b3b3b3; font-size:12px; }
       .ziggy-recu-summary { margin:12px 0; color:#d7d7d7; font-size:13px; }
@@ -4593,14 +6186,8 @@
       } catch (_) { return ''; }
     }
 
-    function safeRecuPageUrl(raw, room) {
-      const link = safeRecuLink(raw);
-      if (!link || !/^[a-z0-9_-]+$/i.test(room)) return '';
-      const url = new URL(link);
-      const path = `/performer/${room.toLowerCase()}`;
-      const tail = url.pathname.replace(/\/$/, '').toLowerCase().slice(path.length);
-      if (!url.pathname.toLowerCase().startsWith(path) || !/^(?:\/latest(?:\/page\/[1-9]\d*)?)?$/.test(tail)) return '';
-      return `${url.origin}${url.pathname}`;
+    function safeRecuPageUrl(raw, room, category = 'recordings') {
+      return recuPageIdentity(raw, room, category)?.url || '';
     }
 
     function safeRecuImage(raw) {
@@ -4632,32 +6219,35 @@
     }
 
     // Page-session cache, deliberately outside the saved Rooms/settings format.
-    function readRecuCache(room) {
+    function readRecuCache(room, category = 'recordings') {
       if (!recuCacheLoaded) {
         recuCacheLoaded = true;
         try {
-          const saved = JSON.parse(sessionStorage.getItem('ziggy_recu_cache_v1') || '[]');
+          const saved = JSON.parse(sessionStorage.getItem('ziggy_recu_cache_v2') || '[]');
           for (const [key, entry] of (Array.isArray(saved) ? saved : []).slice(-RECU_CACHE_MAX)) {
-            if (!/^[a-z0-9_-]+$/.test(key) || !Number.isFinite(entry?.fetchedAt)) continue;
-            try { recuCache.set(key, { profile: sanitizeRecuProfilePayload({ ...entry.profile, room: key }, key), fetchedAt: entry.fetchedAt }); } catch (_) {}
+            const [savedRoom, savedCategory] = String(key).split(':');
+            if (!/^[a-z0-9_-]+$/.test(savedRoom) || !Object.hasOwn(RECU_CATEGORIES, savedCategory) || !Number.isFinite(entry?.fetchedAt)) continue;
+            try { recuCache.set(key, { profile: sanitizeRecuProfilePayload(entry.profile, savedRoom, savedCategory), fetchedAt: entry.fetchedAt }); } catch (_) {}
           }
         } catch (_) {}
       }
-      const entry = recuCache.get(room);
+      const key = `${room}:${category}`;
+      const entry = recuCache.get(key);
       if (!entry) return null;
       const age = Date.now() - entry.fetchedAt;
-      if (age < 0 || age > RECU_CACHE_RETENTION) { recuCache.delete(room); return null; }
-      recuCache.delete(room);
-      recuCache.set(room, entry);
+      if (age < 0 || age > RECU_CACHE_RETENTION) { recuCache.delete(key); return null; }
+      recuCache.delete(key);
+      recuCache.set(key, entry);
       return { ...entry, stale: age > RECU_CACHE_TTL };
     }
 
-    function writeRecuCache(room, profile, fetchedAt = Date.now()) {
-      readRecuCache(room);
-      recuCache.delete(room);
-      recuCache.set(room, { profile: sanitizeRecuProfilePayload({ ...profile, room }, room), fetchedAt });
+    function writeRecuCache(room, profile, fetchedAt = Date.now(), category = 'recordings') {
+      readRecuCache(room, category);
+      const key = `${room}:${category}`;
+      recuCache.delete(key);
+      recuCache.set(key, { profile: sanitizeRecuProfilePayload({ ...profile, room }, room, category), fetchedAt });
       while (recuCache.size > RECU_CACHE_MAX) recuCache.delete(recuCache.keys().next().value);
-      try { sessionStorage.setItem('ziggy_recu_cache_v1', JSON.stringify([...recuCache])); } catch (_) {}
+      try { sessionStorage.setItem('ziggy_recu_cache_v2', JSON.stringify([...recuCache])); } catch (_) {}
     }
 
     function isRecuPanelSelected(panel) {
@@ -4683,76 +6273,122 @@
       return `Updated ${mins ? `${mins} min ago` : 'just now'}${Date.now() - at > RECU_CACHE_TTL ? ' · Cached results; refresh for updates' : ''}`;
     }
 
-    function recuPanelShell(room, stateText = '', host = null) {
-      const profileUrl = recuProfileUrl(room);
-      const content = $('div', { class: 'ziggy-recu-content' });
+    function recuSelectedCategory(panel, room) {
+      const category = panel?.dataset.ziggyRecuRoom === room ? panel.dataset.ziggyRecuCategory : '';
+      return Object.hasOwn(RECU_CATEGORIES, category || '') ? category : 'recordings';
+    }
+
+    function recuPanelShell(room, stateText = '', host = null, category = 'recordings') {
+      const profileUrl = recuCategoryUrl(room, category);
+      if (host && !recuPanelIds.has(host)) recuPanelIds.set(host, ++recuPanelSerial);
+      const prefix = `ziggy-recu-${recuPanelIds.get(host) || 0}`;
+      const content = $('div', { class: 'ziggy-recu-content', id: `${prefix}-content`, role: 'tabpanel',
+        'aria-labelledby': `${prefix}-${category}`, tabindex: '0' });
+      const subtabs = $('div', { class: 'ziggy-recu-subtabs', role: 'tablist', 'aria-label': 'Recu.me categories' });
+      for (const [key, label] of Object.entries(RECU_CATEGORIES)) {
+        const button = $('button', { class: 'ziggy-recu-subtab', type: 'button', role: 'tab', id: `${prefix}-${key}`,
+          'aria-controls': `${prefix}-content`, 'aria-selected': String(key === category), tabindex: key === category ? '0' : '-1',
+          dataset: { recuCategory: key } }, label);
+        const select = next => {
+          if (!host || !Object.hasOwn(RECU_CATEGORIES, next)) return;
+          void loadRecuRoomPanel(host, room, false, next);
+          host.querySelector(`[data-recu-category="${next}"]`)?.focus?.();
+        };
+        button.addEventListener('click', () => select(key));
+        button.addEventListener('keydown', event => {
+          const names = Object.keys(RECU_CATEGORIES), index = names.indexOf(key);
+          const next = event.key === 'ArrowRight' ? (index + 1) % names.length : event.key === 'ArrowLeft' ? (index + names.length - 1) % names.length
+            : event.key === 'Home' ? 0 : event.key === 'End' ? names.length - 1 : -1;
+          if (next < 0) return;
+          event.preventDefault(); select(names[next]);
+        });
+        subtabs.appendChild(button);
+      }
       const panel = $('section', { class: 'ziggy-recu-panel', dataset: { room } }, [
         // Native mobile CSS positions every <header> over the player. This
         // heading belongs to the archive panel, not the native page header.
         $('div', { class: 'ziggy-recu-head' }, [
           $('div', {}, [
             $('h2', { class: 'ziggy-recu-title' }, `Recu.me · ${room}`),
-            $('p', { class: 'ziggy-recu-subtitle' }, 'Recent performer information and recordings'),
+            $('p', { class: 'ziggy-recu-subtitle' }, `${RECU_CATEGORIES[category]} for this performer`),
           ]),
           $('div', { class: 'ziggy-recu-actions' }, [$('a', {
             class: 'ziggy-recu-button', href: profileUrl, target: '_blank', rel: 'noopener noreferrer',
-          }, 'Open full Recu.me profile')]),
+          }, `Open ${RECU_CATEGORIES[category]} on Recu.me`)]),
         ]),
+        subtabs,
         $('p', { class: 'ziggy-recu-status', role: 'status', 'aria-live': 'polite' }),
         content,
       ]);
       if (host) {
         const refresh = $('button', { class: 'ziggy-recu-button', type: 'button', dataset: { recuAction: 'refresh' } }, 'Refresh');
-        refresh.addEventListener('click', () => { void loadRecuRoomPanel(host, room, true); });
+        refresh.addEventListener('click', () => { void loadRecuRoomPanel(host, room, true, category); });
         panel.querySelector('.ziggy-recu-actions').appendChild(refresh);
       }
       if (stateText) content.appendChild($('div', { class: 'ziggy-recu-state', role: 'status', 'aria-live': 'polite' }, stateText));
       return { panel, content };
     }
 
-    function renderRecuIdle(panel, room) {
-      const shell = recuPanelShell(room, 'Select the Recu.me tab to load this profile.');
-      panel.replaceChildren(shell.panel);
-      panel.dataset.ziggyRecuState = 'idle';
-      panel.dataset.ziggyRecuRoom = room;
+    function replaceRecuPanelContent(panel, content) {
+      const focused = document.activeElement;
+      const category = panel.contains(focused) ? focused?.dataset?.recuCategory : '';
+      panel.replaceChildren(content);
+      if (Object.hasOwn(RECU_CATEGORIES, category || '')) panel.querySelector(`[data-recu-category="${category}"]`)?.focus?.({ preventScroll: true });
     }
 
-    function renderRecuLoading(panel, room) {
-      const shell = recuPanelShell(room, '', panel);
+    function renderRecuIdle(panel, room) {
+      const category = recuSelectedCategory(panel, room);
+      const shell = recuPanelShell(room, 'Select the Recu.me tab to load this performer.', panel, category);
+      replaceRecuPanelContent(panel, shell.panel);
+      panel.dataset.ziggyRecuState = 'idle';
+      panel.dataset.ziggyRecuRoom = room;
+      panel.dataset.ziggyRecuCategory = category;
+    }
+
+    function renderRecuLoading(panel, room, category = 'recordings') {
+      const shell = recuPanelShell(room, '', panel, category);
       shell.content.appendChild($('div', { class: 'ziggy-recu-state', role: 'status', 'aria-live': 'polite' }, [
         $('span', { class: 'ziggy-recu-spinner', 'aria-hidden': 'true' }),
-        $('span', {}, `Loading ${room} from Recu.me…`),
+        $('span', {}, `Loading ${RECU_CATEGORIES[category].toLowerCase()} for ${room}…`),
       ]));
-      panel.replaceChildren(shell.panel);
+      replaceRecuPanelContent(panel, shell.panel);
       panel.dataset.ziggyRecuState = 'loading';
       panel.dataset.ziggyRecuRoom = room;
+      panel.dataset.ziggyRecuCategory = category;
       setRecuStatus(panel, '', true);
     }
 
-    function renderRecuError(panel, room, message) {
-      const shell = recuPanelShell(room, '', panel);
+    function renderRecuError(panel, room, message, category = 'recordings') {
+      const shell = recuPanelShell(room, '', panel, category);
       const retry = $('button', { class: 'ziggy-recu-button', type: 'button' }, 'Try again');
-      retry.addEventListener('click', () => loadRecuRoomPanel(panel, room, true));
+      retry.addEventListener('click', () => loadRecuRoomPanel(panel, room, true, category));
       shell.content.appendChild($('div', { class: 'ziggy-recu-state', role: 'alert' }, [
         $('span', {}, message),
         retry,
       ]));
-      panel.replaceChildren(shell.panel);
+      replaceRecuPanelContent(panel, shell.panel);
       panel.dataset.ziggyRecuState = 'error';
       panel.dataset.ziggyRecuRoom = room;
+      panel.dataset.ziggyRecuCategory = category;
     }
 
-    function parseRecuProfile(html, room, pageUrl = '') {
+    function parseRecuProfile(html, room, pageUrl = '', category = 'recordings') {
       const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
-      const extracted = extractRecuPerformerPayload(doc, room, pageUrl);
+      const extracted = extractRecuPerformerPayload(doc, room, pageUrl, category);
       if (!extracted) throw new Error('Recu.me returned an unrecognized performer page. Try again or open the full profile.');
-      return sanitizeRecuProfilePayload(extracted, room);
+      return sanitizeRecuProfilePayload(extracted, room, category, pageUrl);
     }
 
-    function sanitizeRecuProfilePayload(payload, room) {
+    function sanitizeRecuProfilePayload(payload, room, category = 'recordings', pageUrl = '') {
       if (!payload || String(payload.room || '').toLowerCase() !== room.toLowerCase()) {
         throw new Error('Recu.me returned profile data for a different model.');
       }
+      if (!Object.hasOwn(RECU_CATEGORIES, category) || (payload.category || 'recordings') !== category
+          || (pageUrl && safeRecuPageUrl(payload.pageUrl, room, category) !== safeRecuPageUrl(pageUrl, room, category))) {
+        throw new Error('Recu.me returned data for a different category or page.');
+      }
+      const sourceUrl = safeRecuPageUrl(payload.pageUrl || recuCategoryUrl(room, category), room, category);
+      if (!sourceUrl) throw new Error('Recu.me returned an invalid category page.');
       const details = (Array.isArray(payload.details) ? payload.details : [])
         .map(value => String(value || '').replace(/\bSee statistics\b/gi, '').replace(/\s+/g, ' ').trim().slice(0, 300))
         .filter(Boolean)
@@ -4760,6 +6396,7 @@
       const seen = new Set();
       const recordings = (Array.isArray(payload.recordings) ? payload.recordings : []).slice(0, 72).map(item => ({
         id: /^\d{1,24}$/.test(String(item?.id || '')) ? String(item.id) : '',
+        performer: String(item?.performer || '').toLowerCase(),
         url: safeRecuLink(item?.url),
         image: safeRecuImage(item?.image),
         previewImage: safeRecuImage(item?.previewImage),
@@ -4767,13 +6404,27 @@
         date: String(item?.date || '').replace(/\s+/g, ' ').trim().slice(0, 80),
         views: String(item?.views || '').replace(/\s+/g, ' ').trim().slice(0, 80),
       })).filter(item => {
-        if (!item.id || !item.url || seen.has(item.id)) return false;
-        const path = new URL(item.url).pathname;
-        if (path !== `/${room.toLowerCase()}/video/${item.id}/play` && path !== `/video/${item.id}/play`) return false;
-        seen.add(item.id);
+        if (!item.id || !item.url || (item.performer && item.performer !== room.toLowerCase())) return false;
+        const url = new URL(item.url), path = url.pathname;
+        if (category === 'clips') {
+          if (item.performer !== room.toLowerCase() || path !== `/clips/${item.id}/play`) return false;
+          item.url = `https://recu.me${path}?clips_type=performer_clips`;
+        } else {
+          if (path !== `/${room.toLowerCase()}/video/${item.id}/play` && path !== `/video/${item.id}/play`) return false;
+          if (category === 'kinks') {
+            const time = url.searchParams.get('t') || '', kink = url.searchParams.get('k') || '';
+            if (!/^\d{1,10}$/.test(time) || !/^[a-z0-9-]{1,80}$/.test(kink) || url.searchParams.get('e') !== 'performer_kink') return false;
+            item.url = `https://recu.me${path}?t=${time}&e=performer_kink&k=${kink}`;
+            item.key = `${item.id}:${time}:${kink}`;
+          } else item.url = `https://recu.me${path}`;
+        }
+        item.key ||= item.id;
+        if (seen.has(item.key)) return false;
+        seen.add(item.key);
         return true;
       });
-      return { room: room.toLowerCase(), details, recordings, nextUrl: safeRecuPageUrl(payload.nextUrl, room) };
+      return { room: room.toLowerCase(), category, pageUrl: sourceUrl, details, recordings,
+        nextUrl: category === 'kinks' ? '' : safeRecuPageUrl(payload.nextUrl, room, category) };
     }
 
     // A bounded queue, not <img loading=lazy> alone: the actual GM fetch is lazy.
@@ -4911,21 +6562,24 @@
       const state = recuPanelData.get(panel);
       const grid = panel.querySelector('.ziggy-recu-recordings');
       if (!state || !grid) return;
+      const category = state.profile.category || 'recordings';
+      const itemLabel = category === 'clips' ? 'Clip' : category === 'kinks' ? 'Highlight' : 'Recording';
       const end = Math.min(state.visibleCount + 8, state.profile.recordings.length);
       for (const recording of state.profile.recordings.slice(state.visibleCount, end)) {
-        const image = $('img', { alt: `${room} recording preview`, loading: 'lazy', dataset: { recuImage: recording.image } });
+        const image = $('img', { alt: `${room} ${itemLabel.toLowerCase()} preview`, loading: 'lazy', dataset: { recuImage: recording.image } });
         const thumb = $('div', { class: 'ziggy-recu-thumb' }, [
           $('span', { class: 'ziggy-recu-placeholder' }, 'Loading preview…'), image,
         ]);
         if (recording.duration) thumb.appendChild($('span', { class: 'ziggy-recu-duration' }, recording.duration));
         const card = $('a', {
           class: 'ziggy-recu-recording', href: recording.url, target: '_blank', rel: 'noopener noreferrer',
-          'aria-label': `${room} · ${recording.date || `Recording ${recording.id}`} · ${recording.duration}`,
+          'aria-label': `${room} · ${recording.date || `${itemLabel} ${recording.id}`} · ${recording.duration}`,
         }, [thumb, $('div', { class: 'ziggy-recu-recording-meta' }, [
-          $('span', { class: 'ziggy-recu-recording-name' }, recording.date || `Recording ${recording.id}`),
+          $('span', { class: 'ziggy-recu-recording-name' }, recording.date || `${itemLabel} ${recording.id}`),
           $('span', {}, recording.views ? `${recording.views.replace(/\s*views?$/i, '')} views` : recording.duration),
         ])]);
-        bindRecuHover(card, thumb, recording, panel);
+        // The sixteen-frame hover layout was verified for recordings only.
+        if (category === 'recordings') bindRecuHover(card, thumb, recording, panel);
         grid.appendChild(card);
       }
       state.visibleCount = end;
@@ -4940,53 +6594,59 @@
       if (state.visibleCount < state.profile.recordings.length) { appendRecuCards(panel, room); return; }
       const url = state.profile.nextUrl;
       if (!url) return;
+      const category = state.profile.category || 'recordings';
+      const label = RECU_CATEGORIES[category].toLowerCase();
       const generation = recuRequestGeneration;
-      panel.dataset.ziggyRecuState = 'loading'; setRecuStatus(panel, 'Loading older recordings…', true);
+      panel.dataset.ziggyRecuState = 'loading'; setRecuStatus(panel, `Loading more ${label}…`, true);
       try {
-        const page = await requestRecuProfile(room, generation, url);
-        if (generation !== recuRequestGeneration || !panel.isConnected || currentRoom !== room) return;
-        const seen = new Set(state.profile.recordings.map(item => item.id));
-        const additions = page.recordings.filter(item => !seen.has(item.id));
+        const page = await requestRecuProfile(room, generation, url, category);
+        if (generation !== recuRequestGeneration || !panel.isConnected || currentRoom !== room || recuSelectedCategory(panel, room) !== category) return;
+        const seen = new Set(state.profile.recordings.map(item => item.key || item.id));
+        const additions = page.recordings.filter(item => !seen.has(item.key || item.id));
         state.profile.recordings.push(...additions);
-        state.profile.nextUrl = page.nextUrl === url ? '' : page.nextUrl;
+        state.profile.nextUrl = !additions.length || page.nextUrl === url ? '' : page.nextUrl;
         appendRecuCards(panel, room);
-        setRecuStatus(panel, additions.length ? recuUpdatedText(state.fetchedAt) : 'No additional recordings on this page. Load older recordings to continue.');
+        setRecuStatus(panel, additions.length ? recuUpdatedText(state.fetchedAt) : `No additional ${label} on this page.`);
       } catch (error) {
-        if (generation === recuRequestGeneration) setRecuStatus(panel, `Could not load older recordings. ${error.message}`);
+        if (generation === recuRequestGeneration) setRecuStatus(panel, `Could not load more ${label}. ${error.message}`);
       } finally {
         if (generation === recuRequestGeneration) panel.dataset.ziggyRecuState = 'loaded';
       }
     }
 
     function renderRecuProfile(panel, room, profile, generation, fetchedAt = Date.now()) {
-      const shell = recuPanelShell(room, '', panel);
+      const category = profile.category || 'recordings';
+      const shell = recuPanelShell(room, '', panel, category);
       const summary = profile.details.filter(text => /^(last broadcast|new broadcasts):/i.test(text));
       if (summary.length) shell.content.appendChild($('p', { class: 'ziggy-recu-summary' }, summary.join(' · ')));
       if (profile.details.length) shell.content.appendChild($('details', { class: 'ziggy-recu-profile-details' }, [
         $('summary', {}, 'Profile details'),
         $('div', { class: 'ziggy-recu-details' }, profile.details.map(text => $('div', { class: 'ziggy-recu-detail' }, text))),
       ]));
-      shell.content.appendChild($('h3', { class: 'ziggy-recu-recordings-title' }, 'Recent recordings'));
+      shell.content.appendChild($('h3', { class: 'ziggy-recu-recordings-title' }, category === 'kinks' ? 'Kink highlights' : `Recent ${RECU_CATEGORIES[category].toLowerCase()}`));
       shell.content.appendChild($('div', { class: 'ziggy-recu-recordings' }));
-      if (!profile.recordings.length) shell.content.appendChild($('p', {}, 'No recent recordings were listed.'));
-      const more = $('button', { class: 'ziggy-recu-button ziggy-recu-more', type: 'button', dataset: { recuAction: 'more' } }, 'Load older recordings');
+      if (!profile.recordings.length) shell.content.appendChild($('p', {}, `No ${RECU_CATEGORIES[category].toLowerCase()} were listed on this page.`));
+      const more = $('button', { class: 'ziggy-recu-button ziggy-recu-more', type: 'button', dataset: { recuAction: 'more' } }, `Load more ${RECU_CATEGORIES[category].toLowerCase()}`);
       more.addEventListener('click', () => { void loadMoreRecuRecordings(panel, room); });
       shell.content.appendChild(more);
-      shell.content.appendChild($('p', { class: 'ziggy-recu-foot' }, 'Provided by Recu.me. Hover previews show sampled frames, not continuous video.'));
-      panel.replaceChildren(shell.panel);
+      shell.content.appendChild($('p', { class: 'ziggy-recu-foot' }, category === 'recordings'
+        ? 'Provided by Recu.me. Hover previews show sampled frames, not continuous video.'
+        : category === 'kinks' ? 'Provided by Recu.me. Highlights open the original recording at its listed time.' : 'Provided by Recu.me. Clips open on Recu.me.'));
+      replaceRecuPanelContent(panel, shell.panel);
       recuPanelData.set(panel, { profile: { ...profile, recordings: [...profile.recordings] }, fetchedAt, visibleCount: 0 });
       panel.dataset.ziggyRecuState = 'loaded'; panel.dataset.ziggyRecuRoom = room;
+      panel.dataset.ziggyRecuCategory = category;
       setRecuStatus(panel, recuUpdatedText(fetchedAt));
       appendRecuCards(panel, room);
     }
 
-    function requestRecuProfile(room, generation, pageUrl = recuProfileUrl(room)) {
+    function requestRecuProfile(room, generation, pageUrl = recuCategoryUrl(room), category = 'recordings') {
       return new Promise((resolve, reject) => {
         if (typeof GM_xmlhttpRequest !== 'function') {
           reject(new Error('Tampermonkey network access is unavailable.'));
           return;
         }
-        const url = safeRecuPageUrl(pageUrl, room);
+        const url = safeRecuPageUrl(pageUrl, room, category);
         if (!url) { reject(new Error('Invalid Recu.me performer page.')); return; }
         let request, settled = false;
         const finish = (error, value) => {
@@ -5008,15 +6668,18 @@
               if (settled) return;
               if (generation !== recuRequestGeneration) { handle.abort(); return; }
               const status = Number(response.status || 0);
+              if (response.finalUrl && safeRecuPageUrl(response.finalUrl, room, category) !== url) {
+                finish(new Error('Recu.me redirected to a different performer, category or page. Open this category on Recu.me.')); return;
+              }
               if (status < 200 || status >= 300) {
                 if (status === 403) {
-                  requestRecuProfileThroughTab(room, generation, url).then(value => finish(null, value), finish);
+                  requestRecuProfileThroughTab(room, generation, url, category).then(value => finish(null, value), finish);
                   return;
                 }
                 finish(new Error(status === 404 ? 'No Recu.me performer profile was found for this model.' : `Recu.me returned HTTP ${status || 'error'}.`));
                 return;
               }
-              try { finish(null, parseRecuProfile(response.responseText, room, url)); }
+              try { finish(null, parseRecuProfile(response.responseText, room, url, category)); }
               catch (error) { finish(error); }
             },
             onerror: () => finish(new Error('Unable to reach Recu.me.')),
@@ -5027,7 +6690,7 @@
       });
     }
 
-    function requestRecuProfileThroughTab(room, generation, pageUrl = recuProfileUrl(room)) {
+    function requestRecuProfileThroughTab(room, generation, pageUrl = recuCategoryUrl(room), category = 'recordings') {
       return new Promise((resolve, reject) => {
         if (typeof GM_openInTab !== 'function' || typeof GM_getValue !== 'function' || typeof GM_setValue !== 'function') {
           reject(new Error('Tampermonkey cannot open the Recu.me helper tab.'));
@@ -5037,7 +6700,7 @@
           ? crypto.randomUUID()
           : `${Date.now().toString(16)}-${crypto.getRandomValues(new Uint32Array(4)).join('-')}`;
         const key = `${RECU_BRIDGE_KEY_PREFIX}${token}`;
-        const validUrl = safeRecuPageUrl(pageUrl, room);
+        const validUrl = safeRecuPageUrl(pageUrl, room, category);
         if (!validUrl) { reject(new Error('Invalid Recu.me performer page.')); return; }
         const url = new URL(validUrl);
         url.searchParams.set(RECU_BRIDGE_PARAM, token);
@@ -5058,7 +6721,7 @@
         };
         recuBridgeCancel = cancel;
         try {
-          GM_setValue(key, JSON.stringify({ token, room: room.toLowerCase(), pending: true, at: Date.now() }));
+          GM_setValue(key, JSON.stringify({ token, room: room.toLowerCase(), category, pageUrl: validUrl, pending: true, at: Date.now() }));
           helperTab = GM_openInTab(url.href, { active: false, insert: true, setParent: true });
           setRecuStatus(recuActivePanel, 'Loading in the Recu.me tab. If verification is required, switch to that tab to complete it. Waiting up to 90 seconds…', true);
         } catch (_) {
@@ -5082,27 +6745,30 @@
           if (!raw) return;
           let result;
           try { result = JSON.parse(raw); } catch (_) { return; }
-          if (result?.token !== token || String(result?.room || '').toLowerCase() !== room.toLowerCase() || result.pending) return;
+          if (result?.token !== token || String(result?.room || '').toLowerCase() !== room.toLowerCase()
+              || result.category !== category || result.pageUrl !== validUrl || result.pending) return;
           if (!Number.isFinite(result.at) || result.at < startedAt || Date.now() - result.at > 30000) return;
           finished = true;
           cleanup();
           if (result.error) { reject(new Error(String(result.error))); return; }
-          try { resolve(sanitizeRecuProfilePayload(result.payload, room)); }
+          try { resolve(sanitizeRecuProfilePayload(result.payload, room, category, validUrl)); }
           catch (error) { reject(error); }
         }, 200);
       });
     }
 
-    async function loadRecuRoomPanel(panel, room, force = false) {
+    async function loadRecuRoomPanel(panel, room, force = false, category = recuSelectedCategory(panel, room)) {
       if (!panel?.isConnected || currentRoom !== room) return;
-      if (panel.dataset.ziggyRecuRoom === room && (panel.dataset.ziggyRecuState === 'loading'
+      if (!Object.hasOwn(RECU_CATEGORIES, category)) return;
+      if (panel.dataset.ziggyRecuRoom === room && recuSelectedCategory(panel, room) === category && (panel.dataset.ziggyRecuState === 'loading'
           || (!force && panel.dataset.ziggyRecuState === 'loaded'))) return;
       cancelRecuRequests();
       const generation = recuRequestGeneration;
       recuActivePanel = panel;
-      const cached = !force && readRecuCache(room);
+      const previous = recuPanelData.get(panel)?.profile.category === category && panel.dataset.ziggyRecuRoom === room ? recuPanelData.get(panel) : null;
+      if (!previous) recuPanelData.delete(panel);
+      const cached = !force && readRecuCache(room, category);
       if (cached) { renderRecuProfile(panel, room, cached.profile, generation, cached.fetchedAt); return; }
-      const previous = recuPanelData.get(panel);
       if (previous && panel.dataset.ziggyRecuRoom === room) {
         panel.dataset.ziggyRecuState = 'loading';
         setRecuStatus(panel, 'Refreshing Recu.me…', true);
@@ -5115,11 +6781,11 @@
           }
           observeRecuThumbnails(panel);
         }
-      } else renderRecuLoading(panel, room);
+      } else renderRecuLoading(panel, room, category);
       try {
-        const profile = await requestRecuProfile(room, generation);
-        if (generation !== recuRequestGeneration || currentRoom !== room || !panel.isConnected) return;
-        writeRecuCache(room, profile);
+        const profile = await requestRecuProfile(room, generation, recuCategoryUrl(room, category), category);
+        if (generation !== recuRequestGeneration || currentRoom !== room || !panel.isConnected || recuSelectedCategory(panel, room) !== category) return;
+        writeRecuCache(room, profile, Date.now(), category);
         renderRecuProfile(panel, room, profile, generation);
       } catch (error) {
         if (generation !== recuRequestGeneration || currentRoom !== room || !panel.isConnected) return;
@@ -5127,7 +6793,7 @@
           panel.dataset.ziggyRecuState = 'loaded';
           setRecuStatus(panel, `Refresh failed. Showing previous results. ${error?.message || ''}`);
           observeRecuThumbnails(panel);
-        } else renderRecuError(panel, room, error?.message || 'Unable to load this Recu.me profile.');
+        } else renderRecuError(panel, room, error?.message || 'Unable to load this Recu.me category. Open it on Recu.me.', category);
       }
     }
 
@@ -12609,6 +14275,7 @@
 
     window.addEventListener('ryujo_multicam_storage', event => {
       if (event.detail?.authoritative === true) syncFromExternalState(event.detail.state, { authoritative: true });
+      else if (event.detail?.syncProjection === true) syncFromExternalState(event.detail.state);
     });
 
     function syncFromExternalState(ext, { authoritative = false } = {}) {
@@ -12633,6 +14300,9 @@
 
       // 多窗口只同步房间 / 分组，不同步本窗口的视图与筛选设置。
       const localSettings = JSON.parse(JSON.stringify(authoritative ? normalized.settings : (store.state.settings || defaultState().settings)));
+      if (!authoritative && typeof createSettingsSyncCodec === 'function') {
+        for (const key of createSettingsSyncCodec().sharedKeys.multicam) localSettings[key] = normalized.settings[key];
+      }
       const nextState = {
         ...normalized,
         rooms: extRooms,
@@ -12642,7 +14312,7 @@
       const groupIds = new Set(nextState.groups.map(g => g.id));
       if (!authoritative && nextState.settings.activeGroup !== RECENT_FOLLOWED_GROUP_ID && !groupIds.has(nextState.settings.activeGroup)) nextState.settings.activeGroup = DEFAULT_GROUP_ID;
       // 外部标签页同步只替换内存状态，不回写 localStorage，避免多个工作台互相触发 storage ping-pong。
-      store.replaceState(nextState, 'all');
+      store.replaceState(nextState, 'all', { preservePending: !authoritative });
 
       // service 启停（replaceState 之后，避免 service 提前 fire 状态时找不到对应数据）
       for (const id of removedRoomIds) service.stop(id);
@@ -12750,7 +14420,10 @@
     ];
     // The global chat-filter profile is intentionally not session-cleared so it is remembered for every room.
     function clearReloadedLocalStorage() {
-        reloadedOwnedStorageKeys.forEach(function(key) { localStorage.removeItem(key); });
+        reloadedOwnedStorageKeys.forEach(function(key) {
+            if (suiteSettingsSyncBridge?.enabled() && createSettingsSyncCodec().isStorageKey(key)) return;
+            localStorage.removeItem(key);
+        });
         for (var storageIndex = localStorage.length - 1; storageIndex >= 0; storageIndex--) {
             var storageKey = localStorage.key(storageIndex);
             if (storageKey && (storageKey.indexOf('region_') === 0 || /Tokens$/.test(storageKey))) {
@@ -12930,8 +14603,10 @@
         }
     }
 
+    var reloadedChatBaseline=null;
     function applyReloadedChatSettings(){
         var saved=readReloadedChatSettings();
+        reloadedChatBaseline={...saved};
         c1=saved.c1;
         c2=saved.c2;
         c3=saved.c3;
@@ -12963,7 +14638,16 @@
             c5:Number(c5),c6:Number(c6),c7:Number(c7),c7a:Number(c7a),
             c8:Number(c8),c10:Number(c10),language:languageControl ? languageControl.value : ''
         };
-        try {localStorage.setItem(reloadedChatSettingsKey,JSON.stringify(settings));} catch (error) {}
+        try {
+            if (reloadedChatBaseline){
+                var latest=readReloadedChatSettings();
+                Object.keys(settings).forEach(function(key){
+                    if (settings[key]===reloadedChatBaseline[key]) settings[key]=latest[key];
+                });
+            }
+            localStorage.setItem(reloadedChatSettingsKey,JSON.stringify(settings));
+            reloadedChatBaseline={...settings};
+        } catch (error) { alert('Chat settings could not be saved. Your previous settings are retained; review sync/storage status.'); }
     }
 
     function applyReloadedChatSettingsToMessages(){
@@ -12974,9 +14658,18 @@
 
     window.addEventListener('storage',function(event){
         if (event.key!=reloadedChatSettingsKey){return;}
+        applySharedChatPreferences();
+    });
+    var sharedChatApplyPending=false;
+    function applySharedChatPreferences(){
+        if (document.activeElement?.matches('input,textarea,select,[contenteditable="true"]')) { sharedChatApplyPending=true; return; }
+        sharedChatApplyPending=false;
         applyReloadedChatSettings();
         applyReloadedChatSettingsToMessages();
-    });
+        setclass();
+    }
+    document.addEventListener('ziggy-suite:shared-settings-applied',applySharedChatPreferences);
+    document.addEventListener('focusout',function(){if(sharedChatApplyPending)setTimeout(applySharedChatPreferences,0);});
     if (document.querySelector('[data-testid="close-entrance-terms"]')){
         document.querySelector('[data-testid="close-entrance-terms"]').click();
     }
@@ -13577,6 +15270,7 @@
     }
 
     function restoresettings(data){
+        if (suiteSettingsSyncBridge?.enabled()) return; // old note-based snapshots must not override revisioned sync
         var resave=false;
         if (data.indexOf("good boy")!=0){return;}
         if (data.indexOf("refreshoff#")!=-1){
@@ -17644,12 +19338,18 @@
 
   function readStoredValue() {
     try {
+      if (suiteSettingsSyncBridge?.enabled()) return localStorage.getItem(STORE_KEY);
       if (typeof GM_getValue === 'function') return GM_getValue(STORE_KEY, null);
     } catch (_) {}
     try { return localStorage.getItem(STORE_KEY); } catch (_) { return null; }
   }
 
   function writeStoredValue(value) {
+    if (suiteSettingsSyncBridge?.enabled()) {
+      localStorage.setItem(STORE_KEY, value); // journal/validation must succeed before the GM mirror
+      if (typeof GM_setValue === 'function') GM_setValue(STORE_KEY, value);
+      return;
+    }
     try {
       if (typeof GM_setValue === 'function') {
         GM_setValue(STORE_KEY, value);
@@ -17684,7 +19384,7 @@
   }
 
   function saveSettings(patch) {
-    settings = sanitizeSettings({ ...settings, ...patch });
+    settings = sanitizeSettings({ ...(suiteSettingsSyncBridge?.enabled() ? loadSettings() : settings), ...patch });
     writeStoredValue(JSON.stringify(settings));
     syncEnvironment();
     renderSettings();

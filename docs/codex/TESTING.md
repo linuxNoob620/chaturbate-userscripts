@@ -66,9 +66,13 @@ For the editable dropdown, additionally verify page scrolling past its anchor re
 
 ## Repository checks
 
+For automatic settings sync, run `npm run test:settings-sync` after regenerating the module block with `node tools/build-settings-sync.mjs`. It tests the same module factories embedded in the userscript, including controlled offline/CAS/acknowledgement/conflict and failed-storage scenarios. The isolated Chrome fixture `tools/test-settings-sync-browser-fixture.js` tests actual IndexedDB transactions and Web Locks and deletes only its uniquely named disposable database. Keep real enrollment/UI/cloud roundtrip evidence separate from these fixtures; do not claim phone or multi-device acceptance from the deterministic tests. Never print credential/passphrase or decrypted user settings while checking the live path.
+
 After userscript source edits, run the focused regression check first, then the required project gates appropriate to the userscript-only scope. `npm run build:userscript` validates and regenerates userscript metadata without rebuilding extension outputs. Run `npm test` only with awareness that its current parity checks may require existing extension artifacts to match the userscript; do not silently rebuild extensions when extension work was not authorized.
 
 For Recu.me changes run `npm run test:recu`, then actual desktop and phone interactions. Verify idle/selected loading, helper closure, native tab/menu switching, cancelled-load re-entry, cache/reload, refresh retention, pagination deduplication, lazy/error images and hover exit. Wait for the new document after reload before asserting state; checking the old document immediately after `Page.reload` can falsely pass a wait condition.
+
+For category changes, check Recordings, Clips and Kinks independently: correct performer/category external route, lazy loading, cancellation when switching, cache isolation, exact helper identity and distinct timestamped kink highlights. Do not infer phone touch acceptance from desktop category clicks.
 
 ## Verification standard
 

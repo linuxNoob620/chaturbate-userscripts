@@ -40,11 +40,19 @@ Decision: On supported desktop model-room pages, the Suite replaces Chaturbate's
 
 Entry policy: Recu.me is never the initial selected tab on room entry, including remembered Share state. It requires deliberate selection. Newly opened rooms/previews start muted, without preventing a subsequent deliberate unmute.
 
+Categories: expose Recordings, Clips and Kinks as lazy subtabs for the current model. Keep source-specific parsing, exact category/page identity and independent request/cache ownership. Timestamped kink highlights must not collapse into a single recording. Do not prefetch inactive categories or turn archive browsing into a new player.
+
 ## D-007 — Manual imports and visible automatic exports
+
+Status: Superseded for enrolled browsers by D-013; retained for legacy snapshot recovery
+
+Decision: Remove automatic cloud settings imports. Keep explicit manual cloud/local import and normal same-browser state propagation. Queue automatic exports only after successful Workshop membership persistence; coalesce rapid changes and show nonblocking, truthful upload/failure/setup feedback. Do not label a failed or missing-credentials export as successful.
+
+## D-013 — Opt-in revisioned automatic device sync
 
 Status: Active
 
-Decision: Remove automatic cloud settings imports. Keep explicit manual cloud/local import and normal same-browser state propagation. Queue automatic exports only after successful Workshop membership persistence; coalesce rapid changes and show nonblocking, truthful upload/failure/setup feedback. Do not label a failed or missing-credentials export as successful.
+Decision: After explicit one-time enrollment per browser, synchronize approved shared settings through a separate encrypted `settings/sync-v2.enc.json` document. Use causal field revisions, exact operation acknowledgements, durable local queues, explicit deletion tombstones and GitHub SHA compare-and-swap. Concurrent differing values require review, not device-clock ordering or silent whole-snapshot replacement. Keep browser-specific UI/playback/credentials local. Pause retains pending data; edits made while paused require review before resuming. The original encrypted snapshot and manual import/export remain recovery paths, not the automatic merge protocol. See `docs/AUTOMATIC_SETTINGS_SYNC.md` for scope and limits.
 
 ## D-008 — Remove Suite recording without deleting user media
 
@@ -70,9 +78,11 @@ Opening policy: click or explicit keyboard activation only; hovering does not op
 
 ## D-011 — Row-based desktop wheel navigation
 
-Status: Active
+Status: Retired by user request, 2026-09-23
 
 Decision: Conventional mouse-wheel steps move two actual card rows in native room grids, full Workshop and room-preview dropdowns. Measure the current layout rather than assuming fixed row dimensions. Do not apply card-row scrolling to chat, text editing, dialogs, fullscreen, pinch/Ctrl-wheel zoom or mobile touch gestures; preserve fine trackpad motion where wheel-event data allows it to be distinguished.
+
+Replacement: remove the row-step interceptor entirely and let ordinary wheel scrolling follow the browser/native page. Preserve existing explicit Ctrl/Command preview zoom and form-control safety behavior.
 
 ## D-012 — Explicit native model notifications
 

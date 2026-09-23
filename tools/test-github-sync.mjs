@@ -64,6 +64,7 @@ function $(tag, props = {}, children = []) { return { tag, props, children, appe
 
 vm.runInContext(`${prelude}\n${implementation}\n;globalThis.__syncTest = {
   loadGithubSyncConfig,
+  githubApiRequest,
   saveGithubSyncConfig,
   encryptSuiteSettingsPayload,
   decryptSuiteSettingsEnvelope,
@@ -96,7 +97,7 @@ assert.equal(api.loadGithubSyncConfig().repo, 'chaturbate-userscript-settings');
 const calls = [];
 let uploadedContent = '';
 context.GM_xmlhttpRequest = options => {
-  calls.push({ method: options.method, url: options.url, data: options.data });
+  calls.push({ method: options.method, url: options.url, data: options.data, headers: options.headers, nocache: options.nocache });
   if (options.method === 'GET') {
     setTimeout(() => options.onload({ status: 200, responseText: JSON.stringify({ sha: 'existing-sha' }) }), 0);
   } else {
@@ -115,7 +116,10 @@ const upload = await api.uploadSuiteSettingsToGithub(config, passphrase, payload
 assert.equal(upload.commit, 'new-commit-sha');
 assert.equal(calls.length, 2);
 assert.equal(calls[0].method, 'GET');
+assert.equal(calls[0].nocache, true, 'Mutable GitHub contents reads must not use a fresh cached response');
+assert.equal(calls[0].headers['Cache-Control'], 'no-cache', 'Contents reads must revalidate at the server');
 assert.equal(calls[1].method, 'PUT');
+assert.equal(calls[1].nocache, false);
 assert.equal(JSON.parse(calls[1].data).sha, 'existing-sha', 'Existing GitHub file must be overwritten using its SHA');
 
 const retryCalls = [];
@@ -146,5 +150,15 @@ context.GM_xmlhttpRequest = options => {
 const downloaded = await api.downloadSuiteSettingsFromGithub(config, passphrase);
 assert.deepEqual(downloaded.payload, payload);
 assert.equal(downloaded.sha, 'new-commit-sha');
+
+context.GM_xmlhttpRequest = options => {
+  assert.equal(options.nocache, true);
+  assert.equal(options.headers['Cache-Control'], 'no-cache');
+  assert.equal(options.headers['If-None-Match'], '"current-sha"', 'ETag validation must survive cache revalidation');
+  options.onload({ status: 304, responseText: '', responseHeaders: 'etag: "current-sha"' });
+};
+const unchanged = await api.githubApiRequest(config, 'GET', 'https://api.github.com/test', null, { 'If-None-Match': '"current-sha"' });
+assert.equal(unchanged.status, 304);
+assert.equal(unchanged.headers, 'etag: "current-sha"');
 
 console.log('GitHub sync tests passed: encryption, wrong-passphrase rejection, overwrite, conflict rejection, and download/import.');

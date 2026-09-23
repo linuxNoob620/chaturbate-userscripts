@@ -170,7 +170,7 @@ for (const item of scripts) {
     if (!source.includes("if (location.hostname === 'recu.me')")) failures.push(`${item.file}: normal Recu.me visits are not isolated from the Suite runtime`);
     if (!source.includes('function ensureRecuRoomTab()')) failures.push(`${item.file}: native model-room Recu.me tab adapter is missing`);
     if (!source.includes('function parseRecuProfile(html, room, pageUrl =')) failures.push(`${item.file}: sanitized Recu.me performer parser is missing`);
-    if (!source.includes('function sanitizeRecuProfilePayload(payload, room)')) failures.push(`${item.file}: relayed Recu.me data is not revalidated on Chaturbate`);
+    if (!source.includes('function sanitizeRecuProfilePayload(payload, room,')) failures.push(`${item.file}: relayed Recu.me category data is not revalidated on Chaturbate`);
     if (!source.includes('function requestRecuProfileThroughTab(room, generation, pageUrl =')) failures.push(`${item.file}: Recu.me 403 fallback is missing`);
     if (!source.includes('a.tabLink[data-testid="room-tab-Share"]')) failures.push(`${item.file}: Recu.me does not reuse the native Share tab`);
     if (!source.includes("document.querySelector('#roomTabs > #shareTab,#shareTab')")) failures.push(`${item.file}: Recu.me does not reuse the native Share panel`);

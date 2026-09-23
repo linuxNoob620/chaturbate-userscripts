@@ -24,5 +24,7 @@
 !docs/**
 !tools/
 !tools/**
+!src/
+!src/settings-sync-*.js
 !.github/
 !.github/**

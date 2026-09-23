@@ -113,6 +113,7 @@ class Element {
     if (this.parentElement) this.parentElement.removeChild(this);
     else this.isConnected = false;
   }
+  focus() { this.focused = true; }
   addEventListener(name, fn, options = false) {
     if (!this.listeners.has(name)) this.listeners.set(name, []);
     this.listeners.get(name).push(fn);
@@ -204,7 +205,7 @@ function fixture({ storage = new Map(), intersection = false } = {}) {
       observe(target, options) { target.attributeObservers.set(this, options); this.targets.add(target); }
       disconnect() { for (const target of this.targets) target.attributeObservers.delete(this); this.targets.clear(); }
     },
-    DOMParser: class { parseFromString(html) { return documents.get(html) || performerDocument({ identity: html || 'alpha' }); } },
+    DOMParser: class { parseFromString(html) { return documents.get(html) || performerDocument({ identity: html || 'alpha', latest: true }); } },
     GM_getValue: (name, fallback) => gmStored.get(name) ?? fallback,
     GM_setValue: (name, value) => gmStored.set(name, value),
     GM_deleteValue: name => gmStored.delete(name),
@@ -226,7 +227,7 @@ function fixture({ storage = new Map(), intersection = false } = {}) {
     disconnect() { this.observed.clear(); }
   };
   vm.runInContext(`${bridgeConstants}\n${extractor}\n${panelImplementation}\n;globalThis.api = {
-    extractRecuPerformerPayload, safeRecuLink, safeRecuImage, safeRecuPageUrl,
+    extractRecuPerformerPayload, recuCategoryUrl, recuPageIdentity, safeRecuLink, safeRecuImage, safeRecuPageUrl,
     sanitizeRecuProfilePayload, readRecuCache, writeRecuCache,
     requestRecuProfile, cancelRecuRequests, loadRecuRoomPanel, loadMoreRecuRecordings, observeRecuThumbnails,
     ensureRecuRoomTab, ensureRecuMobileMenu, setRecuMobileOpen, isRecuPanelActive,
@@ -260,8 +261,8 @@ function desktopPanelFixture(f, { selected = true, reconcile = false } = {}) {
   return { tab, host, panel, nativeRow };
 }
 
-function recording(id, { href = `/alpha/video/${id}/play`, image = 'https://img.mediafront.net/poster.jpg', previewImage = 'https://img.mediafront.net/sprite.jpg' } = {}) {
-  return el('div', { class: 'video-thumb', dataset: { id } }, [
+function recording(id, { href = `/alpha/video/${id}/play`, performer = 'alpha', image = 'https://img.mediafront.net/poster.jpg', previewImage = 'https://img.mediafront.net/sprite.jpg' } = {}) {
+  return el('div', { class: 'video-thumb', dataset: { id, performer } }, [
     el('a', href === null ? {} : { href }, 'Open recording'),
     el('div', { class: 'video-splash animate-on-hover', dataset: { bg: image, src: previewImage } }),
     textNode('video-time', ' 01:23 '),
@@ -269,11 +270,11 @@ function recording(id, { href = `/alpha/video/${id}/play`, image = 'https://img.
     textNode('video-views', ' 1,234 views '),
   ]);
 }
-function performerDocument({ identity = 'alpha', heading = identity, cards = [recording('101')], next = '/performer/alpha/latest', latest = false } = {}) {
+function performerDocument({ identity = 'alpha', heading = identity, cards = [recording('101')], next = '/performer/alpha/latest', latest = false, category = 'recordings' } = {}) {
   return el('document', {}, [
     el('h1', { class: 'page-h1' }, [el('a', { class: 'performer-link', href: `/performer/${identity}` }, heading)]),
     el('div', { class: 'performer-attrs' }, [textNode('performer-attr', ' Country:   Germany '), textNode('performer-attr', ' Recordings: 10 See statistics ')]),
-    el('div', { class: latest ? 'performer-page-videos' : 'performer-overview' }, [
+    el('div', { class: category === 'clips' ? 'performer-page-clips' : category === 'kinks' ? 'performer-kinks' : latest ? 'performer-page-videos' : 'performer-overview' }, [
       ...cards,
       ...(next && !latest ? [el('a', { href: next }, 'Show all')] : []),
     ]),
@@ -281,19 +282,21 @@ function performerDocument({ identity = 'alpha', heading = identity, cards = [re
   ]);
 }
 
-function helperFixture({ pending = true, token = true, recognized = true, room = 'alpha', latest = false } = {}) {
+function helperFixture({ pending = true, token = true, recognized = true, room = 'alpha', latest = false, category = 'recordings', pendingOverrides = {} } = {}) {
   const id = '11111111-2222-4333-8444-555555555555';
   const key = `ziggy_recu_bridge_v1_${id}`;
   const stored = new Map();
   const writes = [], timers = [];
   let closes = 0, now = Date.now();
-  const document = recognized ? performerDocument({ identity: room, latest, cards: [], next: '' }) : el('document', {}, []);
+  const document = recognized ? performerDocument({ identity: room, latest, category, cards: [], next: '' }) : el('document', {}, []);
   document.readyState = 'complete';
-  if (pending) stored.set(key, JSON.stringify({ token: id, room, pending: true, at: now }));
+  const pageUrl = category === 'clips' ? `https://recu.me/clips/${room}/latest`
+    : `https://recu.me/performer/${room}${category === 'kinks' ? '/kinks' : latest ? '/latest' : ''}`;
+  if (pending) stored.set(key, JSON.stringify({ token: id, room, category, pageUrl, pending: true, at: now, ...pendingOverrides }));
   vm.runInNewContext(`(function() { ${helperImplementation} })();`, {
     URL, URLSearchParams, document,
     Date: class extends Date { static now() { return now; } },
-    location: new URL(`https://recu.me/performer/${room}${latest ? '/latest' : ''}${token ? `?ziggy_suite_bridge=${id}` : ''}`),
+    location: new URL(`${pageUrl}${token ? `?ziggy_suite_bridge=${id}` : ''}`),
     GM_getValue: (name, fallback) => stored.get(name) ?? fallback,
     GM_setValue(name, value) { writes.push({ name, value }); stored.set(name, value); },
     window: { close() { closes++; } },
@@ -501,7 +504,8 @@ function helperFixture({ pending = true, token = true, recognized = true, room =
   assert.equal(f.helperTabs[0].options.active, false);
   const [key, raw] = [...f.gmStored][0], pending = JSON.parse(raw);
   assert.equal(pending.pending, true);
-  const response = { token: pending.token, room: 'alpha', at: f.now(), payload: { room: 'alpha', details: ['From helper'], recordings: [], nextUrl: '' } };
+  const response = { token: pending.token, room: 'alpha', category: pending.category, pageUrl: pending.pageUrl, at: f.now(),
+    payload: { room: 'alpha', category: pending.category, pageUrl: pending.pageUrl, details: ['From helper'], recordings: [], nextUrl: '' } };
   f.gmStored.set(key, JSON.stringify({ ...response, room: 'beta' }));
   f.tickIntervals();
   assert.equal(f.helperTabs[0].closed, false, 'another room cannot complete this helper request');
@@ -716,7 +720,8 @@ function helperFixture({ pending = true, token = true, recognized = true, room =
   f.advance(60000);
   f.tickIntervals();
   assert.equal(f.helperTabs[0].closed, false, 'a selected helper gets time for a verification longer than thirty seconds');
-  f.gmStored.set(key, JSON.stringify({ token: pending.token, room: 'alpha', at: f.now(), payload: f.api.extractRecuPerformerPayload(performerDocument(), 'alpha') }));
+  f.gmStored.set(key, JSON.stringify({ token: pending.token, room: 'alpha', category: pending.category, pageUrl: pending.pageUrl, at: f.now(),
+    payload: f.api.extractRecuPerformerPayload(performerDocument({ latest: true }), 'alpha', pending.pageUrl) }));
   f.tickIntervals();
   await loading;
   assert.equal(panel.dataset.ziggyRecuState, 'loaded', 'a background owner may accept its completed helper');
@@ -799,7 +804,7 @@ for (const reason of ['native switch', 'host removal', 'room change', 'unsupport
   await settle();
   assert.equal(image.dataset.recuFailed, '1');
   const refresh = f.api.loadRecuRoomPanel(panel, 'alpha', true);
-  const profileRequest = f.requests.find(request => request.options.url === 'https://recu.me/performer/alpha');
+  const profileRequest = f.requests.find(request => request.options.url === 'https://recu.me/performer/alpha/latest');
   assert.ok(profileRequest);
   profileRequest.options.onerror();
   await refresh;
@@ -829,7 +834,7 @@ for (const reason of ['native switch', 'host removal', 'room change', 'unsupport
   await settle();
   assert.equal(panel.dataset.ziggyRecuState, 'error');
   assert.equal(host.querySelector('.ziggy-recu-mobile-back'), back, 'error rendering must retain Back');
-  f.documents.set('empty-profile', performerDocument({ cards: [], next: '' }));
+  f.documents.set('empty-profile', performerDocument({ cards: [], next: '', latest: true }));
   const retry = f.api.loadRecuRoomPanel(panel, 'alpha', true);
   f.requests[1].options.onload({ status: 200, responseText: 'empty-profile' });
   await retry;
@@ -873,4 +878,163 @@ for (const reason of ['native switch', 'host removal', 'room change', 'unsupport
   assert.equal(f.intervals.size, 0);
 }
 
-console.log('Recu.me behavior: helper ownership/protocol/deadline, hidden-owner completion and invalidation, URL allowlists, exact identity, lazy thumbnail cancellation/retry, pagination/deduplication, bounded caching, coalesced refresh, native Share child preservation and actual selection, and stable mobile Back passed.');
+{
+  const { api } = fixture();
+  assert.equal(api.recuCategoryUrl('kitty_ricky'), 'https://recu.me/performer/kitty_ricky/latest');
+  assert.equal(api.recuCategoryUrl('kitty_ricky', 'clips'), 'https://recu.me/clips/kitty_ricky/latest');
+  assert.equal(api.recuCategoryUrl('kitty_ricky', 'kinks'), 'https://recu.me/performer/kitty_ricky/kinks');
+  assert.equal(api.recuCategoryUrl('../other', 'clips'), '');
+  assert.equal(api.recuCategoryUrl('alpha', 'constructor'), '');
+  assert.equal(api.safeRecuPageUrl('/clips/alpha/latest/page/2', 'alpha', 'clips'), 'https://recu.me/clips/alpha/latest/page/2');
+  for (const [url, category] of [['/clips/alpha/latest', 'recordings'], ['/performer/alpha/latest', 'clips'],
+    ['/clips/alphabeta/latest', 'clips'], ['/clips/alpha/latest/page/0', 'clips'], ['/performer/alpha/kinks/other', 'kinks']]) {
+    assert.equal(api.safeRecuPageUrl(url, 'alpha', category), '', 'page allowlists must bind performer and category');
+  }
+}
+
+{
+  const { api } = fixture();
+  const url = 'https://recu.me/clips/alpha/latest';
+  const clips = performerDocument({ category: 'clips', latest: true, next: '/clips/alpha/latest/page/2', cards: [
+    recording('201', { href: '/clips/201/play?clips_type=performer_clips' }),
+    recording('202', { href: '/clips/202/play', performer: 'beta' }),
+    recording('203', { href: '/clips/203/play', performer: '' }),
+    recording('204', { href: '/alpha/video/204/play' }),
+  ] });
+  const payload = api.extractRecuPerformerPayload(clips, 'alpha', url, 'clips');
+  const safe = api.sanitizeRecuProfilePayload(payload, 'alpha', 'clips', url);
+  assert.equal(safe.category, 'clips');
+  assert.equal(safe.pageUrl, url);
+  assert.deepEqual(plain(safe.recordings.map(item => item.id)), ['201']);
+  assert.equal(safe.recordings[0].url, 'https://recu.me/clips/201/play?clips_type=performer_clips');
+  assert.equal(safe.nextUrl, 'https://recu.me/clips/alpha/latest/page/2');
+  assert.equal(api.extractRecuPerformerPayload(performerDocument({ latest: true }), 'alpha', url, 'clips'), null,
+    'a recording region must never be presented as clips');
+  assert.throws(() => api.sanitizeRecuProfilePayload(payload, 'alpha', 'recordings'), /different category/);
+  assert.throws(() => api.sanitizeRecuProfilePayload(payload, 'alpha', 'clips', `${url}/page/2`), /different category or page/);
+}
+
+{
+  const { api } = fixture();
+  const url = 'https://recu.me/performer/alpha/kinks';
+  const doc = performerDocument({ category: 'kinks', cards: [
+    recording('301', { href: '/alpha/video/301/play?t=10&e=performer_kink&k=first' }),
+    recording('301', { href: '/alpha/video/301/play?t=20&e=performer_kink&k=second' }),
+    recording('301', { href: '/alpha/video/301/play?t=10&e=performer_kink&k=first' }),
+    recording('302', { href: '/alpha/video/302/play?t=-1&e=performer_kink&k=bad' }),
+    recording('303', { href: '/beta/video/303/play?t=10&e=performer_kink&k=other' }),
+    recording('304', { href: '/alpha/video/304/play?t=10&k=missing-event' }),
+  ] });
+  const payload = api.extractRecuPerformerPayload(doc, 'alpha', url, 'kinks');
+  const safe = api.sanitizeRecuProfilePayload(payload, 'alpha', 'kinks', url);
+  assert.equal(safe.recordings.length, 2, 'distinct highlight times/categories from one video must remain separate');
+  assert.notEqual(safe.recordings[0].key, safe.recordings[1].key);
+  assert.match(safe.recordings[1].url, /\?t=20&e=performer_kink&k=second$/);
+  assert.equal(safe.nextUrl, '', 'unobserved kink pagination/filter URLs must not be invented');
+}
+
+{
+  for (const category of ['clips', 'kinks']) {
+    const helper = helperFixture({ category });
+    assert.equal(helper.writes.length, 1, `${category}: recognized category helper should complete`);
+    const reply = JSON.parse(helper.writes[0].value);
+    assert.equal(reply.category, category);
+    assert.equal(reply.payload.category, category);
+    const wrongCategory = helperFixture({ category, pendingOverrides: { category: 'recordings' } });
+    assert.equal(wrongCategory.writes.length, 0);
+    assert.equal(wrongCategory.closes(), 1, 'a mismatched category owner cannot authorize a relay');
+    const wrongPage = helperFixture({ category, pendingOverrides: { pageUrl: 'https://recu.me/performer/alpha/latest' } });
+    assert.equal(wrongPage.writes.length, 0);
+    assert.equal(wrongPage.closes(), 1);
+  }
+}
+
+{
+  const f = fixture(), panel = el('section');
+  const recordings = f.api.loadRecuRoomPanel(panel, 'alpha');
+  assert.equal(f.requests[0].options.url, 'https://recu.me/performer/alpha/latest');
+  assert.equal(panel.querySelectorAll('[role="tab"]').length, 3);
+  assert.equal(panel.querySelector('[role="tab"][aria-selected="true"]').textContent, 'Recordings');
+  assert.equal(f.requests.length, 1, 'merely rendering tabs must not fetch other categories');
+  const clips = f.api.loadRecuRoomPanel(panel, 'alpha', false, 'clips');
+  assert.equal(f.requests[0].aborted, true, 'a category switch cancels the old owner');
+  assert.equal(f.requests[1].options.url, 'https://recu.me/clips/alpha/latest');
+  f.requests[0].options.onload({ status: 200, responseText: 'alpha' });
+  assert.equal(panel.dataset.ziggyRecuCategory, 'clips');
+  const doc = performerDocument({ category: 'clips', latest: true, next: '', cards: [recording('201', { href: '/clips/201/play' })] });
+  f.documents.set('clips', doc);
+  f.document.activeElement = panel.querySelector('[data-recu-category="clips"]');
+  f.requests[1].options.onload({ status: 200, responseText: 'clips' });
+  await Promise.all([recordings, clips]);
+  assert.equal(panel.dataset.ziggyRecuState, 'loaded');
+  assert.equal(panel.querySelector('[data-recu-category="clips"]').focused, true, 'async replacement must retain focused subtab identity');
+  assert.match(panel.textContent, /Recent clips/);
+  assert.doesNotMatch(panel.textContent, /Recent recordings/);
+  assert.equal(panel.querySelector('.ziggy-recu-recording').listeners.has('mouseenter'), false, 'unverified clip sprite geometry must not inherit recording hover');
+  assert.ok(f.api.readRecuCache('alpha', 'clips'));
+  assert.equal(f.api.readRecuCache('alpha'), null, 'a clip result cannot populate recordings cache');
+  const reloaded = fixture({ storage: f.storage });
+  assert.equal(reloaded.api.readRecuCache('alpha', 'clips').profile.category, 'clips');
+  assert.equal(reloaded.api.readRecuCache('alpha'), null);
+}
+
+{
+  const f = fixture(), panel = el('section');
+  f.api.writeRecuCache('alpha', { details: ['Recordings cache'], recordings: [] });
+  await f.api.loadRecuRoomPanel(panel, 'alpha');
+  const clips = f.api.loadRecuRoomPanel(panel, 'alpha', false, 'clips');
+  f.requests[0].options.onload({ status: 403 });
+  const [key, raw] = [...f.gmStored][0], pending = JSON.parse(raw);
+  assert.equal(pending.category, 'clips');
+  const reply = { token: pending.token, room: 'alpha', category: pending.category, pageUrl: pending.pageUrl, at: f.now(),
+    payload: f.api.extractRecuPerformerPayload(performerDocument({ category: 'clips', latest: true, next: '', cards: [] }), 'alpha', pending.pageUrl, 'clips') };
+  f.gmStored.set(key, JSON.stringify({ ...reply, category: 'recordings' })); f.tickIntervals();
+  assert.equal(f.helperTabs[0].closed, false, 'another category cannot complete this owner');
+  f.gmStored.set(key, JSON.stringify({ ...reply, pageUrl: `${pending.pageUrl}/page/2` })); f.tickIntervals();
+  assert.equal(f.helperTabs[0].closed, false, 'another page cannot complete this owner');
+  f.gmStored.set(key, JSON.stringify(reply)); f.tickIntervals();
+  await clips;
+  assert.equal(f.helperTabs[0].closed, true);
+  assert.match(panel.textContent, /No clips were listed/);
+  const requestsBefore = f.requests.length;
+  await f.api.loadRecuRoomPanel(panel, 'alpha', false, 'recordings');
+  assert.match(panel.textContent, /Recordings cache/);
+  assert.equal(f.requests.length, requestsBefore, 'returning to cached category must not reload another category');
+}
+
+{
+  const f = fixture(), panel = el('section');
+  const clips = f.api.loadRecuRoomPanel(panel, 'alpha', false, 'clips');
+  f.requests[0].options.onload({ status: 403 });
+  const kink = f.api.loadRecuRoomPanel(panel, 'alpha', false, 'kinks');
+  await assertSettles(clips, 'switching from a helper category settles the old load');
+  assert.equal(f.helperTabs[0].closed, true);
+  assert.equal(f.gmStored.size, 0);
+  assert.equal(f.requests[1].options.url, 'https://recu.me/performer/alpha/kinks');
+  f.requests[1].options.onload({ status: 200, responseText: 'alpha' });
+  await kink;
+  assert.equal(panel.dataset.ziggyRecuCategory, 'kinks');
+  assert.equal(panel.dataset.ziggyRecuState, 'error', 'unsupported category layout must show an honest error, not recordings');
+  assert.equal(panel.querySelector('.ziggy-recu-actions a').getAttribute('href'), 'https://recu.me/performer/alpha/kinks');
+  assert.equal(panel.querySelectorAll('.ziggy-recu-recording').length, 0);
+}
+
+{
+  const f = fixture(), panel = el('section');
+  const loading = f.api.loadRecuRoomPanel(panel, 'alpha', false, 'clips');
+  f.requests[0].options.onload({ status: 200, finalUrl: 'https://recu.me/clips/beta/latest', responseText: 'alpha' });
+  await loading;
+  assert.equal(panel.dataset.ziggyRecuState, 'error');
+  assert.match(panel.textContent, /redirected to a different performer/);
+  const kinksButton = panel.querySelector('[data-recu-category="kinks"]');
+  let prevented = false;
+  kinksButton.listeners.get('keydown')[0]({ key: 'Home', preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.equal(panel.dataset.ziggyRecuCategory, 'recordings', 'Home activates the first subtab through the same lazy lifecycle');
+  assert.equal(panel.querySelector('[role="tab"][aria-selected="true"]').getAttribute('tabindex'), '0');
+  assert.equal(panel.querySelectorAll('[role="tab"][tabindex="-1"]').length, 2);
+  assert.equal(panel.querySelector('[role="tabpanel"]').getAttribute('aria-labelledby'), panel.querySelector('[role="tab"][aria-selected="true"]').getAttribute('id'));
+  f.api.cancelRecuRequests();
+}
+
+console.log('Recu.me behavior: previous ownership/lifecycle/cache/Share/mobile checks plus category routes, exact model/category/page identity, lazy accessible subtabs, isolated caches, category/helper cancellation, clip allowlists, distinct timed kink highlights, unsupported-layout fallback and redirect rejection passed.');

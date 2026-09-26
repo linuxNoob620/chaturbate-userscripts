@@ -3,12 +3,20 @@
 ## Deployment
 
 - Primary runtime: Tampermonkey userscript `Chaturbate MultiCam Pro + Cam ARNA.user.js`.
-- Current userscript release: 16.6.23 (`main`, tag `v16.6.23`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
+- Current userscript release: 16.6.24 (`main`, tag `v16.6.24`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
 - Extension builds remain at 16.6.7. They were not modified, rebuilt, packaged, or published for this userscript-only change.
 - Local rollback point: Git tag `backup/pre-16.6.8-workshop-doubletap-20260905` at the 16.6.7 baseline.
-- Version 16.6.23 is installed in the existing Chrome testing-profile Tampermonkey entry; the saved editor matched the complete candidate after reload (line endings normalized). No reinstall or settings reset was performed. OPPO/Quetta was not connected or updated in this pass; its last verified entry is 16.6.22. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
+- Version 16.6.24 is installed in the existing Chrome testing-profile Tampermonkey entry; the saved editor matched the complete candidate after reload (line endings normalized). No reinstall or settings reset was performed. The phone reported unauthorized over ADB and was not updated or tested in this pass; its last verified entry is 16.6.22. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
 - Recu.me release rollback point: local tag `backup/pre-recu-16.6.13-20260909` at 16.6.12.
 - Candidate rollback point: `backup/pre-native-portrait-20260905`. Extension outputs are unchanged.
+
+## Playback-aware Workshop refresh — 16.6.24
+
+- Workshop batch refresh skips status requests for attached, connected, online previews with recent advancing playback and usable video state. Paused, failed, seeking, ended, disconnected, newly attached and stale-progress previews are rechecked. Existing four-worker admission, visible priority, cooldown, scope coordination and background suspension remain. Ordinary periodic status checks are unchanged; a card's explicit Refresh still forces reconnection. Completion feedback counts playing previews kept.
+- Workshop's saved-room index now follows Store room-array replacement after persistence rebases. The previous stale object references could disagree with the Online filter and display Offline overlays or stop public previews. Stable transitions clear obsolete error/private labels; private labels are displayed only for private status. No settings schema or synchronization protocol changed.
+- Actual Chrome/Tampermonkey refresh of 90 saved rooms made 80 room-context requests, excluding ten playing previews. Those ten retained the same video element/source and advancing playback. This is a bounded request/continuity observation, not a measured elapsed-time improvement. After scrolling down/back, all eleven attached previews were unpaused with readyState 4 and the Online filter contained no Offline cards. No full teardown/remount or long-session claim follows from that short scroll check.
+- Syntax, focused Workshop/UI/settings-sync checks and the complete isolated userscript build/regression gate passed. Extracted Store regression fails against the old source and passes with sync enabled and disabled. Playback fixtures cover recent/stale progress, unhealthy states, default polling, forced reconnect and listener replacement/disposal. Independent scoped Riqor review found no blocker. Phone/Zen acceptance remains untested; no phone settings or extension artifacts changed.
+- Rollback: `backup/pre-smart-refresh-20260926` at `88a71bf`. Source SHA-256: `9C80E5E2AACF30E7295279AE5ECF4CBF90D5C74D0728C000B210A4F080EBAE48`.
 
 ## Automatic settings sync and navigation follow-ups — 16.6.23
 

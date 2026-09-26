@@ -10,12 +10,13 @@ const factory = source.slice(begin, end);
 function fixture(ids) {
   const pending = [], events = [], timers = new Map();
   let timerId = 0;
+  let now = Date.now();
   const store = {
     state: { rooms: ids.map(id => ({ id, lastStatus: 'offline' })), settings: { pollMs: { online: 120000, offline: 60000, private: 60000, error: 1000 } } },
     patchRoom(id, patch) { Object.assign(this.state.rooms.find(r => r.id === id), patch); },
   };
   const globals = {
-    store, AbortController, URL, console,
+    store, AbortController, URL, console, Date: { now: () => now },
     window: { location: { hostname: 'chaturbate.com' } }, document: { querySelectorAll: () => [] },
     normalizeUsername: x => String(x).toLowerCase(), isLikelyUsername: x => /^[a-z0-9_]+$/.test(x),
     safeChaturbateHost: () => true, isSafeStreamUrl: () => true,
@@ -28,7 +29,7 @@ function fixture(ids) {
     fetch(url, options) { return new Promise((resolve, reject) => { const request = { url, signal: options.signal, resolve: data => resolve({ ok: true, json: async () => data }), throttle: () => resolve({ ok: false, status: 429, headers: { get: () => '60' } }) }; options.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }); pending.push(request); }); },
   };
   const service = vm.runInNewContext(`${factory}\ncreateRoomService(store)`, globals);
-  return { service, pending, events, store, timers };
+  return { service, pending, events, store, timers, advance: ms => { now += ms; } };
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
@@ -107,3 +108,58 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(f.events.filter(e => e.name === 'room:online').length, before + 2, 'token comparison must not preserve failed playback');
 }
 console.log('Workshop refresh behavior: sharing, forced replacement, stop/restart, four-worker queue, cooldown, progress, and stream continuity passed.');
+
+{
+  const f = fixture(['alpha', 'offline']);
+  const check = f.service.probe('alpha');
+  f.store.state.rooms[0].privateLabel = 'private';
+  f.pending[0].resolve({ room_status: 'public', hls_source: 'https://example.com/live.m3u8' });
+  await check;
+  assert.equal(f.store.state.rooms[0].privateLabel, '', 'public clears an obsolete private label');
+  const listeners = new Map();
+  const video = { currentTime: 1, readyState: 4, paused: false, ended: false, isConnected: true,
+    addEventListener(name, fn) { listeners.set(name, fn); },
+    removeEventListener(name, fn) { if (listeners.get(name) === fn) listeners.delete(name); } };
+  f.service.attachVideo('alpha', video);
+  const starting = f.service.refreshMany(['alpha'], { preservePlaying: true });
+  f.pending.at(-1).resolve({ room_status: 'public', hls_source: 'https://example.com/live.m3u8' });
+  assert.notEqual((await starting)[0].status, 'playing', 'initial attachment is not proof of playback');
+  video.currentTime = 2; listeners.get('timeupdate')();
+  const progress = [];
+  assert.equal((await f.service.refreshMany(['alpha'], { preservePlaying: true, onProgress: p => progress.push(p.completed) }))[0].status, 'playing');
+  assert.deepEqual(progress, [1], 'all-healthy refresh still completes progress');
+  const regular = f.service.refreshMany(['alpha']);
+  f.pending.at(-1).resolve({ room_status: 'public', hls_source: 'https://example.com/live.m3u8' });
+  assert.notEqual((await regular)[0].status, 'playing', 'ordinary polling still requests status');
+  const beforeBatch = f.pending.length;
+  const batch = f.service.refreshMany(['alpha', 'offline'], { preservePlaying: true });
+  assert.equal(f.pending.length, beforeBatch + 1, 'playing preview does not request status; offline room does');
+  assert.match(f.pending.at(-1).url, /\/offline\/$/);
+  f.pending.at(-1).resolve({ room_status: 'offline' });
+  const result = await batch;
+  assert.equal(result[0].status, 'playing');
+  f.advance(10001);
+  const stalled = f.service.refreshMany(['alpha'], { preservePlaying: true });
+  assert.equal(f.pending.length, beforeBatch + 2, 'old playback progress cannot mask a stalled stream');
+  f.pending.at(-1).resolve({ room_status: 'public', hls_source: 'https://example.com/live.m3u8' });
+  assert.notEqual((await stalled)[0].status, 'playing');
+  video.currentTime = 3; listeners.get('timeupdate')();
+  for (const patch of [{ paused: true }, { ended: true }, { readyState: 1 }, { seeking: true }, { error: { code: 3 } }, { isConnected: false }]) {
+    const original = Object.fromEntries(Object.keys(patch).map(key => [key, video[key]]));
+    Object.assign(video, patch);
+    const retry = f.service.refreshMany(['alpha'], { preservePlaying: true });
+    f.pending.at(-1).resolve({ room_status: 'public', hls_source: 'https://example.com/live.m3u8' });
+    assert.notEqual((await retry)[0].status, 'playing', 'unhealthy preview is rechecked');
+    Object.assign(video, original);
+  }
+  const forced = f.service.refresh('alpha');
+  assert.equal(listeners.size, 0, 'explicit reconnect disposes its playback listener');
+  f.pending.at(-1).resolve({ room_status: 'public', hls_source: 'https://example.com/live.m3u8' });
+  await forced;
+  f.service.attachVideo('alpha', video);
+  f.service.attachVideo('alpha', video);
+  assert.equal(listeners.size, 1, 'reattachment owns exactly one progress listener');
+  f.service.detachVideo('alpha');
+  assert.equal(listeners.size, 0, 'playback observer removed with its video');
+}
+console.log('Smart refresh: healthy playback bypass, failed/paused/detached checks, label reset and listener disposal passed.');

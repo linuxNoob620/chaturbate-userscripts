@@ -139,6 +139,21 @@ function check(name, fn) {
   catch (error) { failures.push({ name, error }); console.error(`FAIL - ${name}\n${error.stack}`); }
 }
 
+check('Workshop lookup follows room identity after a status-only save', () => {
+  for (const enabled of [false, true]) {
+    const h = harness({ enabled }), store = h.makeStore();
+    const lookup = new Function('store', 'tempRooms', 'recentRoomMap',
+      section('    let savedRoomIndex =', '    function roomIdsForWorkshopRefresh(')
+      + '\nreturn findRoomAny;')(store, [], new Map());
+    assert.equal(lookup('model_two').lastStatus, 'offline');
+    store.patchRoom('model_one', { lastSeenOnline: 1700000060000 });
+    h.drain();
+    store.patchRoom('model_two', { lastStatus: 'online', lastSeenOnline: 1800000000000 });
+    assert.equal(lookup('model_two'), store.state.rooms.find(room => room.id === 'model_two'));
+    assert.equal(lookup('model_two').lastStatus, 'online');
+  }
+});
+
 for (const enabled of [false, true]) {
   const mode = enabled ? 'enabled' : 'disabled';
   check(`shared preference persists immediately with sync ${mode}`, () => {

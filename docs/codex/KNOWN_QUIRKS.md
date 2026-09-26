@@ -70,6 +70,8 @@ Detached dropdown previews must not reuse the previous attachment's URL. On Sept
 
 The Workshop Store's debounced writer handles both configuration edits and runtime status/last-seen updates. Counting every write or treating every pending writer as an edit can falsely reject a manual import and suppress its completion reload. The 16.6.15 guard compares saved/pending semantic settings instead, including custom card sizes but excluding status fields. Confirmed by extracted-source pending/saved-status reproductions; real settings changes must still block stale replacement.
 
+Store persistence rebasing can replace `state.rooms` and its objects without a `rooms`/`all` notification, including with automatic sync disabled. An object-reference index rebuilt only on those notifications becomes stale while filters read current state. In 16.6.24, Workshop validates the array identity before index access. Keep this invariant when adding indexed readers; do not disable persistence/rebasing to mask stale UI. Confirmed by the source-extracted status-save reproduction on September 26.
+
 ## Historical recorder quirk: valid MP4 conversion can discard an unsupported video track
 
 The current userscript no longer records or converts media. Retain this observation for interpreting older recordings/recovery data and frozen extension builds, not as a current userscript execution path.

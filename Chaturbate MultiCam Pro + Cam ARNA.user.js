@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.23
+// @version           16.6.24
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -1599,7 +1599,7 @@ function createSettingsSyncController(deps) {
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.23');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.24');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -1615,7 +1615,7 @@ function createSettingsSyncController(deps) {
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.23');
+  instanceMarker.setAttribute('data-suite-version', '16.6.24');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -2849,7 +2849,7 @@ function createSettingsSyncController(deps) {
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.23',
+    version: '16.6.24',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -4878,6 +4878,8 @@ function createSettingsSyncController(deps) {
       s.status = status;
       delete s.pendingStatus;
       const patch = { lastStatus: status, ...safeExtra };
+      if (status === 'online' || status === 'offline') patch.privateLabel = '';
+      if (isStableRoomStatus(status)) patch.errorMsg = '';
       if (status === 'online') {
         const lastSeen = numeric(room?.lastSeenOnline, 0);
         if (prev !== 'online' || !lastSeen || Date.now() - lastSeen > 60000) patch.lastSeenOnline = Date.now();
@@ -4920,6 +4922,7 @@ function createSettingsSyncController(deps) {
       id = normalizeUsername(id);
       const s = sessions.get(id);
       if (!s) { hardStopRoomVideos(id); return; }
+      s.releasePlaybackWatch?.();
       if (opts.abort !== false && s.abortController) {
         try { s.abortController.abort(); } catch (_) {}
         s.abortController = null;
@@ -4937,6 +4940,7 @@ function createSettingsSyncController(deps) {
       id = normalizeUsername(id);
       const s = sessions.get(id);
       if (s) {
+        s.releasePlaybackWatch?.();
         if (s.hls) { try { s.hls.stopLoad(); } catch (_) {} try { s.hls.detachMedia(); } catch (_) {} try { s.hls.destroy(); } catch (_) {} s.hls = null; }
         hardStopVideo(s.video);
         s.video = null;
@@ -4953,9 +4957,29 @@ function createSettingsSyncController(deps) {
       id = normalizeUsername(id);
       const s = sessions.get(id);
       if (!s) { hardStopVideo(video); return; }
+      s.releasePlaybackWatch?.();
       clearPoll(s);
       s.background = false;
       s.video = video;
+      s.playbackProgressAt = 0;
+      let lastTime = video.currentTime;
+      const onProgress = () => {
+        if (video.currentTime !== lastTime && !video.seeking && !video.paused) s.playbackProgressAt = Date.now();
+        lastTime = video.currentTime;
+      };
+      video.addEventListener?.('timeupdate', onProgress);
+      s.releasePlaybackWatch = () => {
+        video.removeEventListener?.('timeupdate', onProgress);
+        s.playbackProgressAt = 0;
+        s.releasePlaybackWatch = null;
+      };
+    }
+
+    function hasHealthyPlayback(id) {
+      const s = sessions.get(id), video = s?.video;
+      return !!(s?.status === 'online' && video && video.isConnected !== false
+        && !s.userPaused && !video.paused && !video.ended && !video.seeking && !video.error
+        && video.readyState >= 2 && s.playbackProgressAt > 0 && Date.now() - s.playbackProgressAt < 10000);
     }
 
     function schedulePoll(id, ms) {
@@ -5249,6 +5273,7 @@ function createSettingsSyncController(deps) {
       // 强制重连：清理旧 hls + video + timer，再走 connect，避免刷新时双音轨。
       const s = sessions.get(id);
       if (s) {
+        s.releasePlaybackWatch?.();
         clearPoll(s)
         destroyHls(s);
         hardStopVideo(s.video);
@@ -5278,7 +5303,10 @@ function createSettingsSyncController(deps) {
           const index = cursor++;
           const id = unique[index];
           let result;
-          try { result = await probe(id); }
+          try {
+            result = options.preservePlaying && hasHealthyPlayback(id)
+              ? { id, status: 'playing' } : await probe(id);
+          }
           catch (error) { result = { id, status: 'error', error: String(error?.message || error) }; }
           results[index] = result || { id, status: 'unknown' };
           completed++;
@@ -11658,7 +11686,7 @@ function createSettingsSyncController(deps) {
       recentHistoryKey = key;
       const ids = new Set(history.map(room => room.id));
       for (const id of recentRoomMap.keys()) if (!ids.has(id)) {
-        if (!savedRoomIndex.has(id) && !tempRooms.some(room => room.id === id)) service.stop(id);
+        if (!currentSavedRoomIndex().has(id) && !tempRooms.some(room => room.id === id)) service.stop(id);
         recentRoomMap.delete(id);
       }
       for (const row of history) {
@@ -11682,12 +11710,21 @@ function createSettingsSyncController(deps) {
     });
     setTimeout(reconcileRecentRooms, 0);
     let savedRoomIndex = new Map(store.state.rooms.map(room => [room.id, room]));
+    let indexedRooms = store.state.rooms;
+    function currentSavedRoomIndex() {
+      // Persistence rebases replace room objects without a rooms/all notification.
+      if (indexedRooms !== store.state.rooms) {
+        indexedRooms = store.state.rooms;
+        savedRoomIndex = new Map(indexedRooms.map(room => [room.id, room]));
+      }
+      return savedRoomIndex;
+    }
     function regularTemporaryRooms() { return tempRooms; }
     function regularRoomsForView() { return [...store.state.rooms, ...tempRooms]; }
-    function allRoomsForView() { return [...store.state.rooms, ...tempRooms, ...[...recentRoomMap.values()].filter(r => !savedRoomIndex.has(r.id))]; }
+    function allRoomsForView() { return [...store.state.rooms, ...tempRooms, ...[...recentRoomMap.values()].filter(r => !currentSavedRoomIndex().has(r.id))]; }
     function findRoomAny(id) {
       id = String(id || '');
-      return savedRoomIndex.get(id) || tempRooms.find(r => r.id === id) || recentRoomMap.get(id) || null;
+      return currentSavedRoomIndex().get(id) || tempRooms.find(r => r.id === id) || recentRoomMap.get(id) || null;
     }
 
     function roomIdsForWorkshopRefresh(scope = 'all') {
@@ -11742,6 +11779,7 @@ function createSettingsSyncController(deps) {
       const canContinue = () => !document.hidden && !workshopPageSuspended
         && generation === (workshopRefreshState.generation || 0);
       workshopRefreshPromise = service.refreshMany(ids, {
+        preservePlaying: true,
         concurrency: 4,
         spacingMs: 0,
         shouldContinue: canContinue,
@@ -11759,6 +11797,8 @@ function createSettingsSyncController(deps) {
           return results;
         }
         const notes = [];
+        const keptPlaying = results.filter(result => result?.status === 'playing').length;
+        if (keptPlaying) notes.push(`${keptPlaying} playing previews kept`);
         if (workshopRefreshState.throttled) notes.push(`${workshopRefreshState.throttled} deferred`);
         if (workshopRefreshState.failed) notes.push(`${workshopRefreshState.failed} failed`);
         workshopRefreshState.message = LANG === 'zh'
@@ -13038,7 +13078,7 @@ function createSettingsSyncController(deps) {
 
     function openCardOpsMenu(e, roomId, card) {
       const currentRoom = findRoomAny(roomId);
-      const savedRoom = savedRoomIndex.has(roomId);
+      const savedRoom = currentSavedRoomIndex().has(roomId);
       // 关闭已有的卡片菜单
       const existing = document.querySelector('.card-ops-menu-pop');
       if (existing) { closeCardOpsMenu(); return; }
@@ -13567,7 +13607,7 @@ function createSettingsSyncController(deps) {
         const parts = [meta.label];
         if (Number(room.viewerCount) > 0) parts.push(`${Number(room.viewerCount).toLocaleString()} ${LANG === 'zh' ? '观众' : 'viewers'}`);
         if (room.lastSeenOnline && room.lastStatus !== 'online') parts.push(`${LANG === 'zh' ? '最近在线' : 'last online'} ${fmtTime(room.lastSeenOnline)}`);
-        if (room.privateLabel) parts.push(room.privateLabel);
+        if (room.lastStatus === 'private' && room.privateLabel) parts.push(room.privateLabel);
         const text = parts.join(' · ');
         if (c.infoMeta.textContent !== text) c.infoMeta.textContent = text;
       }
@@ -14089,7 +14129,7 @@ function createSettingsSyncController(deps) {
       // 切换 grid class
       if (store.state.settings.activeGroup !== RECENT_FOLLOWED_GROUP_ID) {
         for (const id of recentRoomMap.keys()) {
-          if (!savedRoomIndex.has(id) && !tempRooms.some(room => room.id === id)) service.stop(id);
+          if (!currentSavedRoomIndex().has(id) && !tempRooms.some(room => room.id === id)) service.stop(id);
         }
       }
       grid.classList.toggle('view-grid', !splitActive);
@@ -14115,7 +14155,7 @@ function createSettingsSyncController(deps) {
       const allRoomIds = new Set(allRoomsForView().map(r => r.id));
       for (const [id, c] of cardMap) {
         if (!wantIds.has(id)) {
-          if (!allRoomIds.has(id) || (recentRoomMap.has(id) && !savedRoomIndex.has(id))) disposeCardEntry(id, { stopSession: true });
+          if (!allRoomIds.has(id) || (recentRoomMap.has(id) && !currentSavedRoomIndex().has(id))) disposeCardEntry(id, { stopSession: true });
           else if (c.root.isConnected) parkCardEntry(id);
         }
       }
@@ -14193,6 +14233,7 @@ function createSettingsSyncController(deps) {
     // ---- Store 订阅 ----
     store.subscribe((state, path) => {
       if (path === 'rooms' || path === 'all') {
+        indexedRooms = state.rooms;
         savedRoomIndex = new Map(state.rooms.map(room => [room.id, room]));
       }
       const isSettingsPath = path === 'settings' || (typeof path === 'string' && path.startsWith('settings:'));

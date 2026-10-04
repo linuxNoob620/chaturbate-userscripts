@@ -3,12 +3,17 @@
 ## Deployment
 
 - Primary runtime: Tampermonkey userscript `Chaturbate MultiCam Pro + Cam ARNA.user.js`.
-- Current userscript release: 16.6.25 (`main`, tag `v16.6.25`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
+- Current userscript release: 16.6.26 (`main`, tag `v16.6.26`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
 - Extension builds remain at 16.6.7. They were not modified, rebuilt, packaged, or published for this userscript-only change.
 - Local rollback point: Git tag `backup/pre-16.6.8-workshop-doubletap-20260905` at the 16.6.7 baseline.
 - Version 16.6.24 is installed in the existing Chrome testing-profile Tampermonkey entry; the saved editor matched the complete candidate after reload (line endings normalized). No reinstall or settings reset was performed. The phone reported unauthorized over ADB and was not updated or tested in this pass; its last verified entry is 16.6.22. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
 - Recu.me release rollback point: local tag `backup/pre-recu-16.6.13-20260909` at 16.6.12.
 - Candidate rollback point: `backup/pre-native-portrait-20260905`. Extension outputs are unchanged.
+
+## Optional room-entry theatre mode — 16.6.26
+
+- Workshop → Settings → Playback settings includes **Open rooms in theatre mode**, enabled by default to preserve existing behavior. The browser-local preference is saved through the existing Store and retained during shared sync projection. It applies on the next room load with the native theatre control; disabling it leaves native layout alone rather than forcing an exit. It does not alter Workshop previews, mobile fullscreen or manual theatre controls.
+- Rollback: `backup/pre-theatre-toggle-20261004`. Nine extracted startup cases/settings wiring, 17 Store integration cases, codec local-only roundtrip, the complete userscript build/regression and settings-sync gates, compatibility adapters and scoped independent review passed. Gates used a clean-HEAD export with scoped overlays to preserve unrelated Recu.me edits. Chrome testing port 9223 was unavailable: actual installed UI/browser behavior and phone behavior were not tested or changed.
 
 ## Copied-profile sync recovery — 16.6.25
 

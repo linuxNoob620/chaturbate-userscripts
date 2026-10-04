@@ -27,6 +27,7 @@ function payload() {
           pollMs: { offline: 60000, private: 30000, error: 10000, online: 120000 }, maxStreamHeight: 1080,
           startupGroup: 'last', startOnOnlineFavorites: false, startupView: 'last',
           shortcuts: { focusAdd: '/', refreshAll: 'r', gridView: 'g', pureMode: '' }, videoFit: 'contain', freeZoom: true,
+          defaultTheaterMode: false,
           volume: 0.3, layoutSize: 4, phoneLayoutSize: 2, activeGroup: 'custom', searchQuery: 'local search',
           filter: { onlyOnline: true }, sortBy: 'name', pageIndex: 3, splitViewActive: true,
           splitRoomIds: ['model_one', 'model_two'], videoTransforms: { model_one: { zoom: 2, panX: 20, panY: 0 } },
@@ -63,6 +64,7 @@ check('capture emits approved fields only and splits chat and ignored members', 
   assert.equal(map['chat/language'], 'de');
   assert.equal(map['chat/c2'], 1);
   assert.equal(map['multicam/shortcuts'].pureMode, '');
+  assert.equal(map['multicam/defaultTheaterMode'], undefined);
   for (const key of ['themeName', 'videoControls', 'defaultVideoWidth', 'isTheaterMode', 'hpfltopen', 'recautosave', 'recvp9']) assert.equal(map[`reloaded/${key}`], undefined);
   assert.deepEqual(data, before);
 });

@@ -285,6 +285,18 @@ check('explicit authoritative replacement cancels the old draft and its pending 
   assert.equal(h.persisted().settings.volume, 0);
 });
 
+check('theatre preference persists locally and survives shared sync projection', () => {
+  const h = harness(); const store = h.makeStore({ attach: true });
+  assert.equal(store.state.settings.defaultTheaterMode, true);
+  store.patchSettings({ defaultTheaterMode: false });
+  assert.equal(store.flush(), true);
+  assert.equal(h.persisted().settings.defaultTheaterMode, false);
+  const incoming = h.persisted(); incoming.settings.favoriteFirst = false;
+  h.external(incoming);
+  assert.equal(store.state.settings.defaultTheaterMode, false);
+  assert.equal(h.makeStore().state.settings.defaultTheaterMode, false);
+});
+
 check('ordinary shared projection leaves playback, transforms, card sizes and view state intact', () => {
   const h = harness();
   const store = h.makeStore({ attach: true });

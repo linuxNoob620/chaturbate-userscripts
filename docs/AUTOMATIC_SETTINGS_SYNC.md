@@ -42,6 +42,20 @@ The existing Suite toast style reports syncing, confirmed upload, queued newer e
 
 Keep the enrollment backup, original JSON export and old GitHub snapshot. Do not clear site storage to repair a queue: that can remove unsent edits and the device identity. A forgotten encryption passphrase cannot be recovered by the script. Saved passphrases remain local to the userscript manager; GitHub receives only the encrypted payload.
 
+### Copied browser profiles (Zen / Floorp)
+
+Renaming a device changes its label, not its internal sync identity. Copying a browser profile can copy that identity and queue; the guard then reports **device identity is in use by another writer**.
+
+In the copied browser, update the Suite to 16.6.25 or later, close other Suite tabs, and open **Workshop → Settings → Configure GitHub**. Scroll to **Safe automatic device sync**:
+
+1. Choose **Repair copied browser profile** and confirm.
+2. The operation pauses sync, commits a separate local recovery backup, and replaces only the internal device identity. It does not read/write GitHub or replace visible settings. Credentials and the display name are unchanged.
+3. Choose **Resume / review local changes**, review any paused edits, then **Sync now / refresh status**. Review conflicts rather than automatically choosing all local values.
+
+The recovery record lives in the existing IndexedDB vault under a unique `identity-repair:<account>:<id>` key; the active state's `identityRepairBackup` points to it. It includes the pre-repair canonical queue, journal, settings and mirror, but not GitHub credentials. Do not clear site data. Earlier repair backups are not overwritten. Repair preserves uncertain in-flight/pending edits while discarding copied acknowledgement/resolution authority; differing existing cloud fields become conflicts instead of being overwritten. Journal entries remain replay-safe until normal sync consumes them. Previously paused, untracked edits still require the ordinary resume review.
+
+Repair fails closed if storage is unavailable, data changes mid-repair, or the combined retained queue exceeds its existing 512-intent capacity. It does not prune edits to force success. Run it in the copied profile first, not routinely on every device. Keep independent local JSON backups as well. Automated tests cover the cloned-identity case; actual Zen/Floorp repair remains a separate live acceptance check.
+
 ## Engineering checks
 
 `npm run test:settings-sync` checks the actual bundled protocol, codec, client queue, transactional adapter, controller and extracted Store integration using deterministic synthetic data/fault injection. It covers stale devices, deletion, same-field conflicts, 409/lost responses, edits during upload, cross-tab ordering, queue saturation/draining, projection failure, reviewed resume, and structural conflicts. `tools/test-settings-sync-browser-fixture.js` is an isolated real-Chrome IndexedDB/Web Locks fixture which removes its own disposable database. Neither fixture substitutes for live cross-device acceptance.

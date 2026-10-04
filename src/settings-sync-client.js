@@ -255,6 +255,26 @@ function createSettingsSyncClient(core) {
     return { state, document, operations: copy(state.flight?.operations || []) };
   }
 
+  function repairIdentity(original, device) {
+    validate(original);
+    if (!deviceId(device) || device === original.device || own(original.confirmed.acks, device))
+      fail('repair requires a fresh device identity');
+    const state = copy(original);
+    state.device = device;
+    // A cloned flight's acknowledgements/outcomes cannot identify which browser wrote it.
+    // Retain every intent, but require review instead of borrowing that causal authority.
+    state.pending = [...(state.flight?.intents || []), ...state.pending].map(intent => {
+      const retained = { ...intent, baseRevision: null };
+      delete retained.dependsOn;
+      delete retained.resolves;
+      return retained;
+    });
+    state.flight = null;
+    state.nextSeq = 1;
+    validate(state);
+    return state;
+  }
+
   function view(state) {
     validate(state);
     const map = core.values(state.confirmed);
@@ -265,5 +285,5 @@ function createSettingsSyncClient(core) {
     return map;
   }
 
-  return Object.freeze({ initialize, ingest, prepare, accept, view, validate, limits });
+  return Object.freeze({ initialize, ingest, prepare, accept, repairIdentity, view, validate, limits });
 }

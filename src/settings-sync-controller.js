@@ -347,6 +347,52 @@ function createSettingsSyncController(deps) {
     if (saved) storage.setItem(CONFIG, JSON.stringify({ ...saved, enabled: false }));
     clearTimeout(timer); timer = null;
   }
+  async function repairCopiedProfile() {
+    const saved = config();
+    if (disposed || !saved?.account || saved.enrolling || account() !== saved.account || !locks?.request)
+      throw new Error('No matching enrolled state to repair. Finish setup first.');
+    // Stop other tabs through the shared config before waiting for the current worker.
+    // Repair itself never contacts GitHub or projects/replaces the user's settings.
+    pause();
+    const paused = config();
+    return locks.request(`ziggy-suite-sync-v2:${saved.account}`, async () => {
+      const assertPaused = () => {
+        if (disposed || account() !== saved.account || !same(config(), paused))
+          throw new Error('Sync setup/account changed during repair. No identity was replaced; retry while paused.');
+      };
+      assertPaused();
+      const original = await vault.read(saved.account);
+      assertPaused();
+      if (!original || original.client.confirmed.syncId !== saved.syncId)
+        throw new Error('Matching sync state is missing. Existing data was retained.');
+      const payload = capture(), map = codec.capture(payload), mirror = storage.getItem(MIRROR);
+      const journal = journalEntries(saved.account);
+      let local = original.client;
+      // Fold the WAL into the candidate without removing it. Seen batch IDs make restart
+      // replay safe; capacity/validation failures leave the entire original queue intact.
+      for (const { item } of journal) local = client.ingest(local, { id: item.id, changes: item.changes });
+      const repaired = client.repairIdentity(local, randomId());
+      const backupKey = `identity-repair:${saved.account}:${randomId()}`;
+      await vault.update(backupKey, existing => {
+        if (existing) throw new Error('Repair backup already exists. Nothing was overwritten.');
+        return { state: { account: saved.account, savedAt: now(), state: original, payload, mirror, journal, config: saved } };
+      });
+      const assertUnchanged = () => {
+        assertPaused();
+        if (!same(codec.capture(capture()), map) || storage.getItem(MIRROR) !== mirror
+          || !same(journalEntries(saved.account), journal))
+          throw new Error('Local settings changed during repair. Backup retained; retry without editing settings.');
+      };
+      assertUnchanged();
+      await vault.update(saved.account, current => {
+        assertUnchanged();
+        if (!same(current, original)) throw new Error('Sync queue changed during repair. Backup retained; retry.');
+        return { state: { ...current, client: repaired, sha: '', etag: '', checkedAt: 0,
+          retryAt: 0, failures: 0, identityRepairBackup: backupKey } };
+      });
+      return { backupKey }; // Deliberately paused. Resume reviews any untracked local edits.
+    });
+  }
   async function resume({ reviewedMap = null } = {}) {
     const saved = config();
     if (!saved || account() !== saved.account || !locks?.request) throw new Error('No matching enrolled state to resume.');
@@ -372,5 +418,5 @@ function createSettingsSyncController(deps) {
     });
   }
   return Object.freeze({ enabled, enrolled, beforeWrite, afterWrite, schedule, run, status, enrollmentPreview, enroll,
-    resolveConflict, pause, resume, dispose() { disposed = true; clearTimeout(timer); vault.close(); } });
+    resolveConflict, pause, resume, repairCopiedProfile, dispose() { disposed = true; clearTimeout(timer); vault.close(); } });
 }

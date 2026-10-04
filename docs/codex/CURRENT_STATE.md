@@ -3,12 +3,19 @@
 ## Deployment
 
 - Primary runtime: Tampermonkey userscript `Chaturbate MultiCam Pro + Cam ARNA.user.js`.
-- Current userscript release: 16.6.24 (`main`, tag `v16.6.24`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
+- Current userscript release: 16.6.25 (`main`, tag `v16.6.25`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
 - Extension builds remain at 16.6.7. They were not modified, rebuilt, packaged, or published for this userscript-only change.
 - Local rollback point: Git tag `backup/pre-16.6.8-workshop-doubletap-20260905` at the 16.6.7 baseline.
 - Version 16.6.24 is installed in the existing Chrome testing-profile Tampermonkey entry; the saved editor matched the complete candidate after reload (line endings normalized). No reinstall or settings reset was performed. The phone reported unauthorized over ADB and was not updated or tested in this pass; its last verified entry is 16.6.22. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
 - Recu.me release rollback point: local tag `backup/pre-recu-16.6.13-20260909` at 16.6.12.
 - Candidate rollback point: `backup/pre-native-portrait-20260905`. Extension outputs are unchanged.
+
+## Copied-profile sync recovery — 16.6.25
+
+- GitHub cloud settings includes **Repair copied browser profile**. Changing the device name does not replace its internal sync ID. Repair pauses sync, preserves a unique local IndexedDB backup of settings/canonical queue/WAL/mirror, and atomically installs a fresh internal ID. Credentials and visible settings are unchanged; the repair performs no network request. Resume remains explicit and reviews untracked paused edits.
+- Copied in-flight acknowledgement/dependency/resolution authority is discarded, not copied pending values. Existing conflicts remain; uncertain edits to existing cloud fields require conflict review. WAL replay uses retained batch identities. Storage failures, concurrent changes and capacity overflow refuse replacement without dropping queued data. Recovery instructions: `docs/AUTOMATIC_SETTINGS_SYNC.md`.
+- Rollback: `backup/pre-sync-identity-repair-20261004` at `aefa27a`. Baseline userscript SHA-256 `9C80E5E2AACF30E7295279AE5ECF4CBF90D5C74D0728C000B210A4F080EBAE48`. Focused synthetic sync tests and independent scoped review passed. Actual Zen/Floorp repair, installed UI and multi-device acceptance are unverified; the Chrome testing endpoint was unavailable. No browser settings, real sync queues, GitHub settings documents, phone settings or extension outputs were changed.
+- Final gates: 157 focused sync checks passed (25 core, 26 client, 26 codec, 29 storage, 35 controller, 16 Store integration). Userscript build/full regressions and compatibility-adapter checks passed in an isolated clean-HEAD export with only scoped candidate overlays, preserving unrelated Recu.me edits. Source matches that tested build; SHA-256 `0130BBC7641A6667AE09D3FE19671B3FDDC0CD71A98051642E16853A8D4ABD72`. Documentation whitespace checks passed. No live browser installation is claimed.
 
 ## Playback-aware Workshop refresh — 16.6.24
 

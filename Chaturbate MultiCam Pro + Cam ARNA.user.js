@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.24
+// @version           16.6.25
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -1038,6 +1038,26 @@ function createSettingsSyncClient(core) {
     return { state, document, operations: copy(state.flight?.operations || []) };
   }
 
+  function repairIdentity(original, device) {
+    validate(original);
+    if (!deviceId(device) || device === original.device || own(original.confirmed.acks, device))
+      fail('repair requires a fresh device identity');
+    const state = copy(original);
+    state.device = device;
+    // A cloned flight's acknowledgements/outcomes cannot identify which browser wrote it.
+    // Retain every intent, but require review instead of borrowing that causal authority.
+    state.pending = [...(state.flight?.intents || []), ...state.pending].map(intent => {
+      const retained = { ...intent, baseRevision: null };
+      delete retained.dependsOn;
+      delete retained.resolves;
+      return retained;
+    });
+    state.flight = null;
+    state.nextSeq = 1;
+    validate(state);
+    return state;
+  }
+
   function view(state) {
     validate(state);
     const map = core.values(state.confirmed);
@@ -1048,7 +1068,7 @@ function createSettingsSyncClient(core) {
     return map;
   }
 
-  return Object.freeze({ initialize, ingest, prepare, accept, view, validate, limits });
+  return Object.freeze({ initialize, ingest, prepare, accept, repairIdentity, view, validate, limits });
 }
 
 // I/O coordinator. Canonical state/outbox are transactional; legacy stores are replayable projections.
@@ -1400,6 +1420,52 @@ function createSettingsSyncController(deps) {
     if (saved) storage.setItem(CONFIG, JSON.stringify({ ...saved, enabled: false }));
     clearTimeout(timer); timer = null;
   }
+  async function repairCopiedProfile() {
+    const saved = config();
+    if (disposed || !saved?.account || saved.enrolling || account() !== saved.account || !locks?.request)
+      throw new Error('No matching enrolled state to repair. Finish setup first.');
+    // Stop other tabs through the shared config before waiting for the current worker.
+    // Repair itself never contacts GitHub or projects/replaces the user's settings.
+    pause();
+    const paused = config();
+    return locks.request(`ziggy-suite-sync-v2:${saved.account}`, async () => {
+      const assertPaused = () => {
+        if (disposed || account() !== saved.account || !same(config(), paused))
+          throw new Error('Sync setup/account changed during repair. No identity was replaced; retry while paused.');
+      };
+      assertPaused();
+      const original = await vault.read(saved.account);
+      assertPaused();
+      if (!original || original.client.confirmed.syncId !== saved.syncId)
+        throw new Error('Matching sync state is missing. Existing data was retained.');
+      const payload = capture(), map = codec.capture(payload), mirror = storage.getItem(MIRROR);
+      const journal = journalEntries(saved.account);
+      let local = original.client;
+      // Fold the WAL into the candidate without removing it. Seen batch IDs make restart
+      // replay safe; capacity/validation failures leave the entire original queue intact.
+      for (const { item } of journal) local = client.ingest(local, { id: item.id, changes: item.changes });
+      const repaired = client.repairIdentity(local, randomId());
+      const backupKey = `identity-repair:${saved.account}:${randomId()}`;
+      await vault.update(backupKey, existing => {
+        if (existing) throw new Error('Repair backup already exists. Nothing was overwritten.');
+        return { state: { account: saved.account, savedAt: now(), state: original, payload, mirror, journal, config: saved } };
+      });
+      const assertUnchanged = () => {
+        assertPaused();
+        if (!same(codec.capture(capture()), map) || storage.getItem(MIRROR) !== mirror
+          || !same(journalEntries(saved.account), journal))
+          throw new Error('Local settings changed during repair. Backup retained; retry without editing settings.');
+      };
+      assertUnchanged();
+      await vault.update(saved.account, current => {
+        assertUnchanged();
+        if (!same(current, original)) throw new Error('Sync queue changed during repair. Backup retained; retry.');
+        return { state: { ...current, client: repaired, sha: '', etag: '', checkedAt: 0,
+          retryAt: 0, failures: 0, identityRepairBackup: backupKey } };
+      });
+      return { backupKey }; // Deliberately paused. Resume reviews any untracked local edits.
+    });
+  }
   async function resume({ reviewedMap = null } = {}) {
     const saved = config();
     if (!saved || account() !== saved.account || !locks?.request) throw new Error('No matching enrolled state to resume.');
@@ -1425,7 +1491,7 @@ function createSettingsSyncController(deps) {
     });
   }
   return Object.freeze({ enabled, enrolled, beforeWrite, afterWrite, schedule, run, status, enrollmentPreview, enroll,
-    resolveConflict, pause, resume, dispose() { disposed = true; clearTimeout(timer); vault.close(); } });
+    resolveConflict, pause, resume, repairCopiedProfile, dispose() { disposed = true; clearTimeout(timer); vault.close(); } });
 }
   // END GENERATED SETTINGS SYNC
 
@@ -1599,7 +1665,7 @@ function createSettingsSyncController(deps) {
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.24');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.25');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -1615,7 +1681,7 @@ function createSettingsSyncController(deps) {
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.24');
+  instanceMarker.setAttribute('data-suite-version', '16.6.25');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -2849,7 +2915,7 @@ function createSettingsSyncController(deps) {
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.24',
+    version: '16.6.25',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -4133,6 +4199,12 @@ function createSettingsSyncController(deps) {
         : 'Settings are synchronized with GitHub.', completed && !state.queued && !Object.keys(state.conflicts).length ? 'success' : '');
     });
     add('Pause automatic sync', () => { controller.pause(); setStatus('Automatic sync paused. Queued changes are retained.'); });
+    add('Repair copied browser profile', async () => {
+      if (!confirm('Repair this browser\'s internal sync identity? Use this in the copied profile (for example Floorp), not routinely on every device.\nClose other Suite tabs first. This pauses sync and backs up local settings and the full queue. Pending edits are retained; uncertain edits require conflict review. No cloud data is changed by repair.')) return;
+      flushPendingSuiteSettings();
+      await controller.repairCopiedProfile();
+      setStatus('New internal identity saved; recovery backup retained locally. Sync is paused. Choose Resume / review local changes, then Sync now and review any conflicts. Your device name and GitHub credentials are unchanged.', 'success');
+    });
     add('Resume / review local changes', async () => {
       try { await controller.resume(); }
       catch (error) {

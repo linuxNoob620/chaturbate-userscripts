@@ -308,4 +308,42 @@ test('invalid selectors fail before returning a candidate and cannot mutate inpu
   assert.deepEqual(plain(state), snapshot);
 });
 
+test('identity repair is immutable, preserves view/history, and drops unsafe cloned resolution authority', () => {
+  let state = client.ingest(init(), batch('resolution', 'a', 'A', 'chosen', 1, { resolves: ['phone:1'] }));
+  state = client.prepare(state, seed()).state;
+  const before = plain(state);
+  const repaired = client.repairIdentity(state, 'floorp-fresh');
+  assert.deepEqual(plain(state), before);
+  assert.deepEqual(plain(client.view(repaired)), plain(client.view(state)));
+  assert.deepEqual(plain(repaired.confirmed), plain(state.confirmed));
+  assert.deepEqual(plain(repaired.seen), plain(state.seen));
+  assert(!repaired.pending[0].resolves);
+  assert.throws(() => client.repairIdentity(state, 'pc'), /fresh device/);
+  const used = client.accept(init(), remoteEdit(seed()));
+  assert.throws(() => client.repairIdentity(used, 'phone'), /fresh device/);
+  assert.throws(() => client.repairIdentity(state, '__proto__'), /fresh device/);
+});
+
+test('identity repair keeps rollback protection and does not overwrite deleted cloud fields', () => {
+  const state = client.ingest(init(), batch('edit'));
+  const repaired = client.repairIdentity(state, 'floorp');
+  const removed = core.merge(seed(), [{ device: 'pc', seq: 1, id: 'pc:1', key: 'a', baseRevision: 1, deleted: true }]).document;
+  const result = client.prepare(repaired, removed);
+  assert.equal(result.document.fields.a.deleted, true);
+  assert.equal(result.document.conflicts['floorp:1'].incoming.value, 'B');
+  assert.throws(() => client.prepare(result.state, seed()), /rolled back/);
+  const fork = seed(); fork.syncId = 'another-sync';
+  assert.throws(() => client.prepare(repaired, fork), /identity changed/);
+});
+
+test('repair never clears existing conflicts using a copied resolution request', () => {
+  const conflict = core.merge(seed(), [op('phone', 1, 'a', null, 'incoming')]).document;
+  const state = client.ingest(client.initialize(conflict, 'pc'), batch('resolve', 'a', 'A', 'incoming', 1, { resolves: ['phone:1'] }));
+  const repaired = client.repairIdentity(state, 'floorp');
+  const result = client.prepare(repaired, conflict);
+  assert.deepEqual(plain(result.document.conflicts['phone:1']), plain(conflict.conflicts['phone:1']));
+  assert.equal(result.document.fields.a.value, 'A');
+  assert.equal(result.document.conflicts['floorp:1'].incoming.value, 'incoming');
+});
+
 console.log(`Settings sync client: ${count} focused queue checks passed.`);

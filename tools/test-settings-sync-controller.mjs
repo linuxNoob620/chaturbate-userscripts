@@ -558,6 +558,137 @@ test('enrollment config failures cannot orphan a vault and pending enrollment re
   assert.equal(conflicts[0].current.value, 'no');
 });
 
+test('copied identity repair preserves WAL and local settings, pauses, and retains newer cloud values as conflicts', async () => {
+  const h = fixture();
+  h.edit('local-choice');
+  const original = h.state(), before = h.local, wal = h.wal();
+  const remote = h.remote;
+  remote.document = core.merge(remote.document, [{ device: 'pc', seq: 1, id: 'pc:1',
+    key: 'reloaded/bigthumb', baseRevision: remote.document.fields['reloaded/bigthumb'].revision, value: 'other-browser' }]).document;
+  h.remote = remote;
+  assert.throws(() => client.prepare(original.client, remote.document), /identity is in use/);
+  const repaired = await h.controller.repairCopiedProfile();
+  assert.equal(h.controller.enabled(), false);
+  assert.notEqual(h.state().client.device, 'pc');
+  assert.deepEqual(h.local, before);
+  assert.deepEqual(h.wal(), wal, 'WAL remains replay-safe across a crash');
+  assert.equal(h.requests.length, 0, 'repair is strictly local');
+  const backup = await h.vault.read(repaired.backupKey);
+  assert.deepEqual(backup.state, original);
+  assert.deepEqual(backup.payload, before);
+  assert.equal(backup.journal.length, 1);
+  assert.equal(h.state().client.pending.length, 1);
+  await h.controller.resume({ reviewedMap: codec.capture(h.local) }); await h.controller.run({ force: true });
+  assert.equal(core.values(h.remote.document)['reloaded/bigthumb'], 'other-browser');
+  assert(Object.values(h.remote.document.conflicts).some(item => item.incoming.value === 'local-choice'));
+  assert.equal(h.wal().length, 0);
+});
+
+test('repair retains ambiguous flight and later intent without borrowing old acknowledgements', async () => {
+  const h = fixture(); h.edit('first');
+  h.writeHook = async () => { throw new Error('lost response'); };
+  await assert.rejects(h.controller.run({ force: true }), /lost response/);
+  h.edit('second');
+  const before = h.state();
+  assert(before.client.flight);
+  await h.controller.repairCopiedProfile();
+  const state = h.state().client;
+  assert.equal(state.flight, null); assert.equal(state.nextSeq, 1);
+  assert.deepEqual(state.pending.map(item => item.after.value), ['first', 'second']);
+  assert(state.pending.every(item => item.baseRevision === null && !item.dependsOn && !item.resolves));
+  assert.equal(client.view(state)['reloaded/bigthumb'], 'second');
+});
+
+test('failed repair backup or final commit leaves original queue and WAL intact and sync paused', async () => {
+  for (const failBackup of [true, false]) {
+    const h = fixture(); h.edit('retain-me');
+    const before = h.state(), local = h.local, wal = h.wal();
+    h.vaultFault = proposed => failBackup ? !!proposed.state.journal : proposed.state.client?.device !== 'pc';
+    await assert.rejects(h.controller.repairCopiedProfile(), /commit failure/);
+    assert.deepEqual(h.state(), before); assert.deepEqual(h.local, local); assert.deepEqual(h.wal(), wal);
+    assert.equal(h.controller.enabled(), false); assert.equal(h.requests.length, 0);
+  }
+});
+
+test('repair rejects account changes and preserves edits made while paused for resume review', async () => {
+  const h = fixture(); h.controller.pause(); h.edit('paused-choice');
+  await h.controller.repairCopiedProfile();
+  await assert.rejects(h.controller.resume(), /Review/);
+  assert.equal(h.local.components.reloaded.storage.bigthumb, 'paused-choice');
+  h.account = 'other-account';
+  const before = h.state();
+  await assert.rejects(h.controller.repairCopiedProfile(), /matching enrolled/);
+  assert.deepEqual(h.state(), before);
+});
+
+test('repair aborts on edits/account/config changes after backup without replacing original identity', async () => {
+  for (const mutation of ['settings', 'account', 'config', 'journal']) {
+    const h = fixture(); const original = h.state();
+    h.vaultFault = proposed => {
+      if (proposed.state.journal) {
+        if (mutation === 'settings') h.local = codec.withStorageValue(h.local, 'bigthumb', 'newer');
+        if (mutation === 'account') h.account = 'changed-account';
+        if (mutation === 'config') h.data.set(CONFIG, JSON.stringify({ ...JSON.parse(h.data.get(CONFIG)), enabled: true }));
+        if (mutation === 'journal') h.data.set(WAL + 'new-batch', JSON.stringify({ account: owner, id: 'new-batch', writer: 'new-writer', sequence: 1, changes: [] }));
+      }
+      return false;
+    };
+    await assert.rejects(h.controller.repairCopiedProfile(), /changed during repair/);
+    assert.deepEqual(h.state(), original);
+    assert.equal(h.requests.length, 0);
+  }
+});
+
+test('repair backup survives controller restart and repeated repair never overwrites earlier backups', async () => {
+  const h = fixture(); const original = h.state();
+  const first = await h.controller.repairCopiedProfile();
+  const firstState = h.state(); h.controller.dispose();
+  const recreated = h.newController();
+  const second = await recreated.repairCopiedProfile();
+  assert.notEqual(second.backupKey, first.backupKey);
+  assert.deepEqual((await h.vault.read(first.backupKey)).state, original);
+  assert.deepEqual((await h.vault.read(second.backupKey)).state, firstState);
+  assert.notEqual(h.state().client.device, firstState.client.device);
+  assert.equal(recreated.enabled(), false);
+});
+
+test('repair button requires confirmation, flushes before repair, and explains paused resume', async () => {
+  const suite = fs.readFileSync(new URL('../Chaturbate MultiCam Pro + Cam ARNA.user.js', import.meta.url), 'utf8');
+  const start = suite.indexOf('  function appendAutomaticSyncControls(');
+  const end = suite.indexOf('  function openGithubSyncSetup(', start);
+  assert(start >= 0 && end > start);
+  const nodes = [], events = []; let approved = false;
+  const makeNode = (tag, attrs, label) => {
+    const node = { label, append() {}, replaceChildren() {}, addEventListener(event, action) { this[event] = action; } };
+    nodes.push(node); return node;
+  };
+  const control = { status: async () => ({ queued: 0, conflicts: {}, enabled: false }),
+    repairCopiedProfile: async () => { events.push('repair'); } };
+  const install = new Function('$', 'suiteSettingsSyncBridge', 'confirm', 'flushPendingSuiteSettings',
+    suite.slice(start, end) + '; return appendAutomaticSyncControls;')(makeNode, control,
+    () => approved, () => events.push('flush'));
+  install({ append() {} }, message => events.push(message), (_, action) => action(), () => {});
+  const button = nodes.find(node => node.label === 'Repair copied browser profile'); assert(button);
+  await button.click(); assert.deepEqual(events, []);
+  approved = true; await button.click();
+  assert.deepEqual(events.slice(0, 2), ['flush', 'repair']);
+  assert.match(events[2], /Sync is paused.*Resume/);
+});
+
+test('repair capacity refusal never drops older intents or overflow WAL', async () => {
+  const h = fixture();
+  await h.vault.update(owner, state => {
+    state.client = client.ingest(state.client, { id: 'full', changes: Array.from({ length: 512 }, (_, i) => ({
+      key: `capacity/${i}`, before: { deleted: true }, after: { deleted: false, value: i }, baseRevision: null,
+    })) });
+    return { state };
+  });
+  h.edit('overflow'); const before = h.state(), wal = h.wal();
+  await assert.rejects(h.controller.repairCopiedProfile(), /capacity|list/);
+  assert.deepEqual(h.state(), before); assert.deepEqual(h.wal(), wal);
+  assert.equal(h.controller.enabled(), false); assert.equal(h.requests.length, 0);
+});
+
 let failures = 0;
 for (const { name, action } of cases) {
   try { await action(); console.log(`PASS ${name}`); }

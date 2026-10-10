@@ -169,7 +169,7 @@ test('replacing a tool panel disposes it exactly once', () => {
 });
 
 test('offline badge never appends null and unchanged badge is retained', () => {
-  const badge = new Node('div'), card = { badge, infoMeta: new Node('div'), root: { classList: { remove() {}, add() {} } }, statusEl: new Node('div') };
+  const badge = new Node('div'), card = { badge, infoMeta: new Node('div'), root: { classList: { contains: () => false, remove() {}, add() {} } }, statusEl: new Node('div') };
   const ctx = vm.createContext({ cardMap: new Map([['alpha', card]]), LANG: 'en',
     statusMeta: () => ({ label: 'Online', color: '#fff' }), $: (...args) => new Node(...args), updateCardButtons() {},
     applyMute() {}, resumeWaitingRecording() {},
@@ -308,12 +308,14 @@ test('native action discovery rejects text before layout and measures candidates
   assert.equal([hidden, candidates.at(-1)].find(ctx.visibleNode), candidates.at(-1), 'Array.find index must not be treated as a cached rectangle');
 });
 
-test('known deferred pan work is reproduced without changing final transform semantics', () => {
+test('Workshop pan is frame-coalesced and commits the exact final transform once', () => {
   const listeners = new Map(), cardListeners = new Map(), frames = new Map();
   let state = { x: 0, y: 0, zoom: 2 }, writes = 0, paints = 0;
   const card = { isConnected: true, classList: { add() {}, remove() {} }, addEventListener: (type, fn) => cardListeners.set(type, fn) };
+  const video = { isConnected: true, style: {} };
   const ctx = vm.createContext({ window: { addEventListener: (type, fn) => listeners.set(type, fn) },
-    store: { state: { settings: { freeZoom: true } } }, cardMap: new Map([['a', { video: { style: {} } }]]),
+    document: { hidden: false, addEventListener() {} },
+    store: { state: { settings: { freeZoom: true } } }, cardMap: new Map([['a', { root: card, video }]]),
     getVideoTransform: () => ({ ...state }), sanitizeVideoTransform: value => ({ ...value }),
     patchVideoTransform: (_, value) => { state = { ...state, ...value }; writes++; }, applyVideoTransform: () => paints++,
     requestAnimationFrame: fn => { frames.set(1, fn); return 1; }, cancelAnimationFrame: id => frames.delete(id),
@@ -322,11 +324,14 @@ test('known deferred pan work is reproduced without changing final transform sem
   ctx.installCardZoomHandlers(card, 'a');
   cardListeners.get('mousedown')({ button: 0, clientX: 0, clientY: 0, preventDefault() {} });
   for (let i = 1; i <= 100; i++) listeners.get('mousemove')({ clientX: i, clientY: i * 2 });
-  // Not an optimization pass: transient-only state was withdrawn because cloud
-  // imports could miss it. Preserve this measurement for a revision-aware fix.
-  assert.equal(writes, 100);
+  assert.equal(writes, 0, 'intermediate movement must not mutate persisted settings');
+  assert.equal(paints, 0, 'movement must wait for the coalesced paint');
+  assert.equal(frames.size, 1);
+  const paint = frames.get(1); frames.delete(1); paint();
+  assert.equal(paints, 1); assert.equal(writes, 0);
   listeners.get('mouseup')(); assert.equal(state.x, 100); assert.equal(state.y, 200);
-  listeners.get('mouseup')(); assert.equal(writes, 100);
+  assert.equal(writes, 1, 'release commits the final coordinates');
+  listeners.get('mouseup')(); assert.equal(writes, 1);
 });
 
 let failed = 0;

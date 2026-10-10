@@ -1,6 +1,6 @@
 # Ziggy Chaturbate Suite
 
-This repository publishes one maintained Tampermonkey userscript for both desktop and mobile Chaturbate. The current release is **16.6.16**, with the known limitations below:
+This repository publishes one maintained Tampermonkey userscript for both desktop and mobile Chaturbate. The current release is **16.6.28**, with the known limitations below:
 
 - **Ziggy Chaturbate Suite** — one native-style Workshop and Rooms tool with Archive Search, playback and chat controls, room-tab naming, split view, encrypted settings backup, and desktop/mobile integration. Suite recording and Recorder Hub have been removed; existing saved media/recovery files are not deleted.
 - On Chaturbate's **native mobile site only**, the Suite exposes direct Rooms/Recu.me tabs, an adaptive Workshop Grid, chat-hiding settings and Picture-in-Picture. Existing fullscreen adaptations remain, but complete native fullscreen parity is not established.
@@ -11,6 +11,14 @@ This repository publishes one maintained Tampermonkey userscript for both deskto
 - [Install Ziggy Chaturbate Suite](https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.user.js)
 
 Install the Suite from the same link on every device. Tampermonkey will use its embedded `@updateURL` and `@downloadURL` values for later update checks.
+
+### 16.6.28 — Faster Workshop and central settings
+
+- Ordinary Refresh keeps healthy playing previews and reuses successful recent checks; stale visible rooms are checked first. **Menu and settings → Refresh → Check all now** bypasses the freshness cache without interrupting healthy streams. Per-card Refresh remains a forced reconnect.
+- Unchanged cards/media are retained; repeated status, sizing and sidebar work is reduced. Preview dragging is frame-coalesced with one final saved transform.
+- One expandable settings drawer organizes Layout, Previews, Refresh, Groups/sorting, Chat/room controls, Notifications, Sync/backups and Advanced, both in full Workshop and its dropdown. Filters opens the relevant section directly.
+- New preview-quality preferences default to 480p; existing selections are preserved. Normal rooms still start at up to 1080p. Chrome/Tampermonkey live checks passed; this release has not been newly tested on Quetta or Zen. [Measurements and acceptance boundaries](docs/codex/CURRENT_STATE.md).
+- [Opt-in automatic device sync](docs/AUTOMATIC_SETTINGS_SYNC.md) remains separate from manual snapshot import/export and preserves conflicting newer settings for review.
 
 ### 16.6.16 — Adaptive Workshop grid
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.27
+// @version           16.6.28
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -1665,7 +1665,7 @@ function createSettingsSyncController(deps) {
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.27');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.28');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -1681,7 +1681,7 @@ function createSettingsSyncController(deps) {
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.27');
+  instanceMarker.setAttribute('data-suite-version', '16.6.28');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -2931,7 +2931,7 @@ function createSettingsSyncController(deps) {
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.27',
+    version: '16.6.28',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -2966,6 +2966,9 @@ function createSettingsSyncController(deps) {
     'ignoredusers', 'isTheaterMode', 'newtabon', 'pclean', 'recautosave',
     'recvp9', 'refreshoff', 'reloadedGlobalChatSettingsV1', 'smallsnap',
     'videoControls', 'zoomoff',
+  ]);
+  const RELOADED_CHAT_LANGUAGES = Object.freeze([
+    ['af','Afrikaans'],['sq','Albanian'],['ar','Arabic'],['hy','Armenian'],['az','Azerbaijani'],['ban','Balinese'],['eu','Basque'],['be','Belarusian'],['bn','Bengali'],['bs','Bosnian'],['bg','Bulgarian'],['yue','Cantonese'],['ca','Catalan'],['zh','Chinese'],['co','Corsican'],['hr','Croatian'],['cs','Czech'],['da','Danish'],['nl','Dutch'],['en','English'],['et','Estonian'],['fil','Filipino'],['fi','Finnish'],['fr','French'],['ka','Georgian'],['de','German'],['el','Greek'],['he','Hebrew'],['hi','Hindi'],['hu','Hungarian'],['is','Icelandic'],['id','Indonesian'],['ga','Irish'],['it','Italian'],['ja','Japanese'],['jv','Javanese'],['kk','Kazakh'],['ko','Korean'],['lv','Latvian'],['li','Limburgan'],['lt','Lithuanian'],['lb','Luxembourgish'],['mk','Macedonian'],['mt','Maltese'],['mn','Mongolian'],['my','Myanmar'],['no','Norwegian'],['pap','Papiamento'],['fa','Persian'],['pl','Polish'],['pt','Portuguese'],['pa','Punjabi'],['ro','Romanian'],['ru','Russian'],['sa','Sanskrit'],['sr','Serbian'],['scn','Sicilian'],['sk','Slovak'],['sl','Slovenian'],['so','Somali'],['es','Spanish'],['su','Sundanese'],['sw','Swahili'],['sv','Swedish'],['ta','Tamil'],['th','Thai'],['tr','Turkish'],['uk','Ukrainian'],['ur','Urdu'],['uz','Uzbek'],['vi','Vietnamese'],['yi','Yiddish'],
   ]);
   const INJECTOR_ROUTE_POLL_VISIBLE_MS = 1000;
   const INJECTOR_ROUTE_POLL_HIDDEN_MS = 5000;
@@ -3077,7 +3080,7 @@ function createSettingsSyncController(deps) {
       videoFit: 'contain',
       freeZoom: true,
       defaultTheaterMode: true,
-      maxStreamHeight: 1080,
+      maxStreamHeight: 480,
       videoTransforms: {},
       favoriteFirst: true,
       shortcuts: defaultShortcuts(),
@@ -4237,12 +4240,24 @@ function createSettingsSyncController(deps) {
     refresh().catch(error => setStatus(error.message, 'error'));
   }
 
-  function openGithubSyncSetup(initialMessage = '') {
+  function openGithubSyncSetup(initialMessage = '', host = null) {
     ensureGithubSyncStyle();
-    document.getElementById('roomgrid-github-sync-backdrop')?.remove();
+    if (!host) {
+      const inline = document.querySelector('.rg-settings-drawer .rg-settings-cloud-host');
+      if (inline) {
+        inline.closest('details').open = true;
+        if (inline.childElementCount) {
+          if (initialMessage) { const status = inline.querySelector('.roomgrid-github-status'); if (status) status.textContent = initialMessage; }
+          return;
+        }
+        host = inline;
+      }
+    }
+    if (!host) document.getElementById('roomgrid-github-sync-backdrop')?.remove();
     const current = loadGithubSyncConfig();
     const backdrop = $('div', { id: 'roomgrid-github-sync-backdrop', class: 'roomgrid-github-backdrop' });
-    const panel = $('section', { class: 'roomgrid-github-panel', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'GitHub cloud settings' });
+    const panel = $('section', host ? { class: 'roomgrid-github-panel rg-settings-github', 'aria-label': 'GitHub cloud settings' }
+      : { class: 'roomgrid-github-panel', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'GitHub cloud settings' });
     const close = $('button', { class: 'roomgrid-github-close', type: 'button', title: 'Close', onclick: () => backdrop.remove() }, '×');
     const tokenInput = $('input', { type: 'password', autocomplete: 'off', value: current.token, placeholder: 'Fine-grained GitHub token' });
     const passphraseInput = $('input', { type: 'password', autocomplete: 'new-password', value: current.passphrase || githubSessionPassphrase, placeholder: 'At least 8 characters' });
@@ -4316,7 +4331,7 @@ function createSettingsSyncController(deps) {
       updateGithubSyncMenuLabel();
     } }, 'Disconnect');
     panel.append(
-      $('div', { class: 'roomgrid-github-head' }, [$('h2', {}, 'GitHub cloud backup'), close]),
+      $('div', { class: 'roomgrid-github-head' }, [$('h2', {}, 'GitHub cloud backup'), ...(host ? [] : [close])]),
       $('p', { class: 'roomgrid-github-copy' }, 'Exports upload one encrypted latest backup containing all Suite settings. Imports download it and replace the current Suite model library after confirmation.'),
       $('div', { class: 'roomgrid-github-target' }, `${GITHUB_SYNC_TARGET.owner}/${GITHUB_SYNC_TARGET.repo} · ${GITHUB_SYNC_TARGET.path}`),
       $('label', { class: 'roomgrid-github-field' }, [$('span', {}, 'Device name'), deviceInput]),
@@ -4327,6 +4342,7 @@ function createSettingsSyncController(deps) {
       status,
     );
     appendAutomaticSyncControls(panel, setStatus, withBusy, readAndSave);
+    if (host) { host.appendChild(panel); return { panel }; }
     backdrop.appendChild(panel);
     backdrop.addEventListener('click', event => { if (event.target === backdrop) backdrop.remove(); });
     document.body.appendChild(backdrop);
@@ -5072,6 +5088,13 @@ function createSettingsSyncController(deps) {
         && video.readyState >= 2 && s.playbackProgressAt > 0 && Date.now() - s.playbackProgressAt < 10000);
     }
 
+    function hasFreshContext(id) {
+      const s = sessions.get(normalizeUsername(id));
+      return !!(s && !inFlight.has(normalizeUsername(id)) && isStableRoomStatus(s.status)
+        && s.contextCheckedAt > 0 && Date.now() - s.contextCheckedAt < 60000
+        && (!s.video || hasHealthyPlayback(id)));
+    }
+
     function schedulePoll(id, ms) {
       id = normalizeUsername(id);
       const s = sessions.get(id);
@@ -5189,6 +5212,8 @@ function createSettingsSyncController(deps) {
       if (s.abortController) { try { s.abortController.abort(); } catch (_) {} }
       const ac = new AbortController();
       s.abortController = ac;
+      // Only completed, successful checks may satisfy a later smart refresh.
+      s.contextCheckedAt = 0;
 
       eventBus.emit('room:loading', id);
       setStatus(id, 'loading');
@@ -5239,6 +5264,7 @@ function createSettingsSyncController(deps) {
         s.video = null;
         sessions.set(id, s);
         schedulePoll(id, cfg.offline);
+        s.contextCheckedAt = Date.now();
         return { id, status: 'offline' };
       }
       if (['private', 'hidden', 'away', 'secret', 'group', 'password'].includes(String(data.room_status || '').toLowerCase())) {
@@ -5246,6 +5272,7 @@ function createSettingsSyncController(deps) {
         destroyPlayer(id);
         sessions.set(id, sessions.get(id) || s);
         schedulePoll(id, cfg.private);
+        s.contextCheckedAt = Date.now();
         return { id, status: 'private' };
       }
       if (!data.hls_source) {
@@ -5280,6 +5307,8 @@ function createSettingsSyncController(deps) {
       if (!sessions.has(id) || sessions.get(id) !== s) return { id, status: 'aborted' };
       if (!sameActiveStream) eventBus.emit('room:online', { id, hlsSource: data.hls_source });
       if (sessions.has(id) && sessions.get(id) === s) schedulePoll(id, cfg.online || onlinePollMs());
+      if (sessions.get(id) !== s) return { id, status: 'aborted' };
+      s.contextCheckedAt = Date.now();
       return { id, status: 'online' };
     }
 
@@ -5395,7 +5424,10 @@ function createSettingsSyncController(deps) {
           let result;
           try {
             result = options.preservePlaying && hasHealthyPlayback(id)
-              ? { id, status: 'playing' } : await probe(id);
+              ? { id, status: 'playing' }
+              : options.reuseFresh && options.force !== true && hasFreshContext(id)
+                ? { id, status: 'fresh', roomStatus: sessions.get(id).status }
+                : await probe(id);
           }
           catch (error) { result = { id, status: 'error', error: String(error?.message || error) }; }
           results[index] = result || { id, status: 'unknown' };
@@ -5429,7 +5461,7 @@ function createSettingsSyncController(deps) {
     function stopAll() { for (const id of [...sessions.keys()]) stop(id); if (!isolateMedia) stopAllPageMedia(); }
     function has(id) { id = normalizeUsername(id); return sessions.has(id); }
 
-    return { start, startBackground, promote, stop, stopAll, refresh, probe, refreshAll, refreshMany, attachVideo, detachVideo, startHls, has, pause, resume, togglePause, isPaused, pauseAll, resumeAll, refreshQuality, setQualityCap, clearQualityCaps };
+    return { start, startBackground, promote, stop, stopAll, refresh, probe, refreshAll, refreshMany, hasFreshContext, attachVideo, detachVideo, startHls, has, pause, resume, togglePause, isPaused, pauseAll, resumeAll, refreshQuality, setQualityCap, clearQualityCaps };
   }
 
   /* =============================================================
@@ -10288,6 +10320,22 @@ function createSettingsSyncController(deps) {
         .rg-drawer-control > select,.rg-drawer-control > input { width:100%!important; box-sizing:border-box; }
         .rg-control-drawer .menu-pop { position:static!important; inset:auto!important; display:block!important; width:100%!important; min-width:0!important; max-height:none!important; overflow:visible!important; padding:0!important; border:0!important; border-radius:0!important; box-shadow:none!important; background:transparent!important; }
         .rg-control-drawer .menu-pop button { width:100%; min-height:38px; border-radius:3px!important; }
+        .rg-settings-drawer { width:min(520px,96vw); }
+        .rg-settings-section > summary,.rg-settings-subsection > summary { min-height:44px; box-sizing:border-box; padding:12px 10px; cursor:pointer; color:#68b5f0; font-size:14px; font-weight:700; }
+        .rg-settings-section > summary:focus-visible,.rg-settings-subsection > summary:focus-visible { outline:2px solid #68b5f0; outline-offset:-2px; }
+        .rg-settings-section[open] > summary { background:#17202a; }
+        .rg-settings-section-body { padding:5px 5px 10px; }
+        .rg-settings-subsection { border-top:1px solid #2d3e50; margin-top:8px; }
+        .rg-settings-form { display:grid; gap:8px; min-width:0; }
+        .rg-settings-form .toggle { display:flex; align-items:center; gap:9px; min-height:38px; color:var(--text); font-size:12px; }
+        .rg-settings-form .toggle input { width:20px; height:20px; flex:0 0 auto; }
+        .rg-settings-drawer .ctrl-input { max-width:100%; box-sizing:border-box; }
+        .rg-settings-drawer .roomgrid-modal-actions { flex-wrap:wrap; }
+        .rg-settings-drawer .roomgrid-github-panel.rg-settings-github { width:100%; max-height:none; padding:8px 0; overflow:visible; border:0; border-radius:0; box-shadow:none; background:transparent; color:var(--text); }
+        .rg-settings-drawer .rg-settings-github .roomgrid-github-actions { grid-template-columns:1fr; }
+        .rg-settings-drawer .rg-settings-github h2 { font-size:15px; }
+        .rg-settings-drawer .rg-settings-github .roomgrid-github-target { overflow-wrap:anywhere; }
+        @media(max-width:420px) { .rg-settings-drawer .rg-drawer-control { grid-template-columns:1fr; gap:5px; }.rg-settings-drawer .rg-settings-form > div[style*="grid-template-columns"] { grid-template-columns:1fr!important; } }
         .cam-card { display:flex!important; flex-direction:column!important; overflow:hidden!important; }
         .cam-media { position:relative; min-width:0; min-height:0; flex:1; overflow:hidden; background:#000; }
         .cam-info { box-sizing:border-box; min-height:48px; display:flex; align-items:center; gap:8px; padding:6px 8px; border-top:1px solid #2d3e50; background:#202c39; }
@@ -11082,12 +11130,12 @@ function createSettingsSyncController(deps) {
       title: 'Menu and settings', 'aria-label': 'Menu and settings',
       html: trustedHtml(iconSvg('settings', 20)), onclick: () => openMoreMenu(controlsMenu) });
     const filtersButton = $('button', { class: 'rg-native-icon rg-filters-button', type: 'button',
-      onclick: () => openMoreMenu(filtersButton) }, LANG === 'zh' ? '筛选' : 'Filters');
+      onclick: () => openMoreMenu(filtersButton, 'groups') }, LANG === 'zh' ? '筛选' : 'Filters');
     refreshAllBtn.classList.add('rg-native-icon');
     refreshAllBtn.innerHTML = iconSvg('refresh', 22);
     refreshAllBtn.setAttribute('aria-label', 'Refresh Workshop');
     refreshAllBtn.title = 'Refresh Workshop · R';
-    refreshAllBtn.onclick = () => refreshWorkshopRooms({ scope: 'all', force: true });
+    refreshAllBtn.onclick = () => refreshWorkshopRooms({ scope: 'all', force: false });
     toolbar.append(categories, $('div', { class: 'rg-native-actions' }, [
       refreshAllBtn, filtersButton, controlsMenu,
     ]));
@@ -11107,14 +11155,14 @@ function createSettingsSyncController(deps) {
     }
     function fullVisibleRooms() { return visibleRooms(); }
     function renderVisibleRooms() { return fullVisibleRooms(); }
-    function syncLayoutControls() {
+    function syncLayoutControls(total = fullVisibleRooms().length) {
       const size = layoutSize();
-      const total = fullVisibleRooms().length;
       layoutSel.hidden = false;
       layoutSel.disabled = false;
       layoutSel.value = String(size);
       layoutSel.title = LANG === 'zh' ? '卡片密度' : 'Card density';
-      visibleCountEl.textContent = LANG === 'zh' ? `${total} 个房间` : `${total} rooms`;
+      const text = LANG === 'zh' ? `${total} 个房间` : `${total} rooms`;
+      if (visibleCountEl.textContent !== text) visibleCountEl.textContent = text;
     }
 
     function applyGridSize() {
@@ -11170,14 +11218,15 @@ function createSettingsSyncController(deps) {
 
     function applyCardGridSizing(card, room) {
       if (!card) return;
-      card.classList.remove('is-focus-main');
-      card.style.gridColumn = '';
-      card.style.gridRow = '';
-      card.style.width = '100%';
-      card.style.height = 'auto';
-      card.style.maxWidth = '';
-      card.style.maxHeight = '';
-      card.style.aspectRatio = 'auto';
+      for (const name of ['is-focus-main', 'is-split-card']) {
+        if (card.classList.contains(name)) card.classList.remove(name);
+      }
+      // Write the final grid state once, rather than reset/undo it every render.
+      const styles = { gridColumn: '', gridRow: '', width: '100%', height: 'auto',
+        flex: '', margin: '', maxWidth: '', maxHeight: '', aspectRatio: 'auto' };
+      for (const [key, value] of Object.entries(styles)) {
+        if (card.style[key] !== value) card.style[key] = value;
+      }
     }
 
     function resetCardSizing(card) {
@@ -11220,6 +11269,7 @@ function createSettingsSyncController(deps) {
     let workshopRefreshUi = { status: refreshProgress, label: progressLabel, fill: progressFill, track: progressTrack, button: refreshAllBtn, summary: null };
     let workshopSidebarCountEls = new Map();
     let workshopCountRaf = 0;
+    let workshopSidebarKey = '';
 
     function workshopRefreshProgressText() {
       if (workshopRefreshState.busy) {
@@ -11271,7 +11321,6 @@ function createSettingsSyncController(deps) {
     }
 
     function renderSidebar() {
-      workshopSidebarCountEls = new Map();
       categoryButtons.forEach((button, id) => {
         const active = store.state.settings.activeGroup === id;
         button.classList.toggle('active', active);
@@ -11289,7 +11338,6 @@ function createSettingsSyncController(deps) {
         sidebar.style.setProperty('display', 'none', 'important');
         return;
       }
-      sidebar.replaceChildren();
       const collapsed = !!store.state.settings.sidebarCollapsed;
       sidebar.dataset.collapsed = collapsed ? 'true' : 'false';
       sidebar.classList.toggle('is-collapsed', collapsed);
@@ -11313,6 +11361,18 @@ function createSettingsSyncController(deps) {
       sidebar.style.setProperty('flex-basis', sidebarWidth, 'important');
       sidebar.style.setProperty('padding', '10px 8px', 'important');
       sidebar.style.setProperty('border-width', '1px', 'important');
+
+      const sidebarKey = JSON.stringify([store.state.groups, store.state.settings.activeGroup, phoneSidebar]);
+      if (workshopSidebarKey === sidebarKey && sidebar.firstElementChild) {
+        const input = sidebar.querySelector('.sidebar-search');
+        if (input && document.activeElement !== input && input.value !== (store.state.settings.searchQuery || '')) {
+          input.value = store.state.settings.searchQuery || '';
+        }
+        return;
+      }
+      workshopSidebarKey = sidebarKey;
+      workshopSidebarCountEls = new Map();
+      sidebar.replaceChildren();
 
       const counts = countByGroup();
       const sidebarRooms = regularRoomsForView();
@@ -11468,6 +11528,7 @@ function createSettingsSyncController(deps) {
     let mediaVisibilityRaf = 0;
     let mediaRequestPumpTimer = 0;
     let mediaRequestScopeSignature = '';
+    let cardVisibilityRead = null;
     // Keep request bursts controlled while allowing a nine-card page to begin
     // all preview requests in roughly 2.4 seconds instead of six seconds.
     const MEDIA_REQUEST_STAGGER_MS = 300;
@@ -11491,8 +11552,12 @@ function createSettingsSyncController(deps) {
       if (document.hidden || workshopPageSuspended) return false;
       const card = cardMap.get(roomId)?.root;
       if (!card?.isConnected || !grid.contains(card)) return false;
-      const cardRect = card.getBoundingClientRect();
-      const gridRect = grid.getBoundingClientRect();
+      let cardRect = cardVisibilityRead?.cards.get(card);
+      if (!cardRect) {
+        cardRect = card.getBoundingClientRect();
+        cardVisibilityRead?.cards.set(card, cardRect);
+      }
+      const gridRect = cardVisibilityRead?.grid || grid.getBoundingClientRect();
       const top = Math.max(0, gridRect.top), left = Math.max(0, gridRect.left);
       const bottom = Math.min(innerHeight, gridRect.bottom), right = Math.min(innerWidth, gridRect.right);
       return bottom > top && right > left && cardRect.width > 0 && cardRect.height > 0
@@ -11647,15 +11712,19 @@ function createSettingsSyncController(deps) {
     function reconcileWorkshopMediaVisibility() {
       mediaVisibilityRaf = 0;
       if (document.hidden || workshopPageSuspended) return;
-      cardMap.forEach((entry, id) => {
-        if (shouldAttachRoomMedia(id)) {
-          mediaViewportIds.add(id);
-          requestRoomMediaIfNeeded(id);
-        } else {
-          mediaViewportIds.delete(id);
-          releaseRoomMediaIfPossible(id);
-        }
-      });
+      // Geometry is frame-local: reuse it within this pass, never across scrolls.
+      cardVisibilityRead = { grid: grid.getBoundingClientRect(), cards: new Map() };
+      try {
+        cardMap.forEach((entry, id) => {
+          if (shouldAttachRoomMedia(id)) {
+            mediaViewportIds.add(id);
+            requestRoomMediaIfNeeded(id);
+          } else {
+            mediaViewportIds.delete(id);
+            releaseRoomMediaIfPossible(id);
+          }
+        });
+      } finally { cardVisibilityRead = null; }
     }
 
     function scheduleWorkshopMediaVisibility() {
@@ -11826,14 +11895,16 @@ function createSettingsSyncController(deps) {
       else rooms = store.state.rooms.filter(room => roomInGroup(room, scope));
       const ids = rooms.map(room => room.id);
       const visible = new Set(ids.filter(id => mediaViewportIds.has(id) || isCardNearViewport(id)));
-      return ids.sort((a, b) => Number(!visible.has(a)) - Number(!visible.has(b)));
+      const priority = new Map(ids.map(id => [id, visible.has(id) ? (service.hasFreshContext(id) ? 1 : 0) : 2]));
+      return ids.sort((a, b) => priority.get(a) - priority.get(b));
     }
 
     async function refreshWorkshopRooms(options = {}) {
       const scope = options.scope || 'all';
       const defer = () => {
         workshopRefreshState.deferred ||= new Map();
-        workshopRefreshState.deferred.set(scope, { ...options, automatic: false });
+        const previous = workshopRefreshState.deferred.get(scope);
+        workshopRefreshState.deferred.set(scope, { ...options, force: options.force === true || previous?.force === true, automatic: false });
         workshopRefreshState.message = LANG === 'zh' ? '刷新已暂停；返回工作台后继续' : 'Refresh paused — resumes when Workshop is visible';
         updateWorkshopRefreshUi();
       };
@@ -11841,7 +11912,8 @@ function createSettingsSyncController(deps) {
       const requestedIds = roomIdsForWorkshopRefresh(scope);
       if (workshopRefreshPromise) {
         const active = workshopRefreshPromise;
-        if (requestedIds.every(id => workshopRefreshRoomIds.has(id))) return active;
+        if (requestedIds.every(id => workshopRefreshRoomIds.has(id))
+          && (options.force !== true || workshopRefreshState.force)) return active;
         // A narrower pass cannot satisfy this request. Serialize the broader pass
         // behind it rather than starting a competing refresh or losing its scope.
         try { await active; } catch (_) {}
@@ -11849,10 +11921,10 @@ function createSettingsSyncController(deps) {
       }
       const freshnessKey = scope === ONLINE_GROUP_ID ? 'all' : scope;
       workshopRefreshState.lastByScope ||= new Map();
-      if (options.automatic && Date.now() - Number(workshopRefreshState.lastByScope.get(freshnessKey) || 0) < 60000) return null;
+      if (options.automatic && options.force !== true && Date.now() - Number(workshopRefreshState.lastByScope.get(freshnessKey) || 0) < 60000) return null;
       const ids = requestedIds;
       clearTimeout(workshopRefreshState.clearTimer);
-      Object.assign(workshopRefreshState, { busy: true, completed: 0, total: ids.length, failed: 0, throttled: 0, message: '' });
+      Object.assign(workshopRefreshState, { busy: true, force: options.force === true, completed: 0, total: ids.length, failed: 0, throttled: 0, message: '' });
       refreshAllBtn.disabled = true;
       scheduleSidebarRender();
       updateWorkshopRefreshUi();
@@ -11870,6 +11942,8 @@ function createSettingsSyncController(deps) {
         && generation === (workshopRefreshState.generation || 0);
       workshopRefreshPromise = service.refreshMany(ids, {
         preservePlaying: true,
+        reuseFresh: true,
+        force: options.force === true,
         concurrency: 4,
         spacingMs: 0,
         shouldContinue: canContinue,
@@ -11888,14 +11962,18 @@ function createSettingsSyncController(deps) {
         }
         const notes = [];
         const keptPlaying = results.filter(result => result?.status === 'playing').length;
+        const keptFresh = results.filter(result => result?.status === 'fresh').length;
         if (keptPlaying) notes.push(`${keptPlaying} playing previews kept`);
+        if (keptFresh) notes.push(`${keptFresh} recent checks reused`);
         if (workshopRefreshState.throttled) notes.push(`${workshopRefreshState.throttled} deferred`);
         if (workshopRefreshState.failed) notes.push(`${workshopRefreshState.failed} failed`);
         workshopRefreshState.message = LANG === 'zh'
           ? `工作台已刷新${notes.length ? ` · ${notes.join(' · ')}` : ''}`
           : `Workshop refreshed${notes.length ? ` · ${notes.join(' · ')}` : ''}`;
         workshopRefreshState.lastCompletedAt = Date.now();
-        workshopRefreshState.lastByScope.set(freshnessKey, workshopRefreshState.lastCompletedAt);
+        if (!workshopRefreshState.failed && !workshopRefreshState.throttled) {
+          workshopRefreshState.lastByScope.set(freshnessKey, workshopRefreshState.lastCompletedAt);
+        } else workshopRefreshState.lastByScope.delete(freshnessKey);
         return results;
       } finally {
         workshopRefreshState.busy = false;
@@ -11929,7 +12007,7 @@ function createSettingsSyncController(deps) {
 
     async function refreshAllSources() {
       const scope = store.state.settings.activeGroup || DEFAULT_GROUP_ID;
-      return refreshWorkshopRooms({ scope, force: true });
+      return refreshWorkshopRooms({ scope, force: false });
     }
     function isDirectMediaUrl(url) { return /\.(m3u8|mp4|webm|mov|m4v)(?:[?#].*)?$/i.test(String(url || '')); }
     function isHlsUrl(url) { return /\.m3u8(?:[?#].*)?$/i.test(String(url || '')) || /m3u8/i.test(String(url || '')); }
@@ -12368,9 +12446,14 @@ function createSettingsSyncController(deps) {
     function updateCardButtons(id) {
       const c = cardMap.get(id);
       if (!c) return;
-      const savedRoom = store.state.rooms.find(r => r.id === id);
+      const savedRoom = currentSavedRoomIndex().get(id);
       const room = findRoomAny(id);
       const favorite = !!savedRoom && roomInGroup(savedRoom, FAVORITE_GROUP_ID);
+      const splitSelected = !!room && store.state.settings.splitRoomIds.includes(room.id);
+      const key = JSON.stringify([favorite, room?.lastStatus === 'online', splitSelected,
+        room?.muted, store.state.settings.activeGroup]);
+      if (c.buttonsStateKey === key) return;
+      c.buttonsStateKey = key;
       if (c.favoriteBtn) {
         setElementHint(c.favoriteBtn, favorite ? t('opFavoriteRemove') : t('opFavoriteAdd'));
         c.favoriteBtn.classList.toggle('favorite-active', favorite);
@@ -12378,7 +12461,6 @@ function createSettingsSyncController(deps) {
       }
       c.root.classList.toggle('is-favorite', favorite);
       c.root.classList.toggle('favorite-online', favorite && room?.lastStatus === 'online');
-      const splitSelected = !!room && store.state.settings.splitRoomIds.includes(room.id);
       if (c.splitBtn) {
         setElementHint(c.splitBtn, splitSelected ? t('splitAlreadyAdded') : t('opAddSplit'));
         c.splitBtn.classList.toggle('split-active', splitSelected);
@@ -12386,7 +12468,10 @@ function createSettingsSyncController(deps) {
       }
       c.root.classList.toggle('is-split-selected', splitSelected);
       if (c.muteBtn && room) {
-        setTrustedHtml(c.muteBtn, trustedHtml(iconSvg(room.muted ? 'volume' : 'volumeOff', 15)));
+        if (c.muteIconState !== !!room.muted) {
+          c.muteIconState = !!room.muted;
+          setTrustedHtml(c.muteBtn, trustedHtml(iconSvg(room.muted ? 'volume' : 'volumeOff', 15)));
+        }
         setElementHint(c.muteBtn, room.muted ? (LANG === 'zh' ? '取消静音' : 'Unmute') : (LANG === 'zh' ? '静音' : 'Mute'));
       }
       if (c.removeBtn) {
@@ -12416,7 +12501,42 @@ function createSettingsSyncController(deps) {
       }
     }
 
+    let workshopInlineToolHost = null;
+    function withWorkshopInlineToolHost(host, action) {
+      const previous = workshopInlineToolHost;
+      workshopInlineToolHost = host;
+      try { return action(); } finally { workshopInlineToolHost = previous; }
+    }
+
     function openToolPanel(title, build) {
+      const inlineHost = typeof workshopInlineToolHost === 'undefined' ? null : workshopInlineToolHost;
+      if (inlineHost) {
+        inlineHost.__roomgridDispose?.();
+        inlineHost.__roomgridReopen = null;
+        inlineHost.replaceChildren();
+        const body = $('div', { class: 'rg-settings-form' });
+        const status = $('div', { class: 'roomgrid-modal-hint', role: 'status' });
+        let cleanup = null, closed = false;
+        const dispose = () => {
+          if (closed) return;
+          closed = true;
+          try { cleanup?.(); } finally { inlineHost.__roomgridDispose = null; }
+        };
+        const close = outcome => {
+          if (closed) return;
+          if (outcome === 'saved') { status.textContent = LANG === 'zh' ? '已保存。' : 'Saved on this device.'; return; }
+          dispose();
+          inlineHost.replaceChildren();
+          inlineHost.__roomgridReopen = () => withWorkshopInlineToolHost(inlineHost, () => openToolPanel(title, build));
+          const section = inlineHost.closest('details');
+          if (section) section.open = false;
+        };
+        inlineHost.__roomgridDispose = dispose;
+        inlineHost.append(body, status);
+        try { cleanup = build?.(body, close) || null; if (closed) cleanup?.(); }
+        catch (error) { dispose(); inlineHost.replaceChildren(); throw error; }
+        return { body, close };
+      }
       closeTransientUi();
       document.querySelectorAll('.roomgrid-modal-backdrop').forEach(el => { try { if (el.__roomgridDispose) el.__roomgridDispose(); else el.remove(); } catch (_) {} });
       const backdrop = $('div', { class: 'roomgrid-modal-backdrop' });
@@ -12543,6 +12663,12 @@ function createSettingsSyncController(deps) {
           ['favorites', t('splitFavorites')],
           ['all', t('splitAllSaved')],
         ];
+        const previewSections = [];
+        for (let ancestor = body.parentElement; ancestor; ancestor = ancestor.parentElement) {
+          if (ancestor.tagName === 'DETAILS') previewSections.push(ancestor);
+        }
+        const previewHostVisible = () => !document.hidden && !workshopPageSuspended
+          && body.isConnected && previewPanel.isConnected && previewSections.every(section => section.open);
 
         function closePreview() {
           clearInterval(previewTimer);
@@ -12552,13 +12678,13 @@ function createSettingsSyncController(deps) {
           previewImage.removeAttribute('src');
         }
         function refreshPreview() {
-          if (!previewRoom || document.hidden || workshopPageSuspended || !previewPanel.isConnected) return;
+          if (!previewRoom || !previewHostVisible()) return;
           previewFallback = false;
           previewStatus.textContent = statusMeta(previewRoom.lastStatus).label;
           previewImage.src = splitPreviewSnapshotUrl(previewRoom.id, false);
         }
         function openPreview(room) {
-          if (document.hidden || workshopPageSuspended || !body.isConnected) return;
+          if (!previewHostVisible()) return;
           clearInterval(previewTimer);
           previewRoom = room;
           previewName.textContent = room.id;
@@ -12579,10 +12705,10 @@ function createSettingsSyncController(deps) {
           requestAnimationFrame(() => previewPanel.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
         }
         previewImage.addEventListener('load', () => {
-          if (previewRoom) previewStatus.textContent = statusMeta(previewRoom.lastStatus).label;
+          if (previewRoom && previewHostVisible()) previewStatus.textContent = statusMeta(previewRoom.lastStatus).label;
         });
         previewImage.addEventListener('error', () => {
-          if (!previewRoom || document.hidden || workshopPageSuspended || !previewPanel.isConnected) return;
+          if (!previewRoom || !previewHostVisible()) return;
           if (!previewFallback) {
             previewFallback = true;
             previewImage.src = splitPreviewSnapshotUrl(previewRoom.id, true);
@@ -12675,19 +12801,22 @@ function createSettingsSyncController(deps) {
         render();
         setTimeout(() => search.focus(), 0);
         const syncPreviewVisibility = () => {
-          clearInterval(previewTimer);
-          previewTimer = 0;
-          if (document.hidden || workshopPageSuspended) previewImage.removeAttribute('src');
-          else if (previewRoom && previewPanel.isConnected) {
+          if (!previewHostVisible()) {
+            clearInterval(previewTimer);
+            previewTimer = 0;
+            previewImage.removeAttribute('src');
+          } else if (previewRoom && !previewTimer) {
             refreshPreview();
             previewTimer = setInterval(refreshPreview, 2200);
           }
         };
+        previewSections.forEach(section => section.addEventListener('toggle', syncPreviewVisibility));
         document.addEventListener('visibilitychange', syncPreviewVisibility);
         window.addEventListener('pagehide', syncPreviewVisibility);
         window.addEventListener('pageshow', syncPreviewVisibility);
         return () => {
           closePreview();
+          previewSections.forEach(section => section.removeEventListener('toggle', syncPreviewVisibility));
           document.removeEventListener('visibilitychange', syncPreviewVisibility);
           window.removeEventListener('pagehide', syncPreviewVisibility);
           window.removeEventListener('pageshow', syncPreviewVisibility);
@@ -12846,7 +12975,7 @@ function createSettingsSyncController(deps) {
         const account = followedAccount();
         if (account) body.append($('a', { class: 'ctrl-btn', href: `${location.origin}/p/${encodeURIComponent(account)}/?tab=settings`, target: '_blank', rel: 'noopener' }, 'Chaturbate notification settings'));
         if (store.state.settings.notifyOnline) body.append($('p', { class: 'roomgrid-modal-hint' },
-          'Separate local Workshop alerts are currently enabled in Layout settings. Those use the Workshop/Favorites filter and can notify independently of the native bell.'));
+          'Separate local Workshop alerts are currently enabled in Notifications settings. Those use the Workshop/Favorites filter and can notify independently of the native bell.'));
         void requestNativeRoomNotifications(roomId, undefined, controller.signal).then(result => {
           if (controller.signal.aborted) return;
           current = result;
@@ -12860,34 +12989,26 @@ function createSettingsSyncController(deps) {
 
     function openLayoutSettings() {
       openToolPanel(t('layoutSettings'), (body, close) => {
-        const layout = $('select', { class: 'ctrl-input' }, [2, 4, 6, 9].map(n => $('option', { value: String(n), selected: Number(store.state.settings.layoutSize) === n }, LANG === 'zh' ? `${n} 位可见` : `${n} visible`)));
+        const layout = $('select', { class: 'ctrl-input' }, [[2, 'Large'], [4, 'Standard'], [6, 'Compact'], [9, 'Dense']].map(([n, label]) => $('option', { value: String(n), selected: Number(store.state.settings.layoutSize) === n }, LANG === 'zh' ? `密度 ${n}` : label)));
         const phoneLayout = $('select', { class: 'ctrl-input' }, [2, 4, 6, 9].map(n => $('option', { value: String(n), selected: Number(store.state.settings.phoneLayoutSize) === n }, LANG === 'zh' ? `${n} 位可见` : `${n} visible`)));
-        const notify = $('input', { type: 'checkbox', checked: !!store.state.settings.notifyOnline });
-        const notifyFavoritesOnly = $('input', { type: 'checkbox', checked: !!store.state.settings.notifyFavoritesOnly, disabled: !store.state.settings.notifyOnline });
         const phoneModeAuto = $('input', { type: 'checkbox', checked: store.state.settings.phoneModeAuto !== false });
-        notify.addEventListener('change', () => { notifyFavoritesOnly.disabled = !notify.checked; });
         body.append(
           $('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px' } }, [
-            $('label', { style: { display: 'grid', gap: '5px', fontSize: '12px', color: 'var(--text-muted)' } }, [LANG === 'zh' ? '网格单屏可见' : 'Grid visible models', layout]),
+            $('label', { style: { display: 'grid', gap: '5px', fontSize: '12px', color: 'var(--text-muted)' } }, [LANG === 'zh' ? '网格密度' : 'Adaptive grid density', layout]),
             $('label', { style: { display: 'grid', gap: '5px', fontSize: '12px', color: 'var(--text-muted)' } }, [LANG === 'zh' ? '手机单屏可见' : 'Phone visible models', phoneLayout]),
           ]),
           $('label', { class: 'toggle', style: { marginTop: '10px' } }, [phoneModeAuto, t('phoneAutoMode')]),
-          $('label', { class: 'toggle', style: { marginTop: '10px' } }, [notify, t('notifyOnline')]),
-          $('label', { class: 'toggle', style: { marginTop: '8px' } }, [notifyFavoritesOnly, t('notifyFavoritesOnly')]),
+          $('div', { class: 'roomgrid-modal-hint' }, LANG === 'zh' ? '列数随可用宽度自动调整。' : 'Columns adapt to available width. Density changes card size, not a fixed column count.'),
           $('div', { class: 'roomgrid-modal-actions' }, [
             $('button', { class: 'ctrl-btn', onclick: close }, t('importReviewCancel')),
-            $('button', { class: 'ctrl-btn primary', onclick: async () => {
-              if (notify.checked && !store.state.settings.notifyOnline) await Notify.request();
-              if (!body.isConnected) return;
+            $('button', { class: 'ctrl-btn primary', onclick: () => {
               store.patchSettings({
                 layoutSize: Number(layout.value),
                 phoneLayoutSize: Number(phoneLayout.value),
                 phoneModeAuto: !!phoneModeAuto.checked,
                 ...(phoneEnvironment && phoneModeAuto.checked ? { viewMode: 'phone', sidebarCollapsed: true } : {}),
-                notifyOnline: !!notify.checked,
-                notifyFavoritesOnly: !!notifyFavoritesOnly.checked,
               });
-              if (store.flush()) close();
+              if (store.flush()) close('saved');
             } }, t('saveSettings')),
           ]),
         );
@@ -12935,7 +13056,7 @@ function createSettingsSyncController(deps) {
                 startupGroup: group.value,
                 startOnOnlineFavorites: group.value === ONLINE_FAVORITES_GROUP_ID,
               });
-              if (store.flush()) close();
+              if (store.flush()) close('saved');
             } }, t('saveSettings')),
           ]),
         );
@@ -12957,11 +13078,12 @@ function createSettingsSyncController(deps) {
         theater.value = store.state.settings.defaultTheaterMode === false ? 'normal' : 'theatre';
         body.append(
           $('div', { style: { display: 'grid', gridTemplateColumns: '1fr', gap: '10px' } }, [
-            $('label', { style: { display: 'grid', gap: '5px', fontSize: '12px', color: 'var(--text-muted)' } }, [t('maxStreamHeight'), quality]),
+            $('label', { style: { display: 'grid', gap: '5px', fontSize: '12px', color: 'var(--text-muted)' } }, [LANG === 'zh' ? '工作台预览质量' : 'Workshop preview quality', quality]),
             $('label', { class: 'toggle' }, [freeZoom, t('freeZoomLabel')]),
             $('label', { style: { display: 'grid', gap: '5px', fontSize: '12px', color: 'var(--text-muted)' } }, [t('defaultTheaterLabel'), theater]),
           ]),
           $('div', { class: 'roomgrid-modal-hint', style: { marginTop: '10px' } }, t('freeZoomHint')),
+          $('div', { class: 'roomgrid-modal-hint' }, LANG === 'zh' ? '480p 适合小预览。此设置不更改普通房间的 1080p 默认画质。' : '480p is recommended for small previews. This does not change normal rooms’ 1080p startup quality.'),
           $('div', { class: 'roomgrid-modal-hint' }, t('defaultTheaterHint')),
           $('div', { class: 'roomgrid-modal-actions' }, [
             $('button', { class: 'ctrl-btn', onclick: close }, t('importReviewCancel')),
@@ -12969,7 +13091,7 @@ function createSettingsSyncController(deps) {
               store.patchSettings({ maxStreamHeight: Number(quality.value) || 0, freeZoom: !!freeZoom.checked, defaultTheaterMode: theater.value === 'theatre' });
               if (!store.flush()) return;
               service.refreshQuality();
-              close();
+              close('saved');
             } }, t('saveSettings')),
           ]),
         );
@@ -12977,6 +13099,7 @@ function createSettingsSyncController(deps) {
     }
 
     function openBackupPanel() {
+      const inlineHost = workshopInlineToolHost;
       openToolPanel(t('backupPanel'), (body) => {
         const keys = [];
         for (let i = 0; i < localStorage.length; i++) {
@@ -13000,7 +13123,7 @@ function createSettingsSyncController(deps) {
                 location.reload();
               } catch (err) { alert('Restore failed: ' + err.message); }
             } }, t('restoreBackup')),
-            $('button', { class: 'ctrl-btn danger', onclick: () => { localStorage.removeItem(key); openBackupPanel(); } }, t('deleteBackup')),
+            $('button', { class: 'ctrl-btn danger', onclick: () => { localStorage.removeItem(key); withWorkshopInlineToolHost(inlineHost, openBackupPanel); } }, t('deleteBackup')),
           ]));
         });
       });
@@ -13030,7 +13153,7 @@ function createSettingsSyncController(deps) {
           $('label', { class: 'toggle' }, [favorite, t('favoriteFirst')]),
           $('div', { class: 'roomgrid-modal-actions' }, [
             $('button', { class: 'ctrl-btn', onclick: close }, t('importReviewCancel')),
-            $('button', { class: 'ctrl-btn primary', onclick: () => { store.patchSettings({ favoriteFirst: !!favorite.checked }); if (store.flush()) close(); } }, t('saveSettings')),
+            $('button', { class: 'ctrl-btn primary', onclick: () => { store.patchSettings({ favoriteFirst: !!favorite.checked }); if (store.flush()) close('saved'); } }, t('saveSettings')),
           ]),
         );
       });
@@ -13072,26 +13195,96 @@ function createSettingsSyncController(deps) {
     }
 
     function openSettingsCenter() {
-      openToolPanel(t('settingsCenter'), (body) => {
-        const action = (label, handler, primary = false) => $('button', {
-          class: 'ctrl-btn' + (primary ? ' primary' : ''),
-          style: { minHeight: '44px', justifyContent: 'flex-start' },
-          onclick: handler,
-        }, label);
+      openMoreMenu(settingsBtn, 'layout');
+    }
+
+    function readWorkshopChatSettings() {
+      const raw = localStorage.getItem('reloadedGlobalChatSettingsV1');
+      const saved = raw ? JSON.parse(raw) : {};
+      if (!saved || typeof saved !== 'object' || Array.isArray(saved)) throw new Error('Stored chat settings are invalid. Download a backup before repairing them.');
+      return { version: 1, c1: 0, c2: 0, c3: 0, c4: 0, c5: 0, c6: 0, c7: 0, c7a: 100, c8: 0, c10: 0, language: '', ...saved };
+    }
+
+    function saveWorkshopChatSettings(baseline, submitted) {
+      const latest = readWorkshopChatSettings();
+      const changed = Object.entries(submitted).filter(([key, value]) => !Object.is(value, baseline[key]));
+      if (!changed.length) return latest;
+      for (const [key, value] of changed) latest[key] = value;
+      localStorage.setItem('reloadedGlobalChatSettingsV1', JSON.stringify(latest));
+      document.dispatchEvent(new CustomEvent('ziggy-suite:shared-settings-applied', { detail: ['reloadedGlobalChatSettingsV1'] }));
+      return latest;
+    }
+
+    function openWorkshopChatSettings() {
+      openToolPanel(LANG === 'zh' ? '聊天设置' : 'Chat preferences', body => {
+        let baseline;
+        const status = $('div', { class: 'roomgrid-modal-hint', role: 'status' });
+        try { baseline = readWorkshopChatSettings(); }
+        catch (error) { body.append($('div', { class: 'roomgrid-modal-hint' }, error.message)); return; }
+        const controls = {};
+        const definitions = [['c1', 'Small emoticons'], ['c2', 'Hide notices'], ['c3', 'Hide subject changes'], ['c4', 'Hide moderator/fan enter and leave'], ['c5', 'Hide gray-user chat'], ['c6', 'Hide moderator chat'], ['c8', 'Hide Lovense messages'], ['c7', 'Hide tips below threshold'], ['c10', 'Translate chat']];
+        for (const [key, label] of definitions) {
+          const input = $('input', { type: 'checkbox', checked: Number(baseline[key]) === 1 });
+          controls[key] = input;
+          body.appendChild($('label', { class: 'toggle' }, [input, label]));
+        }
+        const threshold = $('input', { class: 'ctrl-input', type: 'number', min: 2, max: 1000, value: String(baseline.c7a) });
+        const language = $('select', { class: 'ctrl-input' }, [
+          $('option', { value: '' }, 'Use the room’s current language choice'),
+          ...RELOADED_CHAT_LANGUAGES.map(([code, label]) => $('option', { value: code }, label)),
+        ]);
+        if (baseline.language && !RELOADED_CHAT_LANGUAGES.some(([code]) => code === baseline.language)) language.appendChild($('option', { value: baseline.language }, baseline.language));
+        language.value = baseline.language;
+        const syncControls = () => { threshold.disabled = !controls.c7.checked; language.disabled = !controls.c10.checked; };
+        controls.c7.addEventListener('change', syncControls);
+        controls.c10.addEventListener('change', syncControls);
+        syncControls();
         body.append(
-          $('div', { class: 'roomgrid-modal-hint' }, t('settingsOnlyHint')),
-          $('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '9px' } }, [
-            action(t('startupSettings'), () => openStartupSettings()),
-            action(t('layoutSettings'), () => openLayoutSettings()),
-            action(t('playbackSettingsTitle'), () => openPlaybackSettingsPanel()),
-            action(t('shortcutPanel'), () => openShortcutPanel()),
-            action(t('settingsExport'), () => exportWorkstationSettings(), true),
-            action(t('settingsImport'), () => importWorkstationSettings(), true),
-            action('Configure GitHub Cloud', () => openGithubSyncSetup()),
-            action('Download local backup', () => exportSuiteSettingsLocal(store.state)),
-            action('Import local backup', () => importSuiteSettingsFile({ onImported: result => toast(t(result.roomsReplaced ? 'settingsImported' : 'settingsImportedLegacy')) })),
-          ]),
+          $('label', { class: 'rg-drawer-control' }, [$('span', {}, 'Minimum tip tokens'), threshold]),
+          $('label', { class: 'rg-drawer-control' }, [$('span', {}, 'Translation language'), language]),
+          $('div', { class: 'roomgrid-modal-hint' }, 'Shared chat preferences apply in supported normal-room chat. Workshop has no chat feed. Native mobile chat availability is unchanged.'),
+          $('button', { class: 'ctrl-btn primary', onclick: () => {
+            const amount = Number(threshold.value);
+            if (!Number.isInteger(amount) || amount < 2 || amount > 1000) { status.textContent = 'Enter a whole token amount from 2 to 1000.'; return; }
+            const submitted = Object.fromEntries(Object.entries(controls).map(([key, input]) => [key, input.checked ? 1 : 0]));
+            submitted.c7a = amount;
+            submitted.language = language.value;
+            try {
+              saveWorkshopChatSettings(baseline, submitted);
+              baseline = { ...baseline, ...submitted };
+              status.textContent = 'Chat settings saved locally. Automatic sync uploads separately when enabled.';
+            } catch (error) { status.textContent = `Chat settings were not saved: ${error.message}`; }
+          } }, t('saveSettings')),
+          status,
         );
+      });
+    }
+
+    function openWorkshopNotificationSettings() {
+      openToolPanel(LANG === 'zh' ? '通知' : 'Notifications', (body, close) => {
+        const notify = $('input', { type: 'checkbox', checked: !!store.state.settings.notifyOnline });
+        const favorites = $('input', { type: 'checkbox', checked: !!store.state.settings.notifyFavoritesOnly, disabled: !notify.checked });
+        const status = $('div', { class: 'roomgrid-modal-hint', role: 'status' });
+        const save = $('button', { class: 'ctrl-btn primary', onclick: async () => {
+          save.disabled = true;
+          try {
+            if (notify.checked && !store.state.settings.notifyOnline) await Notify.request();
+            if (!body.isConnected) return;
+            store.patchSettings({ notifyOnline: !!notify.checked, notifyFavoritesOnly: !!favorites.checked });
+            if (store.flush()) close('saved'); else status.textContent = 'Local alert settings could not be saved.';
+          } catch (error) { if (body.isConnected) status.textContent = error.message; }
+          finally { save.disabled = false; }
+        } }, t('saveSettings'));
+        notify.addEventListener('change', () => { favorites.disabled = !notify.checked; });
+        body.append(
+          $('div', { class: 'roomgrid-modal-hint' }, 'Native model alerts: use each card’s bell to choose Always, Auto or Never on Chaturbate. Favorites do not subscribe you. Browser notification permission/subscription is required separately; email settings are not changed.'),
+          $('label', { class: 'toggle' }, [notify, 'Separate local Workshop online alerts']),
+          $('label', { class: 'toggle' }, [favorites, t('notifyFavoritesOnly')]),
+          $('div', { class: 'roomgrid-modal-hint' }, 'Local alerts require this Workshop to be running. They are independent of native model notifications and cannot provide browser-closed delivery.'),
+          save, status,
+        );
+        const account = followedAccount();
+        if (account) body.appendChild($('a', { class: 'ctrl-btn', href: `${location.origin}/p/${encodeURIComponent(account)}/?tab=settings`, target: '_blank', rel: 'noopener' }, 'Chaturbate notification settings'));
       });
     }
 
@@ -13112,6 +13305,7 @@ function createSettingsSyncController(deps) {
             value: shortcutLabel(current[action]),
             readonly: true,
             onkeydown: (e) => {
+              if (e.key === 'Tab' || e.key === 'Escape') return;
               e.preventDefault();
               e.stopPropagation();
               if (e.key === 'Backspace' || e.key === 'Delete') {
@@ -13145,7 +13339,7 @@ function createSettingsSyncController(deps) {
               const next = {};
               for (const [action, input] of Object.entries(inputs)) next[action] = normalizeShortcutSpec(input.dataset.spec || '');
               store.patchSettings({ shortcuts: sanitizeShortcuts(next, defaultShortcuts()) });
-              if (store.flush()) close();
+              if (store.flush()) close('saved');
             } }, t('saveSettings')),
           ]),
         );
@@ -13345,93 +13539,140 @@ function createSettingsSyncController(deps) {
 
     /* ---- 更多菜单按钮触发 ---- */
     let _moreMenuClose = null;
-    function openMoreMenu(anchor) {
+    function openMoreMenu(anchor, initialSection = '') {
       const existing = document.querySelector('.rg-control-backdrop');
       if (existing) {
-        existing.remove();
-        document.body.classList.remove('rg-control-drawer-open');
-        _moreMenuClose = null;
+        if (initialSection) {
+          const section = existing.querySelector(`[data-settings-section="${initialSection}"]`);
+          if (section) { section.open = true; section.querySelector('summary')?.focus(); }
+        } else _moreMenuClose?.();
         return;
       }
 
       const backdrop = $('div', { class: 'rg-control-backdrop' });
-      const drawer = $('aside', { class: 'rg-control-drawer', role: 'dialog', 'aria-modal': 'true', 'aria-label': LANG === 'zh' ? '工作台控制' : 'Workshop controls' });
+      const drawer = $('aside', { class: 'rg-control-drawer rg-settings-drawer', role: 'dialog', 'aria-modal': 'true', 'aria-label': LANG === 'zh' ? '工作台设置' : 'Workshop settings', tabIndex: -1 });
       const menu = $('div', {
         class: 'menu-pop more-menu-pop',
       });
+      const previousFocus = document.activeElement;
+      const placements = [];
+      let removalObserver = null, closed = false;
       const closeDrawer = () => {
+        if (closed) return;
+        closed = true;
+        document.removeEventListener('keydown', onKey, true);
+        removalObserver?.disconnect();
+        drawer.querySelectorAll('.rg-settings-inline').forEach(host => { try { host.__roomgridDispose?.(); } catch (_) {} });
+        for (const [control, marker] of placements) {
+          if (marker?.parentNode) marker.replaceWith(control);
+          else control.remove();
+        }
         backdrop.remove();
         document.body.classList.remove('rg-control-drawer-open');
         _moreMenuClose = null;
+        if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+      };
+      const onKey = event => {
+        if (event.isComposing || event.keyCode === 229) return;
+        if (document.querySelector('.roomgrid-modal-backdrop,#roomgrid-github-sync-backdrop')) return;
+        if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); closeDrawer(); return; }
+        if (event.key !== 'Tab') return;
+        const focusable = [...drawer.querySelectorAll('summary,button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex="0"]')]
+          .filter(node => node.getClientRects().length && !node.closest('[hidden],[inert]'));
+        const first = focusable[0], last = focusable.at(-1);
+        if (!first) { event.preventDefault(); drawer.focus(); }
+        else if (event.shiftKey && (document.activeElement === first || !drawer.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && (document.activeElement === last || !drawer.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
       };
       const closeButton = $('button', { class: 'rg-control-drawer-close', type: 'button', 'aria-label': 'Close controls', onclick: closeDrawer }, '×');
       drawer.append(
-        $('div', { class: 'rg-control-drawer-head' }, [$('strong', {}, LANG === 'zh' ? '工作台控制' : 'Workshop controls'), closeButton]),
+        $('div', { class: 'rg-control-drawer-head' }, [$('strong', {}, LANG === 'zh' ? '工作台设置' : 'Workshop settings'), closeButton]),
         $('div', { class: 'rg-control-drawer-body' }, [menu]),
       );
       backdrop.appendChild(drawer);
       backdrop.addEventListener('click', event => { if (event.target === backdrop) closeDrawer(); });
 
       const sectionLabel = (zh, en) => LANG === 'zh' ? zh : en;
-      const divider = () => $('div', { style: { height: '1px', background: 'var(--border)', margin: '6px 0' } });
-      const sectionTitle = (label) => $('div', {
-        style: {
-          padding: '7px 10px 4px',
-          fontSize: '11px',
-          lineHeight: '1',
-          color: 'var(--text-muted)',
-          fontWeight: '750',
-          letterSpacing: '.02em',
-        },
-      }, label);
-      const item = (label, onClick, opts = {}) => $('button', {
+      let actionHost = null;
+      const item = (label, onClick, opts = {}) => {
+        const host = opts.host || actionHost;
+        return $('button', {
         class: opts.danger ? 'danger' : '',
         title: opts.title || label,
         onclick: () => {
-          closeDrawer();
-          try { onClick?.(); } catch (err) { console.warn('[Ziggy Suite] menu action failed', err); }
+          if (opts.close) closeDrawer();
+          try { withWorkshopInlineToolHost(opts.close ? null : host, () => onClick?.()); }
+          catch (err) { toast(err.message || 'Workshop action failed'); console.warn('[Ziggy Suite] menu action failed', err); }
         },
-      }, label);
-      const addSection = (label, items) => {
-        const section = $('section', { class: 'rg-drawer-section' }, [sectionTitle(label)]);
-        items.filter(Boolean).forEach(el => section.appendChild(el));
-        menu.appendChild(section);
+        }, label);
       };
-      const drawerControl = (label, control) => $('label', { class: 'rg-drawer-control' }, [$('span', {}, label), control]);
+      const addSection = (key, label, build, open = false) => {
+        const content = $('div', { class: 'rg-settings-section-body' });
+        const section = $('details', { class: 'rg-drawer-section rg-settings-section', dataset: { settingsSection: key } }, [
+          $('summary', {}, label), content,
+        ]);
+        let mounted = false;
+        const mount = () => {
+          if (!section.open) return;
+          if (mounted) {
+            content.querySelectorAll('.rg-settings-inline').forEach(host => { if (!host.childElementCount) host.__roomgridReopen?.(); });
+            return;
+          }
+          mounted = true;
+          const previous = actionHost;
+          actionHost = $('div', { class: 'rg-settings-inline' });
+          try { build(content, actionHost); if (!actionHost.parentNode) content.appendChild(actionHost); }
+          catch (error) { content.appendChild($('div', { class: 'roomgrid-modal-hint' }, error.message)); }
+          finally { actionHost = previous; }
+        };
+        section.addEventListener('toggle', mount);
+        section.open = open || key === initialSection;
+        menu.appendChild(section);
+        mount();
+        return section;
+      };
+      const drawerControl = (label, control) => {
+        let marker = null;
+        if (control.parentNode) {
+          marker = document.createComment('Workshop control home');
+          control.parentNode.insertBefore(marker, control);
+        }
+        placements.push([control, marker]);
+        return $('label', { class: 'rg-drawer-control' }, [$('span', {}, label), control]);
+      };
+      const appendTools = (body, builder, host = $('div', { class: 'rg-settings-inline' })) => {
+        body.appendChild(host);
+        withWorkshopInlineToolHost(host, builder);
+      };
+      const nestedTools = (body, label, builder) => {
+        const content = $('div', { class: 'rg-settings-inline' });
+        const details = $('details', { class: 'rg-settings-subsection' }, [$('summary', {}, label), content]);
+        details.addEventListener('toggle', () => { if (details.open && !content.childElementCount) withWorkshopInlineToolHost(content, builder); });
+        body.appendChild(details);
+      };
+      const toggle = (label, checked, change) => {
+        const input = $('input', { type: 'checkbox', checked });
+        input.addEventListener('change', () => change(input.checked));
+        return $('label', { class: 'toggle' }, [input, label]);
+      };
 
       const currentPageIds = () => {
         return currentPageRoomIds();
       };
 
-      addSection(sectionLabel('房间与视图', 'Rooms and view'), [
-        drawerControl(t('searchPlaceholder'), searchInput),
-        item(sectionLabel('添加房间', 'Add room'), () => openQuickRoomEntry()),
-        item(t('manualImport'), () => openManualImportPrompt()),
-        item(t('menuTempUrlManager'), () => openTemporaryUrlManager()),
-        drawerControl(t('viewModeLabel'), viewModeSel),
-        drawerControl(sectionLabel('卡片密度', 'Card density'), layoutSel),
-        splitViewBtn,
-      ]);
-      addSection(sectionLabel('筛选与播放', 'Filters and playback'), [
-        drawerControl(sectionLabel('状态', 'Status'), filterSel),
-        drawerControl(sectionLabel('排序', 'Sort'), sortSel),
-        drawerControl(sectionLabel('音量', 'Volume'), volSlider),
-      ]);
-
-      addSection(sectionLabel('界面', 'Interface'), [
-        item(t('settingsCenter'), () => openSettingsCenter()),
-        item(t('menuLayoutSettings'), () => openLayoutSettings()),
-        item(t('menuPlaybackSettings'), () => openPlaybackSettingsPanel()),
-        item(store.state.settings.toolbarCollapsed ? sectionLabel('显示顶部工具栏', 'Show top controls') : sectionLabel('收起顶部工具栏', 'Collapse top controls'), () => {
-          { const v = !store.state.settings.toolbarCollapsed; document.body.classList.toggle('rg-toolbar-collapsed', v); store.patchSettings({ toolbarCollapsed: v }); }
-        }),
-        item(store.state.settings.sidebarCollapsed ? sectionLabel('显示左侧分组', 'Show groups') : sectionLabel('收起左侧分组', 'Collapse groups'), () => {
-          { const v = !store.state.settings.sidebarCollapsed; document.body.classList.toggle('rg-sidebar-collapsed', v); sidebar.classList.toggle('is-collapsed', v); store.patchSettings({ sidebarCollapsed: v }); }
-        }),
-        item(t('menuPureMode'), () => togglePureMode(), { title: t('pureModeHint') }),
-      ]);
-
-      addSection(sectionLabel('窗口', 'Windows'), [
+      addSection('layout', sectionLabel('布局', 'Layout'), body => {
+        body.append(drawerControl(t('viewModeLabel'), viewModeSel));
+        appendTools(body, openLayoutSettings);
+        nestedTools(body, t('startupSettings'), openStartupSettings);
+        body.append(
+          toggle('Show top controls', !store.state.settings.toolbarCollapsed, enabled => { document.body.classList.toggle('rg-toolbar-collapsed', !enabled); store.patchSettings({ toolbarCollapsed: !enabled }); }),
+          toggle('Show groups', !store.state.settings.sidebarCollapsed, enabled => { document.body.classList.toggle('rg-sidebar-collapsed', !enabled); sidebar.classList.toggle('is-collapsed', !enabled); store.patchSettings({ sidebarCollapsed: !enabled }); }),
+          item(t('menuPureMode'), () => togglePureMode(), { title: t('pureModeHint') }),
+        );
+      });
+      addSection('previews', sectionLabel('预览', 'Previews'), body => {
+        appendTools(body, openPlaybackSettingsPanel);
+        body.append(drawerControl(sectionLabel('音量', 'Preview volume'), volSlider),
         item(t('menuToggleFit'), () => toggleVideoFit(), { title: t('videoFitHint') }),
         item(t('menuPauseVisible'), () => {
           const ids = currentPageIds();
@@ -13455,22 +13696,47 @@ function createSettingsSyncController(deps) {
           store.setAllMuted(false);
           requestAnimationFrame(() => store.state.rooms.forEach(r => applyMute(r.id)));
         }),
-        item(t('batchOpenCurrentPage'), () => openCurrentPageRooms()),
-        item(t('batchMoveCurrentPage'), () => moveCurrentPageToGroup()),
-      ]);
-
-      addSection(sectionLabel('GitHub 设置备份', 'GitHub settings backup'), [
+        item(t('splitView'), () => openSplitViewOrPicker()));
+      });
+      addSection('refresh', sectionLabel('刷新', 'Refresh'), body => {
+        body.append(
+          $('div', { class: 'roomgrid-modal-hint' }, 'Normal refresh keeps healthy playing previews and recently checked results. Stale visible rooms are checked first; the remaining library follows. Hidden Workshop tabs pause admission.'),
+          item('Refresh stale rooms', () => refreshWorkshopRooms({ scope: 'all', force: false })),
+          item('Check all now', () => refreshWorkshopRooms({ scope: 'all', force: true })),
+          $('div', { class: 'roomgrid-modal-hint' }, 'Check all bypasses freshness caching, not playback preservation or server cooldown. A card’s own Refresh forces that preview to reconnect.'),
+        );
+      });
+      addSection('groups', sectionLabel('分组与排序', 'Groups and sorting'), body => {
+        body.append(drawerControl(t('searchPlaceholder'), searchInput),
+          drawerControl(sectionLabel('状态', 'Status'), filterSel),
+          drawerControl(sectionLabel('排序', 'Sort'), sortSel),
+          item(t('batchOpenCurrentPage'), () => openCurrentPageRooms()),
+          item(t('batchMoveCurrentPage'), () => moveCurrentPageToGroup()));
+        appendTools(body, openGroupRulesPanel);
+      });
+      addSection('chat', sectionLabel('聊天与房间', 'Chat and room controls'), body => {
+        appendTools(body, openWorkshopChatSettings);
+        nestedTools(body, t('shortcutPanel'), openShortcutPanel);
+      });
+      addSection('notifications', sectionLabel('通知', 'Notifications'), body => appendTools(body, openWorkshopNotificationSettings));
+      addSection('sync', sectionLabel('同步与备份', 'Sync and backups'), (body, host) => {
+        host.classList.add('rg-settings-cloud-host');
+        body.append(
         item('Export settings to GitHub', () => exportWorkstationSettings()),
         item('Import settings from GitHub', () => importWorkstationSettings()),
-        item('Configure GitHub Cloud', () => openGithubSyncSetup()),
         item('Download local settings backup', () => exportSuiteSettingsLocal(store.state)),
         item('Import local settings backup', () => importSuiteSettingsFile({ onImported: result => toast(t(result.roomsReplaced ? 'settingsImported' : 'settingsImportedLegacy')) })),
-      ]);
-      addSection(sectionLabel('数据', 'Workshop data'), [
-        item(t('manualImport'), () => openManualImportPrompt(), { title: t('manualImport') }),
-        item(t('menuBackupPanel'), () => openBackupPanel()),
+        );
+        const cloud = $('details', { class: 'rg-settings-subsection' }, [$('summary', {}, 'GitHub cloud setup and automatic sync'), host]);
+        cloud.addEventListener('toggle', () => { if (cloud.open && !host.childElementCount) openGithubSyncSetup('', host); });
+        body.appendChild(cloud);
+        nestedTools(body, t('menuBackupPanel'), openBackupPanel);
+      });
+      addSection('advanced', sectionLabel('高级', 'Advanced'), body => { body.append(
+        drawerControl(sectionLabel('添加房间', 'Add room'), tbInput),
+        drawerControl('', tempUrlBtn),
+        item(t('manualImport'), () => openManualImportPrompt(), { title: t('manualImport'), close: true }),
         item(t('menuStatusHistory'), () => openStatusHistoryPanel()),
-        item(t('menuGroupRules'), () => openGroupRulesPanel()),
         item(t('menuTempUrlManager'), () => openTemporaryUrlManager()),
         item(t('menuShareWorkspace'), () => openSharePanel()),
         item(t('menuExport'), () => {
@@ -13521,9 +13787,7 @@ function createSettingsSyncController(deps) {
           store.repairData();
           if (store.flush()) alert(t('repairDone'));
         }),
-      ]);
-
-      addSection(sectionLabel('语言', 'Language'), [
+      ); body.append(
         $('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', padding: '0 8px 4px' } }, [
           $('button', {
             style: {
@@ -13550,26 +13814,24 @@ function createSettingsSyncController(deps) {
             onclick: () => { closeDrawer(); setLang('en'); },
           }, t('langEn')),
         ]),
-      ]);
-
-      addSection(sectionLabel('帮助', 'Help'), [
-        item(t('menuShortcutPanel'), () => openShortcutPanel(), { title: t('menuShortcutPanel') }),
+      ); body.append(
         item(t('menuShortcutHelp'), () => alert(t('shortcutsHelp')), { title: t('menuShortcutHelp') }),
-        item(t('menuAbout'), () => showAboutPanel(), { title: t('menuAbout') }),
-      ]);
-
-      menu.appendChild(item(t('menuClearAll'), () => {
+        item(t('menuAbout'), () => showAboutPanel(), { title: t('menuAbout'), close: true }),
+      ); body.appendChild(item(t('menuClearAll'), () => {
         if (confirm(t('clearAllConfirm'))) {
           try { service.stopAll(); } catch (_) { stopAllPageMedia(); }
           if (!Storage.clearAll()) return;
           store.replaceState(defaultState(), 'all');
           location.reload();
         }
-      }, { danger: true }));
+      }, { danger: true })); });
 
       document.body.appendChild(backdrop);
       document.body.classList.add('rg-control-drawer-open');
       _moreMenuClose = closeDrawer;
+      document.addEventListener('keydown', onKey, true);
+      removalObserver = new MutationObserver(() => { if (!backdrop.isConnected) closeDrawer(); });
+      removalObserver.observe(document.body, { childList: true });
       closeButton.focus();
     }
 
@@ -13722,25 +13984,29 @@ function createSettingsSyncController(deps) {
 
       // 状态覆盖层文本 + video DOM 清理
       if (room.lastStatus === 'online') {
-        c.root.classList.remove('not-online');
-        c.statusEl.style.display = 'none';
+        if (c.root.classList.contains('not-online')) c.root.classList.remove('not-online');
+        if (c.statusEl.style.display !== 'none') c.statusEl.style.display = 'none';
+        c.offlineStateKey = null;
         applyMute(room.id);
       } else {
-        c.root.classList.add('not-online');
-        c.statusEl.style.display = 'flex';
+        if (!c.root.classList.contains('not-online')) c.root.classList.add('not-online');
+        if (c.statusEl.style.display !== 'flex') c.statusEl.style.display = 'flex';
+        const lastSeen = room.lastSeenOnline ? fmtTime(room.lastSeenOnline) : '';
+        const offlineKey = JSON.stringify([room.lastStatus, meta.label, meta.color, lastSeen]);
         // 关键修复：状态非 online 时彻底清理 video 节点。
         // 否则会在卡片中央显示大黑块，且可能残留音频。
         if (c.video) {
           service.detachVideo(room.id);
           c.video = null;
-        } else {
+        } else if (c.offlineStateKey !== offlineKey) {
           service.detachVideo(room.id);
         }
+        if (c.offlineStateKey === offlineKey) return;
         const lines = [
           $('div', { class: 'status-icon', style: { color: meta.color } }, [$('span', { class: 'status-dot-large' })]),
           $('div', { class: 'status-chip', style: { color: meta.color } }, meta.label),
           room.lastSeenOnline
-            ? $('div', { style: { fontSize: '11px', color: 'var(--text-muted)' } }, t('lastSeen', fmtTime(room.lastSeenOnline)))
+            ? $('div', { style: { fontSize: '11px', color: 'var(--text-muted)' } }, t('lastSeen', lastSeen))
             : null,
           (room.lastStatus === 'offline' || room.lastStatus === 'private')
             ? $('div', { style: { fontSize: '10px', color: 'var(--text-muted)' } }, t('autoDetect'))
@@ -13755,6 +14021,7 @@ function createSettingsSyncController(deps) {
         ];
         c.statusEl.replaceChildren();
         lines.forEach(l => l && c.statusEl.appendChild(l));
+        c.offlineStateKey = offlineKey;
       }
     }
 
@@ -13765,8 +14032,10 @@ function createSettingsSyncController(deps) {
       const v = store.state.settings.volume;
       const splitIds = store.state.settings.splitRoomIds;
       const splitMuted = !!store.state.settings.splitViewActive && splitIds.includes(id) && store.state.settings.splitAudioRoomId !== id;
-      c.video.volume = (r.muted || splitMuted) ? 0 : v;
-      c.video.muted = r.muted || splitMuted || v === 0;
+      const volume = (r.muted || splitMuted) ? 0 : v;
+      const muted = !!(r.muted || splitMuted || v === 0);
+      if (c.video.volume !== volume) c.video.volume = volume;
+      if (c.video.muted !== muted) c.video.muted = muted;
     }
 
     function getVideoTransform(roomId) {
@@ -13791,7 +14060,7 @@ function createSettingsSyncController(deps) {
         s.settings.videoTransforms = sanitizeVideoTransformMap(s.settings.videoTransforms);
         if (isDefaultVideoTransform(next)) delete s.settings.videoTransforms[roomId];
         else s.settings.videoTransforms[roomId] = next;
-      }, 'settings:videoTransforms');
+      }, 'settings:videoTransforms.' + roomId);
       applyVideoTransform(roomId);
     }
 
@@ -13799,16 +14068,18 @@ function createSettingsSyncController(deps) {
       patchVideoTransform(roomId, defaultVideoTransform());
     }
 
-    function applyVideoTransform(roomId) {
+    function applyVideoTransform(roomId, previewTransform) {
       const c = cardMap.get(normalizeUsername(roomId));
       if (!c?.video) return;
-      const transform = getVideoTransform(roomId);
+      const transform = previewTransform || getVideoTransform(roomId);
       const css = buildVideoTransformCss(transform);
-      c.video.style.transform = css;
-      c.video.style.transformOrigin = 'center center';
-      c.video.style.cursor = transform.zoom > 1 ? 'grab' : '';
-      c.root.classList.toggle('video-transformed', !isDefaultVideoTransform(transform));
-      c.root.classList.toggle('video-zoomed', transform.zoom > 1);
+      const cursor = activeCardPan?.roomId === roomId ? 'grabbing' : transform.zoom > 1 ? 'grab' : '';
+      for (const [key, value] of Object.entries({ transform: css, transformOrigin: 'center center', cursor })) {
+        if (c.video.style[key] !== value) c.video.style[key] = value;
+      }
+      for (const [name, value] of [['video-transformed', !isDefaultVideoTransform(transform)], ['video-zoomed', transform.zoom > 1]]) {
+        if (c.root.classList.contains(name) !== value) c.root.classList.toggle(name, value);
+      }
     }
 
     function applyAllVideoTransforms() {
@@ -13816,29 +14087,51 @@ function createSettingsSyncController(deps) {
     }
 
     let activeCardPan = null;
-    window.addEventListener('mousemove', (e) => {
-      const pan = activeCardPan;
-      if (!pan) return;
-      if (!pan.card.isConnected) {
-        pan.card.classList.remove('video-panning');
-        activeCardPan = null;
-        return;
-      }
-      const cur = getVideoTransform(pan.roomId);
-      patchVideoTransform(pan.roomId, {
-        x: cur.x + e.clientX - pan.lastX,
-        y: cur.y + e.clientY - pan.lastY,
-      });
-      pan.lastX = e.clientX;
-      pan.lastY = e.clientY;
-    });
-    window.addEventListener('mouseup', () => {
+    let cardPanRaf = 0;
+    function finishCardPan(commit = false) {
       const pan = activeCardPan;
       if (!pan) return;
       activeCardPan = null;
+      if (cardPanRaf) cancelAnimationFrame(cardPanRaf);
+      cardPanRaf = 0;
       pan.card.classList.remove('video-panning');
-      applyVideoTransform(pan.roomId);
+      // Imports/reset/replacement invalidate a gesture; never overwrite their newer value.
+      const unchanged = JSON.stringify(getVideoTransform(pan.roomId)) === pan.baseKey;
+      if (commit && pan.card.isConnected && cardMap.get(pan.roomId)?.video === pan.video && unchanged && pan.moved) {
+        patchVideoTransform(pan.roomId, { x: pan.transform.x, y: pan.transform.y });
+      } else applyVideoTransform(pan.roomId);
+    }
+    function scheduleCardPanPaint() {
+      if (cardPanRaf) return;
+      cardPanRaf = requestAnimationFrame(() => {
+        cardPanRaf = 0;
+        const pan = activeCardPan;
+        if (!pan) return;
+        if (!pan.card.isConnected || cardMap.get(pan.roomId)?.video !== pan.video || JSON.stringify(getVideoTransform(pan.roomId)) !== pan.baseKey) {
+          finishCardPan(); return;
+        }
+        applyVideoTransform(pan.roomId, pan.transform);
+      });
+    }
+    window.addEventListener('mousemove', (e) => {
+      const pan = activeCardPan;
+      if (!pan) return;
+      if (!pan.card.isConnected || cardMap.get(pan.roomId)?.video !== pan.video || JSON.stringify(getVideoTransform(pan.roomId)) !== pan.baseKey) {
+        finishCardPan();
+        return;
+      }
+      pan.transform = sanitizeVideoTransform({ ...pan.transform,
+        x: pan.transform.x + e.clientX - pan.lastX,
+        y: pan.transform.y + e.clientY - pan.lastY });
+      pan.moved = true;
+      pan.lastX = e.clientX;
+      pan.lastY = e.clientY;
+      scheduleCardPanPaint();
     });
+    window.addEventListener('mouseup', () => finishCardPan(true));
+    window.addEventListener('blur', () => finishCardPan());
+    window.addEventListener('pagehide', () => finishCardPan());
+    document.addEventListener('visibilitychange', () => { if (document.hidden) finishCardPan(); });
 
     function installCardZoomHandlers(card, roomId) {
       const isUiTarget = (target) => !!target?.closest?.('.icon-btn,.menu-pop,.roomgrid-modal-backdrop,button,input,select,textarea,a');
@@ -13854,8 +14147,9 @@ function createSettingsSyncController(deps) {
         if (store.state.settings.freeZoom === false || e.button !== 0 || isUiTarget(e.target)) return;
         const cur = getVideoTransform(roomId);
         if (cur.zoom <= 1) return;
-        if (activeCardPan?.card && activeCardPan.card !== card) activeCardPan.card.classList.remove('video-panning');
-        activeCardPan = { card, roomId, lastX: e.clientX, lastY: e.clientY };
+        finishCardPan();
+        activeCardPan = { card, roomId, transform: { ...cur }, baseKey: JSON.stringify(cur),
+          video: cardMap.get(roomId)?.video, moved: false, lastX: e.clientX, lastY: e.clientY };
         card.classList.add('video-panning');
         const c = cardMap.get(roomId);
         if (c?.video) c.video.style.cursor = 'grabbing';
@@ -14242,7 +14536,7 @@ function createSettingsSyncController(deps) {
 
       cleanupSplitLayout();
       const fullList = renderVisibleRooms();
-      syncLayoutControls();
+      syncLayoutControls(fullList.length);
       const list = fullList;
       const wantIds = new Set(list.map(r => r.id));
       pruneRoomMediaQueue(wantIds);
@@ -14280,7 +14574,6 @@ function createSettingsSyncController(deps) {
 
     /* —— grid 布局：均分 —— */
     function renderGridLayout(list) {
-      syncLayoutControls();
       let cursor = grid.firstElementChild;
       list.forEach((room) => {
         let c = cardMap.get(room.id);
@@ -14288,8 +14581,7 @@ function createSettingsSyncController(deps) {
           buildCard(room);
           c = cardMap.get(room.id);
         }
-        activateCardEntry(room.id);
-        resetCardSizing(c.root);
+        if (!c.root.isConnected) activateCardEntry(room.id);
         applyCardGridSizing(c.root, room);
         // Keep unchanged live cards attached: reparenting can reset media/focus.
         if (c.root !== cursor) grid.insertBefore(c.root, cursor);
@@ -14328,10 +14620,13 @@ function createSettingsSyncController(deps) {
     });
 
     // ---- Store 订阅 ----
+    const renderedRoomStatuses = new Map(store.state.rooms.map(room => [room.id, room.lastStatus]));
     store.subscribe((state, path) => {
       if (path === 'rooms' || path === 'all') {
         indexedRooms = state.rooms;
         savedRoomIndex = new Map(state.rooms.map(room => [room.id, room]));
+        renderedRoomStatuses.clear();
+        state.rooms.forEach(room => renderedRoomStatuses.set(room.id, room.lastStatus));
       }
       const isSettingsPath = path === 'settings' || (typeof path === 'string' && path.startsWith('settings:'));
       const settingKeys = isSettingsPath && typeof path === 'string' && path.includes(':')
@@ -14360,16 +14655,23 @@ function createSettingsSyncController(deps) {
         syncShellControls();
         applyPureModeState();
         if (hasSetting('maxStreamHeight')) service.refreshQuality();
-        if (hasSetting('videoTransforms')) applyAllVideoTransforms();
+        if (hasSetting('volume')) cardMap.forEach((_, id) => applyMute(id));
+        if (hasSetting('videoTransforms')) {
+          const roomKeys = settingKeys.filter(key => key.startsWith('videoTransforms.'));
+          if (roomKeys.length && !settingKeys.includes('videoTransforms')) {
+            roomKeys.forEach(key => applyVideoTransform(key.slice('videoTransforms.'.length)));
+          } else applyAllVideoTransforms();
+        }
       }
       if (path && path.startsWith('room:')) {
         const id = path.slice(5);
-        const r = state.rooms.find(x => x.id === id);
+        const r = currentSavedRoomIndex().get(id);
+        const statusChanged = !!r && renderedRoomStatuses.get(id) !== r.lastStatus;
+        if (r) renderedRoomStatuses.set(id, r.lastStatus);
         if (r) renderCardState(r);
-        if (workshopRefreshState.busy) scheduleWorkshopSidebarCounts();
-        else scheduleSidebarRender();
+        if (statusChanged) scheduleWorkshopSidebarCounts();
         // 状态排序时，单卡状态变化也要重排
-        if (state.settings.splitViewActive || state.settings.activeGroup === ONLINE_GROUP_ID || state.settings.activeGroup === ONLINE_FAVORITES_GROUP_ID || state.settings.sortBy === 'status' || state.settings.filter?.hideOffline || state.settings.filter?.hidePrivate || state.settings.filter?.onlyOnline) scheduleGridRender();
+        if (statusChanged && (state.settings.splitViewActive || state.settings.activeGroup === ONLINE_GROUP_ID || state.settings.activeGroup === ONLINE_FAVORITES_GROUP_ID || state.settings.sortBy === 'status' || state.settings.filter?.hideOffline || state.settings.filter?.hidePrivate || state.settings.filter?.onlyOnline)) scheduleGridRender();
       }
     });
 

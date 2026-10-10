@@ -66,6 +66,8 @@ Status: Active
 
 Decision: Replace the dashboard-style Workshop presentation with a native-style listing: reuse the live desktop header where available, category pills, responsive preview cards, an outside-dismissible Groups drawer, visible refresh progress and one organized menu. As authorized on September 13, desktop and mobile Grid columns adapt to available width; density is a card-size preference, not a fixed column count. Mobile retains two columns at the tested portrait width and gains columns in wider views. Retain existing saved data, groups, filters, Grid/Phone modes, previews, split view and explicit room navigation. Keep GitHub import/export discoverable in the same menu on desktop and mobile; do not recreate native account controls or redesign fullscreen as part of the presentation change.
 
+Settings organization: one lazy expandable Workshop settings drawer reuses existing handlers and data ownership for Layout, Previews, Refresh, Groups/sorting, Chat/room controls, Notifications, Sync/backups and Advanced. Keep related editors inline rather than opening successive settings windows. Preserve drafts and dispose media/resources on close; explicit destructive/import confirmations remain necessary. This same implementation serves full Workshop and its embedded dropdown, not separate desktop/mobile settings stores.
+
 ## D-010 — Editable Workshop dropdown and visible-only previews
 
 Status: Active

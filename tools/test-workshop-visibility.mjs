@@ -264,15 +264,21 @@ test('split-picker thumbnail requests/fallbacks are visibility-gated and ownersh
   const refresh = section('        function refreshPreview()', '        function openPreview(', picker);
   const error = section("        previewImage.addEventListener('error'", '        const bindLongPressPreview', picker);
   const cleanup = section('        const syncPreviewVisibility', '\n      });\n    }', picker);
+  const guard = section('        const previewHostVisible', '        function closePreview()', picker);
+  assert.match(guard, /!document\.hidden && !workshopPageSuspended/);
+  assert.match(guard, /body\.isConnected && previewPanel\.isConnected/);
+  assert.match(guard, /previewSections\.every\(section => section\.open\)/);
   for (const body of [refresh, error]) {
-    assert.match(body, /document\.hidden \|\| workshopPageSuspended \|\| !previewPanel\.isConnected/);
-    assert.ok(body.indexOf('document.hidden') < body.indexOf('previewImage.src ='));
+    assert.match(body, /!previewHostVisible\(\)/);
+    assert.ok(body.indexOf('previewHostVisible()') < body.indexOf('previewImage.src ='));
   }
   assert.match(cleanup, /previewImage\.removeAttribute\('src'\)/);
   for (const name of ['visibilitychange', 'pagehide', 'pageshow']) {
     assert.ok(cleanup.includes(`addEventListener('${name}', syncPreviewVisibility)`));
     assert.ok(cleanup.includes(`removeEventListener('${name}', syncPreviewVisibility)`));
   }
+  assert.match(cleanup, /section\.addEventListener\('toggle', syncPreviewVisibility\)/);
+  assert.match(cleanup, /section\.removeEventListener\('toggle', syncPreviewVisibility\)/);
 });
 
 test('thumbnail hiding cancels the source/timer, suppresses late fallback and restarts once on return', () => {
@@ -280,6 +286,7 @@ test('thumbnail hiding cancels the source/timer, suppresses late fallback and re
   const refresh = section('        function refreshPreview()', '        function openPreview(', picker);
   const error = section("        previewImage.addEventListener('error'", '        const bindLongPressPreview', picker);
   const sync = section('        const syncPreviewVisibility', "        document.addEventListener('visibilitychange'", picker);
+  const guard = section('        const previewHostVisible', '        function closePreview()', picker);
   const document = { hidden: false }, timers = new Map(), requests = [], imageEvents = new Map();
   let timerId = 0;
   const image = {
@@ -288,14 +295,14 @@ test('thumbnail hiding cancels the source/timer, suppresses late fallback and re
     set src(value) { requests.push(value); this.cleared = false; },
   };
   const ctx = vm.createContext({
-    document, workshopPageSuspended: false, previewRoom: { id: 'alpha', lastStatus: 'online' },
+    document, workshopPageSuspended: false, body: { isConnected: true }, previewSections: [], previewRoom: { id: 'alpha', lastStatus: 'online' },
     previewPanel: { isConnected: true }, previewImage: image, previewTimer: 0, previewFallback: false,
     previewStatus: {}, statusMeta: status => ({ label: status }), t: key => key,
     splitPreviewSnapshotUrl: (id, fallback) => `${id}:${fallback}`,
     clearInterval: id => timers.delete(id),
     setInterval(fn) { timers.set(++timerId, fn); return timerId; },
   });
-  const run = vm.runInContext(`${refresh}\n${error}\n${sync}\n({ sync: syncPreviewVisibility, refresh: refreshPreview })`, ctx);
+  const run = vm.runInContext(`${guard}\n${refresh}\n${error}\n${sync}\n({ sync: syncPreviewVisibility, refresh: refreshPreview })`, ctx);
   run.sync(); assert.equal(requests.length, 1); assert.equal(timers.size, 1);
   document.hidden = true; run.sync();
   assert.equal(timers.size, 0); assert.equal(image.cleared, true);

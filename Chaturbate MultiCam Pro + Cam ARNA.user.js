@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.26
+// @version           16.6.27
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -1665,7 +1665,7 @@ function createSettingsSyncController(deps) {
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.26');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.27');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -1681,7 +1681,7 @@ function createSettingsSyncController(deps) {
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.26');
+  instanceMarker.setAttribute('data-suite-version', '16.6.27');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1741,17 +1741,17 @@ function createSettingsSyncController(deps) {
   setInterval(enforceSuiteTabTitle, 5000);
   enforceSuiteTabTitle();
 
-  // Desktop room pages default to Chaturbate's own theater layout. This only
+  // Desktop room pages apply the selected native layout. This only
   // attempts the transition once per page load, so leaving theater manually is
   // respected until the next navigation or refresh.
   function enterDefaultDesktopTheaterOnce() {
     if (!roomNameForTabTitle() || isWorkshopRoute()) return;
     let attempts = 0;
     const tryEnter = () => {
-      // Read after initialization, and stop pending entry if the preference changes.
-      // Disabled leaves the site's own layout alone; it never clicks to exit theater.
+      // Read after initialization so pending work uses the latest saved selection.
+      let wantsTheater;
       try {
-        if (JSON.parse(localStorage.getItem(STORE_KEY) || 'null')?.settings?.defaultTheaterMode === false) return;
+        wantsTheater = JSON.parse(localStorage.getItem(STORE_KEY) || 'null')?.settings?.defaultTheaterMode !== false;
       } catch (_) { return; }
       attempts += 1;
       const button = document.getElementById('theater-mode-icon')
@@ -1759,12 +1759,15 @@ function createSettingsSyncController(deps) {
       const resizeHandle = [...document.querySelectorAll('.resizeHandle')]
         .find(node => node.getClientRects().length && getComputedStyle(node).display !== 'none');
       if (button?.getClientRects().length && resizeHandle) {
-        try { button.click(); } catch (_) {}
+        if (wantsTheater) { try { button.click(); } catch (_) {} }
         return;
       }
       // A mounted theater button without the normal-mode resize handle means
       // the room is already in theater mode.
-      if (button && !resizeHandle && attempts >= 10) return;
+      if (button?.getClientRects().length && !resizeHandle && attempts >= 10) {
+        if (!wantsTheater) { try { button.click(); } catch (_) {} }
+        return;
+      }
       if (attempts < 50) setTimeout(tryEnter, 160);
     };
     setTimeout(tryEnter, 180);
@@ -2396,8 +2399,10 @@ function createSettingsSyncController(deps) {
       videoFitCover: 'Fit: fill window',
       videoFitHint: 'Switch between full image and cropped fill.',
       playbackSettingsTitle: 'Playback settings',
-      defaultTheaterLabel: 'Open rooms in theatre mode',
-      defaultTheaterHint: 'Applies on the next room load where the native theatre control is available. Off leaves the site layout unchanged. Saved on this browser only.',
+      defaultTheaterLabel: 'Room layout on page load',
+      theaterMode: 'Theatre mode',
+      normalMode: 'Normal mode',
+      defaultTheaterHint: 'Applies the selected native layout on each room load where the theatre control is available. Manual changes afterward remain available. Saved on this browser only.',
       maxStreamHeight: 'Max stream quality',
       maxQualityAuto: 'Auto / no cap',
       freeZoomLabel: 'Ctrl/Command + wheel zoom',
@@ -2675,8 +2680,10 @@ function createSettingsSyncController(deps) {
       videoFitCover: '画面：填满窗口',
       videoFitHint: '在完整显示和裁切填满之间切换。',
       playbackSettingsTitle: '播放设置',
-      defaultTheaterLabel: '打开房间时使用剧场模式',
-      defaultTheaterHint: '下次打开具有原生剧场按钮的房间时生效。关闭后保留网站布局。仅保存在此浏览器。',
+      defaultTheaterLabel: '页面加载时的房间布局',
+      theaterMode: '剧场模式',
+      normalMode: '普通模式',
+      defaultTheaterHint: '打开具有原生剧场按钮的房间时应用所选布局。之后仍可手动切换。仅保存在此浏览器。',
       maxStreamHeight: '最高画质',
       maxQualityAuto: '自动 / 不限制',
       freeZoomLabel: 'Ctrl/Command + 滚轮缩放',
@@ -2924,7 +2931,7 @@ function createSettingsSyncController(deps) {
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.26',
+    version: '16.6.27',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -12943,19 +12950,23 @@ function createSettingsSyncController(deps) {
         ]);
         quality.value = String(Number(store.state.settings.maxStreamHeight) || 0);
         const freeZoom = $('input', { type: 'checkbox', checked: store.state.settings.freeZoom !== false });
-        const theater = $('input', { type: 'checkbox', checked: store.state.settings.defaultTheaterMode !== false });
+        const theater = $('select', { class: 'ctrl-input' }, [
+          $('option', { value: 'theatre' }, t('theaterMode')),
+          $('option', { value: 'normal' }, t('normalMode')),
+        ]);
+        theater.value = store.state.settings.defaultTheaterMode === false ? 'normal' : 'theatre';
         body.append(
           $('div', { style: { display: 'grid', gridTemplateColumns: '1fr', gap: '10px' } }, [
             $('label', { style: { display: 'grid', gap: '5px', fontSize: '12px', color: 'var(--text-muted)' } }, [t('maxStreamHeight'), quality]),
             $('label', { class: 'toggle' }, [freeZoom, t('freeZoomLabel')]),
-            $('label', { class: 'toggle' }, [theater, t('defaultTheaterLabel')]),
+            $('label', { style: { display: 'grid', gap: '5px', fontSize: '12px', color: 'var(--text-muted)' } }, [t('defaultTheaterLabel'), theater]),
           ]),
           $('div', { class: 'roomgrid-modal-hint', style: { marginTop: '10px' } }, t('freeZoomHint')),
           $('div', { class: 'roomgrid-modal-hint' }, t('defaultTheaterHint')),
           $('div', { class: 'roomgrid-modal-actions' }, [
             $('button', { class: 'ctrl-btn', onclick: close }, t('importReviewCancel')),
             $('button', { class: 'ctrl-btn primary', onclick: () => {
-              store.patchSettings({ maxStreamHeight: Number(quality.value) || 0, freeZoom: !!freeZoom.checked, defaultTheaterMode: !!theater.checked });
+              store.patchSettings({ maxStreamHeight: Number(quality.value) || 0, freeZoom: !!freeZoom.checked, defaultTheaterMode: theater.value === 'theatre' });
               if (!store.flush()) return;
               service.refreshQuality();
               close();

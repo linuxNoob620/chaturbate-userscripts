@@ -3,12 +3,20 @@
 ## Deployment
 
 - Primary runtime: Tampermonkey userscript `Chaturbate MultiCam Pro + Cam ARNA.user.js`.
-- Current userscript release: 16.6.28 (`main`, tag `v16.6.28`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
+- Current userscript release: 16.6.29 (`main`, tag `v16.6.29`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
 - Extension builds remain at 16.6.7. They were not modified, rebuilt, packaged, or published for this userscript-only change.
 - Local rollback point: Git tag `backup/pre-16.6.8-workshop-doubletap-20260905` at the 16.6.7 baseline.
-- Version 16.6.28 is installed in the existing Chrome testing-profile Tampermonkey entry; saved editor readback after reload matched the final source bytes. No reinstall or settings reset was performed. The phone was not updated or tested in this pass; its last verified entry is 16.6.22. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
+- Version 16.6.29 is installed in the existing Chrome testing-profile Tampermonkey entry; saved editor readback after reload matched the final source bytes. No reinstall or settings reset was performed. The phone was not updated or tested in this pass; its last verified entry is 16.6.22. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
 - Recu.me release rollback point: local tag `backup/pre-recu-16.6.13-20260909` at 16.6.12.
 - Candidate rollback point: `backup/pre-native-portrait-20260905`. Extension outputs are unchanged.
+
+## Adjustable room startup quality and settings hierarchy — 16.6.29
+
+- **Workshop → Menu and settings → Playback → Room stream startup quality** offers 240p, 360p, 480p, 720p and 1080p, defaulting to 1080p. On the next new native video/source, the existing native quality menu selects the chosen resolution or highest offered lower resolution. Later manual choices remain available. This preference is browser-local, survives shared settings sync, and does not alter native media sizing, fullscreen, viewport or controls. Unrecognized or above-cap-only ladders retain the prior fallback behavior: leave the native player untouched.
+- **Workshop preview quality** remains independent and preserves existing choices; it controls live card previews, not static thumbnails or normal-room streams. The main settings section is now named **Playback**. Main headings use light text; blue subsection headings sit in indented, bordered panels with a subtly different background. All styling is scoped to the settings drawer, with existing focus indicators and summary touch targets retained.
+- Actual installed Chrome/Tampermonkey automated handler checks saved the new setting, preserved preview quality at 720p and Normal room layout, and retained the choice across navigation. The same public room played at 1280×720 for the 720p selection; 480p fell back to native 360p and 640×360 playback. Restoring 1080p produced native 1080p and 1920×1080 playback. Settings computed colors/background/border matched the scoped CSS. These are installed-browser DOM-handler/media checks, not a new pointer/keyboard acceptance pass or real-phone verification. The test browser is left at the 1080p room default.
+- Syntax, complete isolated userscript build/regression and settings-sync gates, room-layout checks and compatibility adapter checks passed. Focused checks: 59 native quality, 20 Workshop settings and 18 Store/sync integration cases. Shared sync projection explicitly excludes the new local-only preference. The clean-HEAD overlay excludes unrelated standalone Recu.me and Android work. No extension rebuild, live cloud operation, account action or phone-setting change was performed. Mobile/Quetta and native fullscreen parity remain unverified in this pass.
+- Recoverable baseline: `backup/pre-room-startup-quality-20261012` at `629d362ba4030a38fe474b1cbdee8a75d62f3e4a`; baseline source SHA-256 `25C22F01371EBEB476A236709C83A86C0922B50CD7101393582E4740F0CDDD02`. Installed source SHA-256 `DAAFCCC35434534168C436DD3099538CFCF7C444C7A259BB416D1BF2F425FC60`.
 
 ## Workshop performance and central settings — 16.6.28
 

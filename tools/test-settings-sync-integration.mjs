@@ -297,6 +297,21 @@ check('theatre preference persists locally and survives shared sync projection',
   assert.equal(h.makeStore().state.settings.defaultTheaterMode, false);
 });
 
+check('native room startup quality persists locally independently of shared preview quality', () => {
+  const h = harness(); const store = h.makeStore({ attach: true });
+  assert.equal(store.state.settings.nativeRoomStartupHeight, 1080);
+  store.patchSettings({ nativeRoomStartupHeight: 720 });
+  assert.equal(store.flush(), true);
+  assert.equal(h.persisted().settings.nativeRoomStartupHeight, 720);
+  const incoming = h.persisted(); incoming.settings.maxStreamHeight = 360;
+  h.external(incoming);
+  assert.equal(store.state.settings.nativeRoomStartupHeight, 720);
+  assert.equal(store.state.settings.maxStreamHeight, 360);
+  assert.equal(h.makeStore().state.settings.nativeRoomStartupHeight, 720);
+  store.patchSettings({ nativeRoomStartupHeight: 2160 }); store.flush();
+  assert.equal(h.persisted().settings.nativeRoomStartupHeight, 1080);
+});
+
 check('ordinary shared projection leaves playback, transforms, card sizes and view state intact', () => {
   const h = harness();
   const store = h.makeStore({ attach: true });

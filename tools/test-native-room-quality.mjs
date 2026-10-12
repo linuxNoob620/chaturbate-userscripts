@@ -19,7 +19,7 @@ function test(name, run) {
   catch (error) { error.message = `${name}: ${error.message}`; throw error; }
 }
 
-function fixture({ mobile = false, labels = [], currentSrc = 'blob:native-one', delay = 0 } = {}) {
+function fixture({ mobile = false, labels = [], currentSrc = 'blob:native-one', delay = 0, startupHeight, rawSettings } = {}) {
   const clicks = [], pending = [];
   let now = 0, hostAvailable = true, videoAvailable = true;
   const state = { options: [], video: null };
@@ -80,10 +80,12 @@ function fixture({ mobile = false, labels = [], currentSrc = 'blob:native-one', 
       'only the normal-room native player is discovered, never Workshop/card videos');
     return videoAvailable ? state.video : null;
   } };
-  const ctx = vm.createContext({ document, WeakMap });
+  let raw = rawSettings ?? JSON.stringify({ settings: { nativeRoomStartupHeight: startupHeight } });
+  const ctx = vm.createContext({ document, WeakMap, STORE_KEY: 'fixture-store', localStorage: { getItem: () => raw } });
   vm.runInContext(`${qualityCode}\nglobalThis.sync = createNativeRoomQualitySync();`, ctx);
   return {
     state, clicks, sync: ctx.sync, setLabels, newVideo,
+    setStartupHeight(value) { raw = JSON.stringify({ settings: { nativeRoomStartupHeight: value } }); },
     hostAvailable(value) { hostAvailable = value; },
     videoAvailable(value) { videoAvailable = value; },
     advance(ms) {
@@ -98,6 +100,26 @@ function fixture({ mobile = false, labels = [], currentSrc = 'blob:native-one', 
 
 for (const mobile of [false, true]) {
   const platform = mobile ? 'mobile' : 'desktop';
+  for (const startupHeight of [240, 360, 480, 720, 1080]) test(`${platform}: configured ${startupHeight}p startup`, () => {
+    const f = fixture({ mobile, startupHeight, labels: ['2160p', '1080p', '720p', '480p', '360p', '240p'] });
+    f.sync('room_one');
+    assert.deepEqual(f.clicks, [`${startupHeight}p`]);
+    f.setStartupHeight(240); f.sync('room_one');
+    assert.equal(f.clicks.length, 1, 'saving a startup preference does not override an already-owned source');
+  });
+  test(`${platform}: unavailable requested quality chooses highest lower rendition`, () => {
+    const f = fixture({ mobile, startupHeight: 720, labels: ['1080p', '540p', '360p'] });
+    f.sync('room_one'); assert.deepEqual(f.clicks, ['540p']);
+  });
+  test(`${platform}: latest preference is read when delayed options become available`, () => {
+    const f = fixture({ mobile, labels: ['Auto'] });
+    f.sync('room_one'); f.setStartupHeight(480); f.setLabels(['1080p', '720p', '480p']);
+    f.sync('room_one'); assert.deepEqual(f.clicks, ['480p']);
+  });
+  for (const startupHeight of [0, 1440, 2160, -1, 'invalid', null]) test(`${platform}: invalid cap falls back to 1080p`, () => {
+    const f = fixture({ mobile, startupHeight, labels: ['2160p', '1080p', '720p'] });
+    f.sync('room_one'); assert.deepEqual(f.clicks, ['1080p']);
+  });
   for (const [labels, expected] of [
     [['720p', '2160p', 'Auto', '1080p', '480p'], '1080p'],
     [['1440p', '480p', 'Auto', '720p'], '720p'],
@@ -211,6 +233,11 @@ test('a synchronously failed native click can retry on the next reconciliation',
   f.sync('room_one');
   f.setLabels(['1080p']); f.sync('room_one');
   assert.deepEqual(f.clicks, ['1080p', '1080p']);
+});
+
+test('unreadable settings retain the existing default without breaking playback', () => {
+  const f = fixture({ rawSettings: '{bad', labels: ['1080p', '720p'] });
+  f.sync('room_one'); assert.deepEqual(f.clicks, ['1080p']);
 });
 
 test('mobile accessibility selected suffix is not parsed as the quality label', () => {

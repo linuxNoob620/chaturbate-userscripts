@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.28
+// @version           16.6.29
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -1665,7 +1665,7 @@ function createSettingsSyncController(deps) {
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.28');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.29');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -1681,7 +1681,7 @@ function createSettingsSyncController(deps) {
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.28');
+  instanceMarker.setAttribute('data-suite-version', '16.6.29');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -2931,7 +2931,7 @@ function createSettingsSyncController(deps) {
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.28',
+    version: '16.6.29',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3080,6 +3080,7 @@ function createSettingsSyncController(deps) {
       videoFit: 'contain',
       freeZoom: true,
       defaultTheaterMode: true,
+      nativeRoomStartupHeight: 1080,
       maxStreamHeight: 480,
       videoTransforms: {},
       favoriteFirst: true,
@@ -3274,6 +3275,7 @@ function createSettingsSyncController(deps) {
     const st = src.settings && typeof src.settings === 'object' && !Array.isArray(src.settings) ? src.settings : {};
     out.settings = { ...def.settings, ...st };
     out.settings.defaultTheaterMode = st.defaultTheaterMode !== false;
+    out.settings.nativeRoomStartupHeight = [240, 360, 480, 720, 1080].includes(Number(st.nativeRoomStartupHeight)) ? Number(st.nativeRoomStartupHeight) : def.settings.nativeRoomStartupHeight;
     const allowedSettingKeys = new Set(Object.keys(def.settings));
     for (const key of Object.keys(out.settings)) {
       if (!allowedSettingKeys.has(key)) delete out.settings[key];
@@ -5923,13 +5925,19 @@ function createSettingsSyncController(deps) {
       // Do not replace its HLS source, controls, sizing or fullscreen behavior.
       let options = [...host.querySelectorAll('[data-testid="quality-option"]')];
       if (!options.length) options = [...host.querySelectorAll('#chat-player .vjs-menu-item')];
+      if (!options.length) return;
+      let maxHeight = 1080;
+      try {
+        const saved = Number(JSON.parse(localStorage.getItem(STORE_KEY) || 'null')?.settings?.nativeRoomStartupHeight);
+        if ([240, 360, 480, 720, 1080].includes(saved)) maxHeight = saved;
+      } catch (_) { /* Missing/unreadable settings retain the existing 1080p default. */ }
       let best = null, height = 0;
       for (const option of options) {
         if (option.getAttribute('aria-disabled') === 'true' || option.disabled) continue;
         const label = (option.querySelector('.vjs-menu-item-text') || option).textContent.trim();
         const match = label.match(/^(\d{3,4})p(?:\s*\d+(?:\.\d+)?(?:\s*fps)?)?$/i);
         const candidate = match ? Number(match[1]) : 0;
-        if (candidate > height && candidate <= 1080) { best = option; height = candidate; }
+        if (candidate > height && candidate <= maxHeight) { best = option; height = candidate; }
       }
       if (!best) return; // Options may not have hydrated yet; never choose an uncapped Auto.
       const selected = best.getAttribute('aria-checked') === 'true'
@@ -10321,11 +10329,14 @@ function createSettingsSyncController(deps) {
         .rg-control-drawer .menu-pop { position:static!important; inset:auto!important; display:block!important; width:100%!important; min-width:0!important; max-height:none!important; overflow:visible!important; padding:0!important; border:0!important; border-radius:0!important; box-shadow:none!important; background:transparent!important; }
         .rg-control-drawer .menu-pop button { width:100%; min-height:38px; border-radius:3px!important; }
         .rg-settings-drawer { width:min(520px,96vw); }
-        .rg-settings-section > summary,.rg-settings-subsection > summary { min-height:44px; box-sizing:border-box; padding:12px 10px; cursor:pointer; color:#68b5f0; font-size:14px; font-weight:700; }
+        .rg-settings-section > summary,.rg-settings-subsection > summary { min-height:44px; box-sizing:border-box; padding:12px 10px; cursor:pointer; font-size:14px; font-weight:700; }
+        .rg-settings-section > summary { color:#f1f1f1; }
+        .rg-settings-subsection > summary { color:#68b5f0; font-size:13px; font-weight:600; }
         .rg-settings-section > summary:focus-visible,.rg-settings-subsection > summary:focus-visible { outline:2px solid #68b5f0; outline-offset:-2px; }
         .rg-settings-section[open] > summary { background:#17202a; }
         .rg-settings-section-body { padding:5px 5px 10px; }
-        .rg-settings-subsection { border-top:1px solid #2d3e50; margin-top:8px; }
+        .rg-settings-subsection { border:1px solid #3e5266; border-radius:5px; background:#1b2632; margin:10px 0 0 10px; }
+        .rg-settings-subsection > .rg-settings-inline { padding:0 10px 10px; }
         .rg-settings-form { display:grid; gap:8px; min-width:0; }
         .rg-settings-form .toggle { display:flex; align-items:center; gap:9px; min-height:38px; color:var(--text); font-size:12px; }
         .rg-settings-form .toggle input { width:20px; height:20px; flex:0 0 auto; }
@@ -13070,6 +13081,9 @@ function createSettingsSyncController(deps) {
           ...[240, 360, 480, 720, 1080, 1440, 2160].map(n => $('option', { value: String(n) }, `${n}p`)),
         ]);
         quality.value = String(Number(store.state.settings.maxStreamHeight) || 0);
+        const roomQuality = $('select', { class: 'ctrl-input', 'aria-label': 'Room stream startup quality' },
+          [240, 360, 480, 720, 1080].map(n => $('option', { value: String(n) }, `${n}p`)));
+        roomQuality.value = String(store.state.settings.nativeRoomStartupHeight || 1080);
         const freeZoom = $('input', { type: 'checkbox', checked: store.state.settings.freeZoom !== false });
         const theater = $('select', { class: 'ctrl-input' }, [
           $('option', { value: 'theatre' }, t('theaterMode')),
@@ -13079,16 +13093,18 @@ function createSettingsSyncController(deps) {
         body.append(
           $('div', { style: { display: 'grid', gridTemplateColumns: '1fr', gap: '10px' } }, [
             $('label', { style: { display: 'grid', gap: '5px', fontSize: '12px', color: 'var(--text-muted)' } }, [LANG === 'zh' ? '工作台预览质量' : 'Workshop preview quality', quality]),
+            $('label', { style: { display: 'grid', gap: '5px', fontSize: '12px', color: 'var(--text-muted)' } }, [LANG === 'zh' ? '房间直播初始画质' : 'Room stream startup quality', roomQuality]),
             $('label', { class: 'toggle' }, [freeZoom, t('freeZoomLabel')]),
             $('label', { style: { display: 'grid', gap: '5px', fontSize: '12px', color: 'var(--text-muted)' } }, [t('defaultTheaterLabel'), theater]),
           ]),
           $('div', { class: 'roomgrid-modal-hint', style: { marginTop: '10px' } }, t('freeZoomHint')),
-          $('div', { class: 'roomgrid-modal-hint' }, LANG === 'zh' ? '480p 适合小预览。此设置不更改普通房间的 1080p 默认画质。' : '480p is recommended for small previews. This does not change normal rooms’ 1080p startup quality.'),
+          $('div', { class: 'roomgrid-modal-hint' }, LANG === 'zh' ? '480p 适合小预览。预览画质只影响工作台直播预览，不影响静态缩略图或普通房间。' : '480p is recommended for small previews. Workshop preview quality affects live card previews, not static thumbnails or normal rooms.'),
+          $('div', { class: 'roomgrid-modal-hint' }, LANG === 'zh' ? '房间画质在下次加载直播时生效，选择该画质或最高的较低画质（最高 1080p）。此设备独立保存，之后仍可手动切换画质。' : 'Room quality applies on the next stream load: the selected resolution, or the highest available below it (maximum 1080p). Saved on this browser; later manual quality changes remain available.'),
           $('div', { class: 'roomgrid-modal-hint' }, t('defaultTheaterHint')),
           $('div', { class: 'roomgrid-modal-actions' }, [
             $('button', { class: 'ctrl-btn', onclick: close }, t('importReviewCancel')),
             $('button', { class: 'ctrl-btn primary', onclick: () => {
-              store.patchSettings({ maxStreamHeight: Number(quality.value) || 0, freeZoom: !!freeZoom.checked, defaultTheaterMode: theater.value === 'theatre' });
+              store.patchSettings({ maxStreamHeight: Number(quality.value) || 0, nativeRoomStartupHeight: Number(roomQuality.value), freeZoom: !!freeZoom.checked, defaultTheaterMode: theater.value === 'theatre' });
               if (!store.flush()) return;
               service.refreshQuality();
               close('saved');
@@ -13670,7 +13686,7 @@ function createSettingsSyncController(deps) {
           item(t('menuPureMode'), () => togglePureMode(), { title: t('pureModeHint') }),
         );
       });
-      addSection('previews', sectionLabel('预览', 'Previews'), body => {
+      addSection('previews', sectionLabel('播放', 'Playback'), body => {
         appendTools(body, openPlaybackSettingsPanel);
         body.append(drawerControl(sectionLabel('音量', 'Preview volume'), volSlider),
         item(t('menuToggleFit'), () => toggleVideoFit(), { title: t('videoFitHint') }),

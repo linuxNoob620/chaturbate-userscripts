@@ -3,12 +3,24 @@
 ## Deployment
 
 - Primary runtime: Tampermonkey userscript `Chaturbate MultiCam Pro + Cam ARNA.user.js`.
-- Current userscript release: 16.6.29 (`main`, tag `v16.6.29`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
+- Current userscript release: 16.6.30 (`main`, tag `v16.6.30`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
 - Extension builds remain at 16.6.7. They were not modified, rebuilt, packaged, or published for this userscript-only change.
 - Local rollback point: Git tag `backup/pre-16.6.8-workshop-doubletap-20260905` at the 16.6.7 baseline.
-- Version 16.6.29 is installed in the existing Chrome testing-profile Tampermonkey entry; saved editor readback after reload matched the final source bytes. No reinstall or settings reset was performed. The phone was not updated or tested in this pass; its last verified entry is 16.6.22. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
+- Version 16.6.30 is installed in the existing Chrome testing-profile Tampermonkey entry; saved editor readback after reload matched the final source bytes, and the reloaded live runtime reports 16.6.30. No reinstall or settings reset was performed. The phone was not updated or tested in this pass; its last verified entry is 16.6.22. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
 - Recu.me release rollback point: local tag `backup/pre-recu-16.6.13-20260909` at 16.6.12.
 - Candidate rollback point: `backup/pre-native-portrait-20260905`. Extension outputs are unchanged.
+
+## Staged desktop performance pass — 16.6.30
+
+- Native listing decoration no longer blocks the page for routine updates. Route-owned bounded batches target added/changed cards, handle late hydration/recycled nodes, reuse preference snapshots and avoid own-note feedback/retained-list scans. Targeted decoration does not refetch hidden status; full/explicit route updates retain the existing refresh path.
+- Workshop setting updates are key-specific. Split audio, ratio and toolbar position patch stable panes/controls instead of rebuilding structure; detached or changed membership still takes the structural path. Existing 16.6.28 freshness, card identity and transient pan behavior remain.
+- Native-thumbnail hover owns its timer/image/listeners and rejects stale route/source/visibility results. Desktop Archive searches deactivate on dock/tab/subview/page inactivity and resume unfinished work without losing completed results. Native-mobile search policy is opted out pending its separate pass.
+- Bulk username additions use an indexed coherent Store mutation and successful flush before acknowledgement, preserving group/order/rebase/journal behavior. Failed same-list retries cannot falsely report persistence success. Serialized bulk checks use the existing four-worker lane; this is not a global request cap.
+- Actual Chrome/Tampermonkey: append decoration 503/442/444 ms before versus 31/7/200 ms afterward; automatic blocker 495/434/436 ms versus zero. No total scripting/CPU/GPU or sub-100-ms guarantee is established. Three hover cycles admitted no snapshot request after leaving. Split/audio/divider/toolbar retained two advancing videos with zero grid-child mutations; local preferences were restored. Drawer draft/focus, hidden/return, nearby preview fullscreen and muted native 1080p playback checks passed within the bounded observations documented in the report.
+- Synthetic 100/500/1,000-room additions reduced save counts from 100/500/1,000 to one per batch with equivalent state. One cold live refresh took 12.6 seconds/109 requests; eight of nine sampled videos remained advancing, with two failed checks and a changing live Online list. No cold-refresh speed gain or complete-preview continuity is claimed.
+- Complete isolated userscript build/regression, settings-sync and adapter gates passed, along with 30 focused performance and 14 isolated actual Chromium DOM checks. Independent read-only scoped lifecycle/persistence/media review found no remaining confirmed blocker. No real account mutation, bulk test library, cloud write, extension rebuild or phone-setting change was performed.
+- Mobile changes/actual Quetta, preview budgets, large-list virtualization, long-session soak, CPU/GPU/memory trend and complete PiP/native-fullscreen acceptance remain deferred or untested. All-live functionality and saved preferences remain available. Details, exact check outcomes and tradeoffs: `docs/PERFORMANCE_PASS_16.6.30.md`.
+- Rollback: `backup/pre-staged-performance-20261012` at `a649b14a008dcfd755fc73d563e12c3621564893`. Final installed source SHA-256: `0AFD893F44BBA8AD067845021DAB706E10A1ACF9832572358D300ACB102EBC51`.
 
 ## Adjustable room startup quality and settings hierarchy — 16.6.29
 

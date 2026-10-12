@@ -377,5 +377,76 @@ check('failed writes leave shared drafts retryable and do not acknowledge succes
   assert.equal(h.receipts.at(-1).success, true);
 });
 
+for (const enabled of [false, true]) check(`bulk addition matches sequential memberships and order with sync ${enabled}`, () => {
+  const a = harness({ enabled }), b = harness({ enabled });
+  const single = a.makeStore(), bulk = b.makeStore();
+  single.patchSettings({ activeGroup: 'custom' }); bulk.patchSettings({ activeGroup: 'custom' });
+  const ids = ['model_one', ...Array.from({ length: 100 }, (_, i) => `synthetic_${i}`)];
+  for (const id of ids) single.addRoom(id);
+  const result = bulk.addRooms([...ids, ids[1], 'bad/name', '']);
+  const comparable = state => ({ ...clone(state), rooms: state.rooms.map(room => ({ ...clone(room), addedAt: 0 })).sort((a, b) => a.id.localeCompare(b.id)) });
+  assert.deepEqual(comparable(bulk.state), comparable(single.state));
+  assert.equal(result.added, 100); assert.equal(result.exists, 1); assert.equal(result.newIds.length, 100);
+  assert.equal(bulk.persistence, 'saved'); assert.equal(b.persisted().rooms.length, 102);
+  assert.equal(b.membershipExports.length, 1); // actual export queue decides enrolled/legacy behavior
+  assert.equal(b.writes.filter(w => w.key === storeKey).length, 1); // also persists pending local group selection
+  assert.equal(a.writes.filter(w => w.key === storeKey).length, 100);
+});
+check('mixed existing DEFAULT membership and new rooms retain sequential order', () => {
+  const a = harness(), b = harness();
+  for (const h of [a, b]) {
+    const state = h.persisted(); state.rooms[0].groups = ['custom']; state.rooms[0].group = 'custom';
+    state.rooms[0].groupOrder = { custom: 10 }; state.rooms[0].order = 10; h.external(state);
+  }
+  const single = a.makeStore(), bulk = b.makeStore();
+  const ids = ['new_before', 'model_one', 'new_after'];
+  for (const id of ids) single.addRoom(id);
+  bulk.addRooms(ids);
+  const comparable = state => state.rooms.map(room => ({ ...clone(room), addedAt: 0 })).sort((a, b) => a.id.localeCompare(b.id));
+  assert.deepEqual(comparable(bulk.state), comparable(single.state));
+});
+check('bulk failure is reported, retains the draft, and retries without losing newer remote state', () => {
+  const h = harness({ enabled: true }), store = h.makeStore();
+  h.controls.failWrites = true;
+  assert.throws(() => store.addRooms(['new_one', 'new_two']), /saving failed/);
+  assert.equal(store.persistence, 'failed'); assert.equal(store.state.rooms.length, 4);
+  assert.equal(h.persisted().rooms.length, 2); assert.equal(h.membershipExports.length, 0);
+  assert.ok(h.receipts.every(receipt => receipt.success === false));
+  const remote = h.persisted(); remote.settings.notifyFavoritesOnly = false;
+  remote.rooms[0].notes = 'newer remote note'; h.external(remote);
+  h.controls.failWrites = false;
+  assert.equal(store.flush(), true); assert.equal(h.persisted().rooms.length, 4);
+  assert.equal(h.persisted().settings.notifyFavoritesOnly, false);
+  assert.equal(h.persisted().rooms[0].notes, 'newer remote note');
+});
+check('bulk no-op produces no persistence or render notification', () => {
+  const h = harness(), store = h.makeStore(); let notifications = 0; store.subscribe(() => notifications++);
+  assert.deepEqual(store.addRooms(['model_one', 'MODEL_ONE']), { added: 0, exists: 1, total: 1, newIds: [] });
+  assert.equal(notifications, 0); assert.equal(h.writes.length, 0);
+});
+check('same-list retry must persist a failed retained bulk draft before acknowledging duplicates', () => {
+  const h = harness(), store = h.makeStore(); h.controls.failWrites = true;
+  assert.throws(() => store.addRooms(['retry_one', 'retry_two']), /saving failed/);
+  h.drain(); // the original failed debounce no longer provides a future retry
+  assert.throws(() => store.addRooms(['retry_one', 'retry_two']), /saving failed/);
+  h.controls.failWrites = false;
+  assert.equal(store.addRooms(['retry_one', 'retry_two']).exists, 2);
+  assert.equal(store.persistence, 'saved'); assert.equal(h.persisted().rooms.length, 4);
+});
+
 console.log(`Settings sync Store integration: ${passed} passed, ${failures.length} failed (extracted actual userscript, synthetic data).`);
+if (process.argv.includes('--measure')) {
+  const samples = [];
+  for (const count of [100, 500, 1000]) {
+    const ids = Array.from({ length: count }, (_, i) => `measured_${i}`);
+    const a = harness(), b = harness(), sequential = a.makeStore(), bulk = b.makeStore();
+    let start = performance.now(); for (const id of ids) sequential.addRoom(id);
+    const beforeMs = Math.round(performance.now() - start);
+    start = performance.now(); bulk.addRooms(ids); const afterMs = Math.round(performance.now() - start);
+    assert.equal(b.persisted().rooms.length, count + 2);
+    samples.push({ count, sequentialMs: beforeMs, bulkMs: afterMs,
+      sequentialWrites: a.writes.filter(w => w.key === storeKey).length, bulkWrites: b.writes.filter(w => w.key === storeKey).length });
+  }
+  console.log(JSON.stringify({ samples, caveat: 'One synthetic Node Store sample per size, same actual persistence code. Not browser input latency or real sync/WAL throughput.' }));
+}
 if (failures.length) process.exitCode = 1;

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.29
+// @version           16.6.30
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -1665,7 +1665,7 @@ function createSettingsSyncController(deps) {
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.29');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.30');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -1681,7 +1681,7 @@ function createSettingsSyncController(deps) {
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.29');
+  instanceMarker.setAttribute('data-suite-version', '16.6.30');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -2931,7 +2931,7 @@ function createSettingsSyncController(deps) {
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.29',
+    version: '16.6.30',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -4596,6 +4596,42 @@ function createSettingsSyncController(deps) {
       },
 
       // ---- 房间 ----
+      addRooms(ids) {
+        const clean = [...new Set((ids || []).map(normalizeUsername).filter(isLikelyUsername))];
+        let added = 0, exists = 0;
+        const newIds = [];
+        update(s => {
+          normalizeStateMemberships(s);
+          const ag = s.settings.activeGroup || DEFAULT_GROUP_ID;
+          const targetGroup = [RECENT_FOLLOWED_GROUP_ID, LIBRARY_GROUP_ID, ONLINE_GROUP_ID, ONLINE_FAVORITES_GROUP_ID].includes(ag) ? DEFAULT_GROUP_ID : ag;
+          const index = new Map(s.rooms.map(room => [room.id, room]));
+          let allOrder = nextOrderForGroup(s, DEFAULT_GROUP_ID);
+          let groupOrder = targetGroup === DEFAULT_GROUP_ID ? allOrder : nextOrderForGroup(s, targetGroup);
+          for (const id of clean) {
+            const existing = index.get(id);
+            if (existing) {
+              if (ensureRoomInGroup(existing, targetGroup, groupOrder)) {
+                added++;
+                if (targetGroup === DEFAULT_GROUP_ID) {
+                  allOrder = Math.max(allOrder, numeric(existing.order, 0) + 1);
+                  groupOrder = allOrder;
+                } else groupOrder++;
+              }
+              else exists++;
+              continue;
+            }
+            const room = normalizeRoom({ id, addedAt: Date.now(), group: targetGroup, groups: [targetGroup],
+              groupOrder: targetGroup === DEFAULT_GROUP_ID ? {} : { [targetGroup]: groupOrder }, order: allOrder,
+              lastStatus: 'unknown', lastSeenOnline: 0, muted: true }, allOrder);
+            s.rooms.push(room); index.set(id, room); newIds.push(id); added++;
+            if (targetGroup === DEFAULT_GROUP_ID) allOrder++;
+            groupOrder++;
+          }
+          if (!added) return false;
+        }, 'rooms');
+        if (!flush()) throw new Error('Rooms are pending locally: saving failed. Retry saving before closing; bulk status checks were not started.');
+        return { added, exists, total: clean.length, newIds };
+      },
       addRoom(id) {
         id = normalizeUsername(id);
         if (!isLikelyUsername(id)) return false;
@@ -7409,6 +7445,7 @@ function createSettingsSyncController(deps) {
     let activeDockTab = 'multicam';
     localStorage.setItem('roomgrid_active_dock_tab', 'multicam');
     const camArna = createCamArnaDock(arnaPane, {
+      suspendWhenInactive: !nativeMobilePage,
       notify: (message) => toast(message, 2200),
       openExternal: (url) => openNoopener(url),
       onFoundCount: (count) => {
@@ -7427,7 +7464,8 @@ function createSettingsSyncController(deps) {
       multicamTab.setAttribute('aria-selected', showArna ? 'false' : 'true');
       arnaTab.setAttribute('aria-selected', showArna ? 'true' : 'false');
       root.classList.toggle('arna-active', showArna);
-      if (showArna) camArna.activate(activeDockRoom());
+      if (showArna && (nativeMobilePage || (!collapsed && !document.hidden))) camArna.activate(activeDockRoom());
+      else camArna.deactivate();
       if (!collapsed) scheduleDockAutoCollapse();
     }
     multicamTab.addEventListener('click', () => setDockTab('multicam'));
@@ -7514,7 +7552,7 @@ function createSettingsSyncController(deps) {
       document.dispatchEvent(new CustomEvent('ziggy-suite:state'));
     }
     currentRoomSubs.add(updateDockRoom);
-    currentRoomSubs.add(() => { if (activeDockTab === 'arna') camArna.activate(activeDockRoom()); });
+    currentRoomSubs.add(() => { if (activeDockTab === 'arna' && (nativeMobilePage || (!collapsed && !document.hidden))) camArna.activate(activeDockRoom()); });
     storageSubs.add(updateDockRoom);
     function syncDock() {
       root.classList.toggle('is-collapsed', !!collapsed);
@@ -7552,6 +7590,7 @@ function createSettingsSyncController(deps) {
       collapsed = !!nextCollapsed;
       localStorage.setItem('ryujo_fab_collapsed', collapsed ? '1' : '0');
       if (collapsed) {
+        camArna.deactivate();
         clearDockAutoCollapseTimer();
         if (contextDockSummoned) {
           contextDockSummoned = false;
@@ -8484,8 +8523,14 @@ function createSettingsSyncController(deps) {
     });
     document.addEventListener('ziggy-mobile-shell:ready', publishSuiteState);
     window.addEventListener('pagehide', () => {
+      camArna.deactivate();
       if (contextDockSummoned) setDockCollapsed(true);
       cancelRecuRequests();
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (nativeMobilePage) return;
+      if (document.hidden || collapsed || activeDockTab !== 'arna') camArna.deactivate();
+      else camArna.activate(activeDockRoom());
     });
     // A mobile page restored from the back-forward cache keeps this document and
     // its Suite runtime. Re-publish state instead of exposing the legacy fallback
@@ -8494,6 +8539,7 @@ function createSettingsSyncController(deps) {
       refreshNativeLayoutMode();
       publishSuiteState();
       syncSuitePageMountsSoon();
+      if (!nativeMobilePage && !document.hidden && !collapsed && activeDockTab === 'arna') camArna.activate(activeDockRoom());
     });
 
     const dockCard = $('div', { class: 'roomgrid-dock-card' }, [head, body]);
@@ -9139,6 +9185,11 @@ function createSettingsSyncController(deps) {
     let searchAbort = null;
     let debounceTimer = 0;
     let lastAutoRoom = '';
+    const suspendWhenInactive = !!options.suspendWhenInactive;
+    let active = !suspendWhenInactive;
+    let selectedView = 'search';
+    let resumeUser = '';
+    let lastSearchUser = '';
     let input = null;
     let archiveGrid = null;
     let counter = null;
@@ -9150,14 +9201,34 @@ function createSettingsSyncController(deps) {
     const views = new Map();
 
     function activate(room) {
+      active = true;
       if (!mounted) mount();
       const candidate = String(room || '').trim();
       if (isValidUsername(candidate) && candidate !== lastAutoRoom) {
         lastAutoRoom = candidate;
+        resumeUser = '';
         input.value = candidate;
         showView('search');
         checkAll(candidate);
+      } else if (resumeUser && selectedView === 'search') {
+        const candidate = resumeUser;
+        resumeUser = '';
+        checkAll(candidate, candidate === lastSearchUser);
       }
+    }
+
+    function suspendSearch() {
+      if (!suspendWhenInactive) return;
+      if (debounceTimer || searchAbort) resumeUser = input?.value.trim() || '';
+      clearTimeout(debounceTimer); debounceTimer = 0;
+      searchRun++;
+      searchAbort?.abort(); searchAbort = null;
+    }
+
+    function deactivate() {
+      if (!suspendWhenInactive) return;
+      active = false;
+      suspendSearch();
     }
 
     function mount() {
@@ -9258,14 +9329,18 @@ function createSettingsSyncController(deps) {
 
       for (const view of views.values()) container.appendChild(view);
       input.addEventListener('input', () => {
+        suspendSearch();
+        resumeUser = '';
         clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => checkAll(input.value.trim()), 600);
+        debounceTimer = setTimeout(() => { debounceTimer = 0; checkAll(input.value.trim()); }, 600);
       });
       buildArchiveGrid();
       buildSiteToggles();
     }
 
     function showView(name) {
+      selectedView = name;
+      if (name !== 'search') suspendSearch();
       for (const [key, button] of subTabs) {
         const active = key === name;
         button.classList.toggle('active', active);
@@ -9274,6 +9349,10 @@ function createSettingsSyncController(deps) {
       for (const [key, view] of views) view.hidden = key !== name;
       if (name === 'history') loadHistory();
       if (name === 'saved') loadSavedProfiles();
+      if (name === 'search' && active && resumeUser) {
+        const username = resumeUser; resumeUser = '';
+        checkAll(username, username === lastSearchUser);
+      }
     }
 
     function getValue(key, fallback) {
@@ -9345,28 +9424,33 @@ function createSettingsSyncController(deps) {
       }
     }
 
-    function checkAll(username) {
+    function checkAll(username, resume = false) {
+      if (suspendWhenInactive && (!active || selectedView !== 'search' || document.hidden)) { resumeUser = username; return; }
       searchAbort?.abort();
       searchAbort = new AbortController();
       const signal = searchAbort.signal;
       const runId = ++searchRun;
       const items = [...archiveGrid.querySelectorAll('.roomgrid-arna-archive')];
       if (!isValidUsername(username)) {
+        searchAbort = null;
         for (const item of items) item.classList.remove('checking', 'found', 'not-found');
         updateCounter(0, items.length);
         return;
       }
-      saveHistory(username);
-      let foundCount = 0;
-      for (const item of items) {
-        item.classList.remove('found', 'not-found');
+      resume = resume && username === lastSearchUser;
+      lastSearchUser = username; resumeUser = '';
+      if (!resume) saveHistory(username);
+      let foundCount = resume ? items.filter(item => item.classList.contains('found')).length : 0;
+      const pendingItems = resume ? items.filter(item => !item.classList.contains('found') && !item.classList.contains('not-found')) : items;
+      for (const item of pendingItems) {
+        if (!resume) item.classList.remove('found', 'not-found');
         item.classList.add('checking');
       }
-      updateCounter(0, items.length);
+      updateCounter(foundCount, items.length);
       let next = 0;
       const worker = async () => {
-        while (!signal.aborted && runId === searchRun && next < items.length) {
-          const item = items[next++];
+        while (!signal.aborted && runId === searchRun && next < pendingItems.length) {
+          const item = pendingItems[next++];
           const url = item.dataset.url.replace('{username}', encodeURIComponent(username));
           const exists = await checkPage(url, signal);
           if (signal.aborted || runId !== searchRun) return;
@@ -9381,7 +9465,9 @@ function createSettingsSyncController(deps) {
           updateCounter(foundCount, items.length);
         }
       };
-      return Promise.all(Array.from({ length: Math.min(3, items.length) }, worker));
+      return Promise.all(Array.from({ length: Math.min(3, pendingItems.length) }, worker)).finally(() => {
+        if (runId === searchRun) searchAbort = null;
+      });
     }
 
     function updateCounter(found, total) {
@@ -9532,6 +9618,7 @@ function createSettingsSyncController(deps) {
     }
 
     function selectUsername(username) {
+      resumeUser = '';
       input.value = username;
       showView('search');
       checkAll(username);
@@ -9567,7 +9654,7 @@ function createSettingsSyncController(deps) {
       event.target.value = '';
     }
 
-    return { activate };
+    return { activate, deactivate };
   }
 
   /* =============================================================
@@ -10791,9 +10878,11 @@ function createSettingsSyncController(deps) {
           const raw = String(e.target.value || '');
           const parts = raw.split(/[\s,;，；]+/).map(x => x.trim()).filter(Boolean);
           if (parts.length <= 1) return;
-          const r = importUsernameList(parts);
-          e.target.value = '';
-          toast(t('manualImportDone', r.added, r.exists));
+          try {
+            const r = importUsernameList(parts);
+            e.target.value = '';
+            toast(t('manualImportDone', r.added, r.exists));
+          } catch (error) { toast(error.message || String(error), 5000); }
         }, 0);
       },
       onkeypress: (e) => {
@@ -11004,21 +11093,24 @@ function createSettingsSyncController(deps) {
       }), t('notifyOnline'),
     ]);
 
+    let bulkRoomRefreshTail = Promise.resolve();
     function importUsernameList(usernames) {
       const clean = [...new Set((usernames || [])
         .map(u => normalizeUsername(u))
         .filter(isLikelyUsername))];
-      let added = 0, exists = 0;
-      clean.forEach(u => {
-        const hadRoom = !!store.state.rooms.find(r => r.id === u);
-        if (store.addRoom(u)) {
-          if (!hadRoom) service.start(u);
-          added++;
-        } else {
-          exists++;
-        }
-      });
-      return { added, exists, total: clean.length };
+      // One durable mutation, then serialized batches using the existing four workers.
+      const result = store.addRooms(clean);
+      if (result.newIds.length) {
+        bulkRoomRefreshTail = bulkRoomRefreshTail.then(() => {
+          const ids = result.newIds.filter(id => findRoomAny(id));
+          return service.refreshMany(ids, { reuseFresh: true, preservePlaying: true,
+            shouldContinue: () => !document.hidden && !workshopPageSuspended });
+        }).then(results => {
+          if (results.some(result => result.status === 'error' || result.status === 'throttled'))
+            toast('Rooms saved; some status checks failed or were deferred. Use Refresh to retry.');
+        }).catch(() => toast('Rooms saved; status checks failed. Use Refresh to retry.'));
+      }
+      return result;
     }
 
     function openManualImportPrompt() {
@@ -11046,9 +11138,11 @@ function createSettingsSyncController(deps) {
       const apply = $('button', {
         class: 'ctrl-btn primary',
         onclick: () => {
-          const r = importUsernameList(parse());
-          close();
-          toast(t('manualImportDone', r.added, r.exists));
+          try {
+            const r = importUsernameList(parse());
+            close();
+            toast(t('manualImportDone', r.added, r.exists));
+          } catch (error) { toast(error.message); }
         },
       }, LANG === 'zh' ? '添加' : 'Add');
       ta.addEventListener('input', update);
@@ -14296,6 +14390,7 @@ function createSettingsSyncController(deps) {
     let splitToolbarHideTimer = 0;
     let splitToolbarActivityCleanup = null;
     let splitToolbarLastActivity = 0;
+    let splitLayoutView = null;
 
     function cleanupSplitToolbarAutohide(resetActivity = false) {
       clearTimeout(splitToolbarHideTimer);
@@ -14365,6 +14460,7 @@ function createSettingsSyncController(deps) {
     }
 
     function cleanupSplitLayout() {
+      splitLayoutView = null;
       cleanupSplitToolbarAutohide(true);
       grid.querySelectorAll('.split-pane').forEach(pane => {
         pane.querySelectorAll('.cam-card').forEach(card => grid.appendChild(card));
@@ -14409,12 +14505,50 @@ function createSettingsSyncController(deps) {
       divider.addEventListener('pointercancel', finish);
     }
 
+    function syncSplitLayoutState() {
+      const view = splitLayoutView;
+      if (!view || !store.state.settings.splitViewActive || !grid.contains(view.toolbar)) return;
+      const settings = store.state.settings;
+      const ratio = clampInt(settings.splitRatio, 20, 80, 50) + '%';
+      if (grid.style.getPropertyValue('--split-ratio') !== ratio) grid.style.setProperty('--split-ratio', ratio);
+      const position = settings.splitToolbarPosition || 'top';
+      if (view.toolbar.dataset.position !== position) {
+        view.toolbar.classList.remove('position-' + view.toolbar.dataset.position);
+        view.toolbar.classList.add('position-' + position);
+        view.toolbar.dataset.position = position;
+      }
+      const hint = `${t('splitControlsPosition')} · ${splitToolbarPositionLabel(position)}`;
+      if (view.positionBtn.title !== hint) view.positionBtn.title = hint;
+      view.controls.forEach((controls, slot) => {
+        const roomId = view.ids[slot];
+        const canCycle = splitOnlineCycleIds(slot).some(id => id !== roomId);
+        for (const [button, key] of [[controls.prevOnlineBtn, 'splitPrevOnline'], [controls.nextOnlineBtn, 'splitNextOnline']]) {
+          if (button.disabled !== !canCycle) button.disabled = !canCycle;
+          const title = t(canCycle ? key : 'splitNoOtherOnline');
+          if (button.title !== title) button.title = title;
+        }
+        const active = settings.splitAudioRoomId === roomId;
+        if (controls.audioBtn.classList.contains('active') !== active) controls.audioBtn.classList.toggle('active', active);
+        if (controls.audioActive !== active) {
+          setTrustedHtml(controls.audioBtn, trustedHtml(iconSvg(active ? 'volume' : 'volumeOff', 18)));
+          controls.audioActive = active;
+        }
+        applyMute(roomId);
+      });
+    }
+
     function renderSplitLayout() {
       reconcileSplitState(store.state);
       const ids = store.state.settings.splitRoomIds;
       const rooms = ids.map(findRoomAny).filter(Boolean);
       if (rooms.length !== 2) {
         store.setSplitActive(false);
+        return;
+      }
+      if (splitLayoutView && ids.every((id, slot) => splitLayoutView.ids[slot] === id && cardMap.get(id)?.root === splitLayoutView.roots[slot] && grid.contains(splitLayoutView.panes[slot]) && splitLayoutView.panes[slot].contains(splitLayoutView.roots[slot])) && grid.contains(splitLayoutView.toolbar)) {
+        rooms.forEach(room => { requestRoomMediaIfNeeded(room.id); renderCardState(room); });
+        syncSplitLayoutState();
+        syncSplitButton();
         return;
       }
 
@@ -14434,6 +14568,7 @@ function createSettingsSyncController(deps) {
         cardMap.delete(id);
       }
 
+      const paneControls = [];
       const panes = rooms.map((room, slot) => {
         let c = cardMap.get(room.id);
         if (!c) {
@@ -14478,6 +14613,7 @@ function createSettingsSyncController(deps) {
           $('div', { class: 'split-pane-label' }, `${t('splitPane', slot + 1)} · ${room.id}`),
           $('div', { class: 'split-pane-actions' }, [prevOnlineBtn, nextOnlineBtn, audioBtn, replaceBtn]),
         ]);
+        paneControls.push({ prevOnlineBtn, nextOnlineBtn, audioBtn, audioActive });
         return $('div', { class: 'split-pane', dataset: { splitSlot: String(slot), roomId: room.id } }, [c.root, controls]);
       });
 
@@ -14511,6 +14647,7 @@ function createSettingsSyncController(deps) {
       }, [positionBtn, swapBtn, fullscreenBtn, exitBtn]);
 
       grid.replaceChildren(panes[0], divider, panes[1], splitToolbar);
+      splitLayoutView = { ids: ids.slice(), panes, roots: ids.map(id => cardMap.get(id).root), toolbar: splitToolbar, positionBtn, controls: paneControls };
       rooms.forEach(room => {
         activateCardEntry(room.id);
         requestRoomMediaIfNeeded(room.id);
@@ -14656,20 +14793,21 @@ function createSettingsSyncController(deps) {
         const needsGrid = fullRefresh || hasSetting(
           'activeGroup', 'filter', 'sortBy', 'searchQuery', 'layoutSize', 'phoneLayoutSize', 'phoneModeAuto', 'pageIndex',
           'viewMode',
-          'favoriteFirst', 'splitRoomIds', 'splitViewActive', 'splitRatio', 'splitAudioRoomId', 'splitToolbarPosition'
+          'favoriteFirst', 'splitRoomIds', 'splitViewActive'
         );
 
         if (needsSidebar) scheduleSidebarRender();
         if (needsGrid) scheduleGridRender();
 
-        syncSortControl();
-        filterSel.value = filterModeFromState();
-        sizeSlider.value = String(state.settings.gridSize);
-        if (document.activeElement !== searchInput) searchInput.value = state.settings.searchQuery || '';
-        syncViewSeg();
-        syncLayoutControls();
-        syncShellControls();
-        applyPureModeState();
+        if (fullRefresh || hasSetting('sortBy')) syncSortControl();
+        if (fullRefresh || hasSetting('activeGroup', 'filter')) filterSel.value = filterModeFromState();
+        if (fullRefresh || hasSetting('gridSize')) sizeSlider.value = String(state.settings.gridSize);
+        if ((fullRefresh || hasSetting('searchQuery')) && document.activeElement !== searchInput) searchInput.value = state.settings.searchQuery || '';
+        if (fullRefresh || hasSetting('viewMode', 'splitViewActive')) syncViewSeg();
+        if (needsGrid) syncLayoutControls();
+        if (fullRefresh || hasSetting('pureMode', 'toolbarCollapsed', 'splitViewActive')) syncShellControls();
+        if (fullRefresh || hasSetting('pureMode', 'videoFit', 'viewMode', 'sidebarCollapsed', 'toolbarCollapsed', 'splitViewActive')) applyPureModeState();
+        if (!fullRefresh && hasSetting('splitRatio', 'splitAudioRoomId', 'splitToolbarPosition')) syncSplitLayoutState();
         if (hasSetting('maxStreamHeight')) service.refreshQuality();
         if (hasSetting('volume')) cardMap.forEach((_, id) => applyMute(id));
         if (hasSetting('videoTransforms')) {
@@ -14927,6 +15065,7 @@ function createSettingsSyncController(deps) {
     var thisfap="";
     var fapbr="";
     var cimg=new Image();
+    var hoverImageJob=null;
     var lt2=0;
     var usernoteslist = "";
     if (currpage.indexOf(stor)!=-1){document.location.href=domain;}
@@ -14938,6 +15077,7 @@ function createSettingsSyncController(deps) {
     var supporter=false;
     var login=false;
     var pageType="";
+    var thumbnailWork={pending:new Set(),timer:0,route:'',preferences:null,states:new WeakMap(),bound:new WeakMap()};
     var thumbobserver1=new MutationObserver(addevent2);
     var banusers=[];
     var noaccess=false;
@@ -15218,7 +15358,8 @@ function createSettingsSyncController(deps) {
     }
     function pageevent(){
         if (sitelocation==document.location.href.split("/")[3]){return;}
-        document.getElementById("holdpage").style.display="block";
+        cancelThumbnailDecoration();
+        moveimgstop();
         pageobserver.disconnect();
         thumbobserver1.disconnect();
         document.querySelector('[data-testid="room-bio-tab-contents"]').innerHTML="";
@@ -15253,7 +15394,7 @@ function createSettingsSyncController(deps) {
             document.getElementById("holdpage").style.display="none";
         }
         if (pageType=="thumbs"){
-            setTimeout(function(){document.getElementById("holdpage").style.display="none";},4000);
+            document.getElementById("holdpage").style.display="none";
             setTimeout(thumbpageset,500);
         }
         if (pageType=="profile"){
@@ -15580,7 +15721,7 @@ function createSettingsSyncController(deps) {
         }else{
             localStorage.removeItem("hidemt");
         }
-        hidemtenter();
+        if(pageType==="thumbs")addevent2();else hidemtenter();
     }
     function refreshoff(){
         if (document.getElementById("a4").value==1){
@@ -15968,107 +16109,135 @@ function createSettingsSyncController(deps) {
             }).catch(function(){addevent2();});
     }
 
-    function addevent2(){
-        document.getElementById("holdpage").style.display="block";
-        currpage=document.location.href;
-        roomname= currpage.split("/")[3];
-        thumbobserver1.disconnect();
-        setTimeout(addevent2a,500);
+    function addevent2(records){
+        var route=document.location.href;
+        if(thumbnailWork.route!==route){cancelThumbnailDecoration();thumbnailWork.route=route;}
+        var full=!Array.isArray(records);
+        thumbnailWork.full=thumbnailWork.full||full;
+        if(full){
+            thumbnailWork.preferences=null;
+            startthumbobserver(); // Observe native hydration/additions while bounded batches yield.
+            // Routine decoration never takes exclusive ownership of the page.
+            var hold=document.getElementById("holdpage");
+            if(hold)hold.style.display="none";
+            hidemtenter();
+            if(currpage!==route)notepopclose();
+            currpage=route;roomname=route.split("/")[3];
+        }
+        function ownNote(node){return node?.dataset?.ziggyNote==='1'||node?.closest?.('[data-ziggy-note="1"]')?.dataset?.ziggyNote==='1';}
+        function enqueue(node,descendants=false){
+            if(!node||ownNote(node))return;
+            var element=node.nodeType===3?node.parentElement:node;
+            var card=element?.closest?.('[data-testid="room-card"]');
+            if(card)thumbnailWork.pending.add(card);
+            if(element?.matches?.('[data-testid="room-card"]'))thumbnailWork.pending.add(element);
+            if(descendants)for(var child of element?.querySelectorAll?.('[data-testid="room-card"]')||[])thumbnailWork.pending.add(child);
+        }
+        if(full){for(var card of document.querySelectorAll('[data-testid="room-card"]'))thumbnailWork.pending.add(card);}
+        else for(var record of records){
+            if(ownNote(record.target))continue;
+            if(record.type==='childList'){
+                var additions=Array.from(record.addedNodes||[]).filter(node=>!ownNote(node));
+                if(additions.length){enqueue(record.target);additions.forEach(node=>enqueue(node,true));}
+            }else enqueue(record.target);
+        }
+        if(hoverImageJob?.anchor.isConnected===false)moveimgstop();
+        if(!thumbnailWork.pending.size)return;
+        if(!thumbnailWork.preferences){
+            thumbnailWork.preferences={ignored:new Set((localStorage.getItem("ignoredusers")||'').split(',')),hideMT:!!localStorage.getItem("hidemt"),notes:new Set(usernoteslist?.usernames||[])};
+        }
+        if(!thumbnailWork.timer)thumbnailWork.timer=setTimeout(flushThumbnailDecoration,0);
     }
 
-    function addevent2a(){
-        if (document.getElementById("unfollowit")){
-            document.getElementById("unfollowit").style.display="none";
-            if (document.location.href.split("/")[4]=="offline"){
-                document.getElementById("unfollowit").style.display="block";
-            }
-        }
-        hidemtenter();
-        if (currpage!=document.location.href){
-            notepopclose();
-        }
-        currpage=document.location.href;
-        var genclass="";
-        var tags=document.querySelectorAll('[data-testid="room-card"]');
-        if (localStorage.getItem("ignoredusers")){
-            banusers=localStorage.getItem("ignoredusers").split(",");
-        }
-        for (n=0; n<tags.length; n++){
-            var thumbroomname=tags[n].querySelector('[data-testid="room-card-username"]').innerHTML;
-            if (banusers.indexOf(thumbroomname)!=-1){
-                tags[n].style.display="none";
-            }
-            if ((localStorage.getItem("hidemt"))&&(roomname!="followed-cams")){
-                if(tags[n].querySelector('[data-testid="room-card-gender"]')){
-                    genclass=tags[n].querySelector('[data-testid="room-card-gender"]').classList;
-                    if ((genclass.contains("genderm"))||(genclass.contains("genders"))){
-                         tags[n].style.display="none";
-                    }
-                }
-            }
-            if(!tags[n].name){
-                tags[n].name="Camslut";
-                if (!supporter){
-                    tags[n].querySelector('[data-testid="room-card-image-anchor"]').addEventListener("mouseenter", moveimg);
-                    tags[n].querySelector('[data-testid="room-card-image-anchor"]').addEventListener("mouseleave", moveimgstop);
-                }
-                if (login){
-                    tags[n].querySelector('[data-testid="room-card-image-anchor"]').title="Visit "+thumbroomname+"'s chatroom.";
-                    tags[n].querySelector('[data-testid="room-card-image-anchor"]').addEventListener("click", function(event){
-                        if (localStorage.getItem("newtabon")){
-                            return;
-                        }
-                        event.stopPropagation();
-                        event.preventDefault();
-                        openInNewTab(this.href,"_blank");
-                    });
+    function cancelThumbnailDecoration(){
+        if(thumbnailWork.timer)clearTimeout(thumbnailWork.timer);
+        thumbnailWork.timer=0;thumbnailWork.pending.clear();thumbnailWork.preferences=null;thumbnailWork.full=false;
+    }
 
-                    tags[n].getElementsByClassName("RoomCardDetails")[0].addEventListener("click", function(event){event.stopPropagation();});
-                    tags[n].getElementsByClassName("RoomCardDetails")[0].style.cursor="default";
-                    tags[n].querySelector('[data-testid="room-card-username"]').href=domain+"p/"+username+"/?tab=bio&model="+thumbroomname;
-                    tags[n].querySelector('[data-testid="room-card-username"]').title="Visit "+thumbroomname+"'s bio.";
+    function flushThumbnailDecoration(){
+        thumbnailWork.timer=0;
+        if(thumbnailWork.route!==document.location.href){cancelThumbnailDecoration();return;}
+        var batch=[],started=performance.now();
+        for(var card of thumbnailWork.pending){
+            thumbnailWork.pending.delete(card);
+            if(card.isConnected!==false)batch.push(card);
+            if(batch.length>=32||performance.now()-started>=8)break;
+        }
+        if(batch.length)addevent2a(batch,thumbnailWork.preferences);
+        if(thumbnailWork.pending.size)thumbnailWork.timer=setTimeout(flushThumbnailDecoration,0);
+        else {
+            thumbnailWork.preferences=null;
+            var full=thumbnailWork.full;thumbnailWork.full=false;
+            if(full)showhidden();else startthumbobserver();
+        }
+    }
 
-                    tags[n].querySelector('[data-testid="room-card-username"]').addEventListener("click", function(event){
-                        event.stopPropagation();
-                        event.preventDefault();
-                        var target="_self";
-                        if (!localStorage.getItem("newtabon")){
-                            target="_blank";
-                        }
-                        openInNewTab(this.href, target);
-                    });
-                }else{
-                    tags[n].addEventListener("click", function(event){
-                        if (localStorage.getItem("newtabon")){
-                            return;
-                        }
-                        event.stopPropagation();
-                        event.preventDefault();
-                        openInNewTab(this.querySelector('[data-testid="room-card-username"]').href,"_blank");
-                    });
+    function addevent2a(tags,preferences){
+        var unfollow=document.getElementById("unfollowit");
+        if(unfollow)unfollow.style.display=document.location.href.split("/")[4]==="offline"?"block":"none";
+        function bind(element,type,handler){
+            if(!element)return;
+            var listeners=thumbnailWork.bound.get(element);
+            if(!listeners){listeners=new Set();thumbnailWork.bound.set(element,listeners);}
+            if(listeners.has(type))return;
+            listeners.add(type);element.addEventListener(type,handler);
+        }
+        for(var card of tags){
+            var nameLink=card.querySelector('[data-testid="room-card-username"]');
+            var imageLink=card.querySelector('[data-testid="room-card-image-anchor"]');
+            if(!nameLink||!imageLink)continue; // Separate native hydration mutations retry this card.
+            var thumbroomname=nameLink.textContent.trim();
+            var state=thumbnailWork.states.get(card)||{};
+            var gender=card.querySelector('[data-testid="room-card-gender"]')?.classList;
+            var hidden=preferences.ignored.has(thumbroomname)||(preferences.hideMT&&roomname!=="followed-cams"&&(gender?.contains("genderm")||gender?.contains("genders")));
+            if(hidden){
+                if(!state.hidden){state.display=card.style.display;state.hidden=true;}
+                if(card.style.display!=="none")card.style.display="none";
+            }else if(state.hidden){
+                if(card.style.display==="none")card.style.display=state.display||"";
+                state.hidden=false;
+            }
+            thumbnailWork.states.set(card,state);
+            decorateHiddenLabel(card);
+            if(!supporter){bind(imageLink,"mouseenter",moveimg);bind(imageLink,"mouseleave",moveimgstop);}
+            if(login){
+                var bio=domain+"p/"+username+"/?tab=bio&model="+thumbroomname;
+                if(nameLink.href!==bio)nameLink.href=bio;
+                var imageTitle="Visit "+thumbroomname+"'s chatroom.",bioTitle="Visit "+thumbroomname+"'s bio.";
+                if(imageLink.title!==imageTitle)imageLink.title=imageTitle;
+                if(nameLink.title!==bioTitle)nameLink.title=bioTitle;
+                bind(imageLink,"click",function(event){
+                    if(localStorage.getItem("newtabon"))return;
+                    event.stopPropagation();event.preventDefault();openInNewTab(this.href,"_blank");
+                });
+                var details=card.getElementsByClassName("RoomCardDetails")[0];
+                bind(details,"click",function(event){event.stopPropagation();});
+                if(details&&details.style.cursor!=="default")details.style.cursor="default";
+                bind(nameLink,"click",function(event){
+                    event.stopPropagation();event.preventDefault();
+                    openInNewTab(this.href,localStorage.getItem("newtabon")?"_self":"_blank");
+                });
+            }else bind(card,"click",function(event){
+                if(localStorage.getItem("newtabon"))return;
+                event.stopPropagation();event.preventDefault();
+                openInNewTab(this.querySelector('[data-testid="room-card-username"]').href,"_blank");
+            });
+            if(usernoteslist!==""){
+                var noteElement=card.querySelector('[data-ziggy-note="1"]')||card.querySelector('[title="User notes"]');
+                var created=!noteElement;
+                if(created){
+                    noteElement=document.createElement("div");
+                    noteElement.dataset.ziggyNote="1";
+                    noteElement.style.position="absolute";noteElement.style.top="0px";noteElement.style.left="0px";noteElement.style.cursor="pointer";
+                    noteElement.title="User notes";
+                    noteElement.addEventListener("click",function(event){event.stopPropagation();shownote(this.name,event.pageY,event.pageX);});
                 }
-
-                if (usernoteslist!=""){
-                    var newelem=document.createElement('div');
-                    if (usernoteslist.usernames.indexOf(thumbroomname)!=-1){
-                        newelem.innerHTML=note;
-                    }else{
-                        newelem.innerHTML=nonote;
-                    }
-                    newelem.style.position="absolute";
-                    newelem.style.top="0px";
-                    newelem.style.left="0px";
-                    newelem.addEventListener("click", function(event){event.stopPropagation();shownote(this.name,event.pageY,event.pageX);});
-                    newelem.style.cursor="pointer";
-                    newelem.setAttribute("name", thumbroomname);
-                    newelem.name=thumbroomname;
-                    newelem.title="User notes";
-                    tags[n].appendChild(newelem);
-                }
+                var icon=preferences.notes.has(thumbroomname)?note:nonote;
+                if(noteElement.innerHTML!==icon)noteElement.innerHTML=icon;
+                if(noteElement.name!==thumbroomname){noteElement.setAttribute("name",thumbroomname);noteElement.name=thumbroomname;}
+                if(created)card.appendChild(noteElement);
             }
         }
-        document.getElementById("holdpage").style.display="none";
-        showhidden();
     }
 
     function openInNewTab(href,target){
@@ -16084,7 +16253,7 @@ function createSettingsSyncController(deps) {
 
     function startthumbobserver(){
         var node=document.querySelector('[data-testid="room-list"]');
-        if (node) thumbobserver1.observe(node,{subtree:true,childList:true});
+        if (node) thumbobserver1.observe(node,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['data-room','class']});
     }
 
     function showhidden(){
@@ -16128,42 +16297,28 @@ function createSettingsSyncController(deps) {
             }).catch(function(){hprom=false;startthumbobserver();});
     }
     function showhidden3(){
-        var tags=document.querySelector('[data-testid="room-list-container"]').querySelectorAll('[data-testid="room-card"]');
-        for (n=0; n<tags.length; n++){
-            var oldtext=tags[n].querySelector('[data-testid="thumbnail-label"]').innerHTML;
-            var name=tags[n].querySelector('[data-testid="room-card-username"]').innerHTML;
-            var newtext=oldtext.replace(" HIDDEN","");
-            newtext=newtext.replace("HIDDEN","");
-            tags[n].querySelector('[data-testid="thumbnail-label"]').innerHTML=newtext;
-            tags[n].querySelector('[data-testid="thumbnail-label"]').style.backgroundColor = "";
-
-            if (hiddenarray.indexOf(name)!=-1){
-                if (newtext != ""){
-                    tags[n].querySelector('[data-testid="thumbnail-label"]').innerHTML=newtext+" HIDDEN";
-                }else{
-                    tags[n].querySelector('[data-testid="thumbnail-label"]').innerHTML="HIDDEN";
-                }
-                tags[n].querySelector('[data-testid="thumbnail-label"]').style.backgroundColor = "blue";
-            }
-        }
+        var container=document.querySelector('[data-testid="room-list-container"]');
+        for(var card of container?.querySelectorAll('[data-testid="room-card"]')||[])decorateHiddenLabel(card);
         startthumbobserver();
     }
     function showhidden4(){
-        if (document.querySelector('[data-testid="hidden-cams-roomlist"]')){
-            var tags=document.querySelector('[data-testid="hidden-cams-roomlist"]').querySelectorAll('[data-testid="room-card"]');
-            for (n=0; n<tags.length; n++){
-                var oldtext=tags[n].querySelector('[data-testid="thumbnail-label"]').innerHTML;
-                var newtext=oldtext.replace(" HIDDEN","");
-                newtext=newtext.replace("HIDDEN","");
-                tags[n].querySelector('[data-testid="thumbnail-label"]').innerHTML=newtext;
-                if (newtext != ""){
-                    tags[n].querySelector('[data-testid="thumbnail-label"]').innerHTML=newtext+" HIDDEN";
-                }else{
-                    tags[n].querySelector('[data-testid="thumbnail-label"]').innerHTML="HIDDEN";
-                }
-                tags[n].querySelector('[data-testid="thumbnail-label"]').style.backgroundColor = "blue";
-            }
-        }
+        var container=document.querySelector('[data-testid="hidden-cams-roomlist"]');
+        for(var card of container?.querySelectorAll('[data-testid="room-card"]')||[])decorateHiddenLabel(card);
+    }
+    function decorateHiddenLabel(card){
+        var route=document.location.href.split('/')[3];
+        if(route!=='followed-cams'&&route!=='spy-on-cams')return;
+        if(route==='followed-cams'&&document.location.href.split('/')[4]==='offline')return;
+        if(route==='spy-on-cams'&&!card.closest('[data-testid="hidden-cams-roomlist"]'))return;
+        var label=card.querySelector('[data-testid="thumbnail-label"]');
+        var name=card.querySelector('[data-testid="room-card-username"]')?.textContent.trim();
+        if(!label||!name)return;
+        var hidden=route==='spy-on-cams'?!!card.closest('[data-testid="hidden-cams-roomlist"]'):hiddenarray.includes(name);
+        var clean=label.innerHTML.replace(' HIDDEN','').replace('HIDDEN','');
+        var next=hidden?(clean?clean+' HIDDEN':'HIDDEN'):clean;
+        if(label.innerHTML!==next)label.innerHTML=next;
+        var color=hidden?'blue':'';
+        if(label.style.backgroundColor!==color)label.style.backgroundColor=color;
     }
     function shownote(name,pageY,pageX){
         if(document.getElementById("notepop").style.display=="block"){
@@ -16419,29 +16574,56 @@ function createSettingsSyncController(deps) {
     }
 
     function moveimg(){
+        moveimgstop();
         if(localStorage.getItem("animationoff")){return;}
         thisfap=this;
+        if(document.hidden||thisfap.isConnected===false)return;
         if (thisfap.getElementsByClassName("thumbnail_label_offline").length!=0){return;}
-        fapbr=thisfap.getElementsByTagName("img")[0].src.split("/")[4].split("?")[0];
-        cimg.addEventListener("load",regetimg);
+        var thumbnail=thisfap.getElementsByTagName("img")[0];
+        if(!thumbnail)return;
+        fapbr=thumbnail.src.split("/")[4]?.split("?")[0];
+        if(!fapbr)return;
+        cimg=new Image();
+        var job={anchor:thisfap,thumbnail,image:cimg,room:fapbr,expectedSource:thumbnail.src,route:document.location.href,timer:0};
+        hoverImageJob=job;
+        job.load=()=>regetimg(job);
+        job.error=()=>{if(hoverImageJob===job)moveimgstop();};
+        cimg.addEventListener("load",job.load);
+        cimg.addEventListener("error",job.error);
         lt2=new Date().getTime();
+        job.started=lt2;
         cimg.src = "https://jpeg.live.mmcdn.com/minifwap/"+fapbr+"?f="+lt2;
     }
 
     function moveimgstop(){
-        cimg.removeEventListener("load",regetimg);
+        var job=hoverImageJob;
+        hoverImageJob=null;thisfap="";
+        if(!job)return;
+        clearTimeout(job.timer);
+        job.image.removeEventListener("load",job.load);
+        job.image.removeEventListener("error",job.error);
+        job.image.removeAttribute('src');
     }
 
-    function regetimg(){
-        var lt=new Date().getTime()-lt2;
+    function regetimg(job){
+        if(hoverImageJob!==job)return;
+        if(document.hidden||job.anchor.isConnected===false||job.route!==document.location.href||job.anchor.getElementsByTagName("img")[0]!==job.thumbnail||job.thumbnail.src!==job.expectedSource){moveimgstop();return;}
+        var lt=new Date().getTime()-job.started;
         if (lt>180){lt=180;}
-        thisfap.getElementsByTagName("img")[0].src=cimg.src;
-        setTimeout(function(){lt2=new Date().getTime();cimg.src = "https://jpeg.live.mmcdn.com/minifwap/"+fapbr+"?f="+lt2;}, 200-lt);
+        job.thumbnail.src=job.image.src;
+        job.expectedSource=job.thumbnail.src;
+        job.timer=setTimeout(function(){
+            job.timer=0;
+            if(hoverImageJob!==job)return;
+            if(document.hidden||job.anchor.isConnected===false||job.route!==document.location.href||job.thumbnail.src!==job.expectedSource){moveimgstop();return;}
+            job.started=Date.now();job.image.src="https://jpeg.live.mmcdn.com/minifwap/"+job.room+"?f="+job.started;
+        },200-lt);
     }
 
     function refresher(){
+        window.addEventListener('pagehide',()=>{moveimgstop();cancelThumbnailDecoration();});
         document.addEventListener("visibilitychange", function(){
-            if (document.hidden){return;}
+            if (document.hidden){moveimgstop();return;}
             if (document.location.href.split("/")[3]=="followed-cams"){
                 if (localStorage.getItem("refreshoff")){
                     openInNewTab(document.location.href, "_self");
@@ -19151,6 +19333,7 @@ function createSettingsSyncController(deps) {
         roomthumbs=thumbholder.getElementsByClassName("RoomCard");
         nrt=roomthumbs.length;
         if(confirm("Do you want to unfollow these "+thumbholder.getElementsByClassName("RoomCard__followStar").length+" rooms?")){
+            cancelThumbnailDecoration();
             thumbobserver1.disconnect();
             document.getElementById("unfollowit").removeEventListener("click",unfollowthispage);
             unfollowroom2();

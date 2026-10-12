@@ -265,7 +265,7 @@ test('HTTP-success application-rejected ban performs no cleanup', async () => {
 test('archive searches cap concurrency and cancel obsolete requests', async () => {
   const requests = [];
   const items = Array.from({ length: 9 }, () => ({ isConnected: true, dataset: { url: 'https://example.invalid/{username}' }, classList: { add() {}, remove() {} } }));
-  const ctx = vm.createContext({ AbortController, searchRun: 0, searchAbort: null,
+  const ctx = vm.createContext({ AbortController, searchRun: 0, searchAbort: null, suspendWhenInactive:false, active:true, selectedView:'search', resumeUser:'', lastSearchUser:'',
     archiveGrid: { querySelectorAll: () => items }, isValidUsername: x => !!x, saveHistory() {}, updateCounter() {}, analyzeResponse: () => true,
     GM_xmlhttpRequest(options) { const handle = { aborted: false, abort() { this.aborted = true; options.onabort?.(); } }; requests.push({ options, handle }); return handle; },
   });

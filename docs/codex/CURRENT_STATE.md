@@ -3,12 +3,19 @@
 ## Deployment
 
 - Primary runtime: Tampermonkey userscript `Chaturbate MultiCam Pro + Cam ARNA.user.js`.
-- Current userscript release: 16.6.30 (`main`, tag `v16.6.30`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
+- Current userscript release: 16.6.31 (`main`, tag `v16.6.31`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
 - Extension builds remain at 16.6.7. They were not modified, rebuilt, packaged, or published for this userscript-only change.
 - Local rollback point: Git tag `backup/pre-16.6.8-workshop-doubletap-20260905` at the 16.6.7 baseline.
-- Version 16.6.30 is installed in the existing Chrome testing-profile Tampermonkey entry; saved editor readback after reload matched the final source bytes, and the reloaded live runtime reports 16.6.30. No reinstall or settings reset was performed. The phone was not updated or tested in this pass; its last verified entry is 16.6.22. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
+- Version 16.6.31 is installed in the existing Chrome testing-profile Tampermonkey entry; saved editor readback after reload matched the final source bytes, and the reloaded live runtime reports 16.6.31. No reinstall or settings reset was performed. The phone was not updated or tested in this pass; its last verified entry is 16.6.22. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
 - Recu.me release rollback point: local tag `backup/pre-recu-16.6.13-20260909` at 16.6.12.
 - Candidate rollback point: `backup/pre-native-portrait-20260905`. Extension outputs are unchanged.
+
+## Native Following dropdown order — 16.6.31
+
+- Removed broadcast-start/alphabetical sorting from the animated Following renderer. Existing native room nodes provide the order; newly API-returned rooms absent from those nodes append in API order without losing entries. Fresh and cached openings use the current native arrangement. Native children, Show All, preview ownership/limits and Workshop sorting remain unchanged.
+- Actual installed Chrome/Tampermonkey, three pointer open/close cycles: all 75 shared native rooms retained their relative order, no duplicate cards, eight advancing previews each cycle, zero enhanced preview videos after close, unchanged URL and native Show All destination. Disabled-script baseline was captured first; no account actions or settings edits were used.
+- Focused regression fails against the old timestamp-sorted renderer and passes the candidate. Isolated userscript build/full regression, read-only adapter checks, sync-bundle check, syntax and independent scoped code review passed. Unrelated standalone Recu.me/Android work and extension outputs were excluded. Native-mobile code was not changed; actual Quetta, long-open native list replacement and every alternate native layout remain untested.
+- Rollback: `backup/pre-native-following-order-20261014` at `7c28b159db9dcf3f080b212a827ef0cd09f80452`. Installed source SHA-256: `7A7E9F2ED4DD15327F1296FF7E2A4FCDF38A2503A10361DA52C484062571490F`.
 
 ## Staged desktop performance pass — 16.6.30
 
@@ -212,7 +219,7 @@ The editable dropdown above supersedes the following read-only ownership rules; 
 - The card More menu resolves the current room locally and no longer references the removed Following source.
 - Grid and Phone viewing modes are implemented; Focus mode has been removed.
 - Online Following has been removed from Workshop, including its cache, fallback parser/iframe, paging and sorting state, split-view source, mount refresh, and five-minute refresh timer.
-- Chaturbate's native desktop Following dropdown provides the animated followed-room previews, ordered by latest broadcast start; its native Show All destination is preserved.
+- Chaturbate's native desktop Following dropdown provides animated followed-room previews in native order as of 16.6.31; its native Show All destination is preserved.
 - A playing Workshop preview no longer opens a room from a single tap.
 - Double-tapping the playing preview uses the shared Workshop native-fullscreen path.
 - Explicit model-name links remain the navigation action; preview taps themselves do not navigate or create tabs.

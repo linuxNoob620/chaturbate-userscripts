@@ -2,6 +2,11 @@
 
 This file contains only behavior observed on Chaturbate with the Ziggy userscript disabled. Each entry must name the environment, device/browser, verification date, disabled-script state, and actual observation.
 
+## Desktop Following order — 2026-10-14
+
+- Persistent Chrome-for-Testing / actual Tampermonkey, Suite disabled and runtime absence confirmed after reload. Clicking the native Following link opened its dropdown without navigation; Show All retained `https://chaturbate.com/followed-cams/`.
+- The 75 rooms common to the displayed native list and a fresh default Following API response were not in the same relative order. Do not treat the API's default response order as an exact native dropdown-order baseline. Live membership changes between requests are separate from ordering.
+
 ## Homepage grid sizing — 2026-09-13
 
 - Persistent desktop Chrome-for-Testing, Suite 16.6.15 disabled in Tampermonkey and runtime absence confirmed after reload. The active native `.RoomCardGrid` used `repeat(auto-fill, minmax(174px, 1fr))` with approximately 9 CSS pixels between columns. At viewport widths 1889/1489/1139/839/639, the homepage displayed 10/7/5/4/3 columns without horizontal document overflow. These counts depend on the native thumbnail-size preference; they are not a required fixed breakpoint table for larger Suite previews.

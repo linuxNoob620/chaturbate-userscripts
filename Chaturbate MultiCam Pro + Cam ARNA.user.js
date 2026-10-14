@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.30
+// @version           16.6.31
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -1665,7 +1665,7 @@ function createSettingsSyncController(deps) {
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.30');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.31');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -1681,7 +1681,7 @@ function createSettingsSyncController(deps) {
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.30');
+  instanceMarker.setAttribute('data-suite-version', '16.6.31');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -2931,7 +2931,7 @@ function createSettingsSyncController(deps) {
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.30',
+    version: '16.6.31',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -5729,7 +5729,17 @@ function createSettingsSyncController(deps) {
         // The site hides alternating native lists with an !important nth-of-type rule.
         list.style.setProperty('display', 'grid', 'important');
         // Keep React's native children intact; own only this sibling, using the same site classes.
-        for (const room of rooms.slice().sort((a, b) => b.onlineSince - a.onlineSince || a.id.localeCompare(b.id))) {
+        const remaining = new Map(rooms.map(room => [room.id, room]));
+        const orderedRooms = [];
+        session.natives.forEach(({ node }) => {
+          node.querySelectorAll('.FollowedDropdown__room-username').forEach(name => {
+            const id = normalizeUsername(name.textContent);
+            if (remaining.has(id)) { orderedRooms.push(remaining.get(id)); remaining.delete(id); }
+          });
+        });
+        // A newly returned room may not yet exist in the native DOM; retain it at the end.
+        orderedRooms.push(...remaining.values());
+        for (const room of orderedRooms) {
           const card = document.createElement('div');
           card.className = 'FollowedDropdown__room';
           const link = document.createElement('a');

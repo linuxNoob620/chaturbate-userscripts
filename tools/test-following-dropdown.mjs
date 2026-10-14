@@ -25,10 +25,28 @@ assert.equal(calls[0].options.signal, signal);
 assert.equal(calls[0].options.credentials, 'include');
 assert.equal(rooms[90].lastStatus, 'private');
 assert.equal(rooms[90].onlineSince, 1090);
-const comparator = source.match(/rooms\.slice\(\)\.sort\((\(a, b\) => b\.onlineSince[^\n]+)\)\) \{/)[1];
-const sorted = rooms.slice().sort(vm.runInContext(comparator, context));
-assert.equal(sorted[0].id, 'room_90');
-assert.equal(rooms[0].id, 'room_0', 'sorting must not mutate shared data');
+// Execute the shipped ordering/card loop: native order outranks API order,
+// timestamps and names, without losing newly returned rooms or mutating cache.
+const loopStart = source.indexOf('        // Keep React\'s native children intact;', end);
+const loopEnd = source.indexOf("        session.natives.forEach(({ node }) => { node.style.display = 'none'; });", loopStart);
+const cardLoop = source.slice(loopStart, loopEnd);
+function node() {
+  return { children: [], dataset: {}, append(...children) { this.children.push(...children); } };
+}
+for (const input of [rooms, [{ id: 'z_room', onlineSince: 10 }, { id: 'a_room', onlineSince: 20 }, { id: 'b_room', onlineSince: 20 }]]) {
+ for (const nativeIds of [[], input.map(room => room.id).reverse(), [input[1].id, input[0].id, input[1].id, 'missing_room']]) {
+  const list = node();
+  const expected = [...new Set(nativeIds)].filter(id => input.some(room => room.id === id));
+  expected.push(...Array.from(input, room => room.id).filter(id => !expected.includes(id)));
+  vm.runInNewContext(cardLoop, { rooms: input, list,
+    session: { natives: [{ node: { querySelectorAll: () => nativeIds.map(textContent => ({textContent})) } }] },
+    normalizeUsername: value => String(value || '').trim().toLowerCase(),
+    document: { createElement: node }, roomPageUrl: id => `https://chaturbate.com/${id}/` });
+  assert.deepEqual(list.children.map(card => card.dataset.roomId), expected, 'Following must keep native order; append new API rooms without custom sorting');
+  assert.equal(list.children[0].children[0].children[1].textContent, expected[0]);
+ }
+}
+assert.equal(rooms[0].id, 'room_0', 'rendering must not mutate cached data');
 context.fetch = async () => ({ ok: false, status: 429 });
 await assert.rejects(load(signal), /429/);
 context.fetch = async () => ({ ok: true, json: async () => ({ rooms: [], total_count: 10 }) });
@@ -43,4 +61,4 @@ assert(!source.includes('ONLINE_FOLLOWING_GROUP_ID'));
 assert(!source.includes('syncOnlineFollowing'));
 assert(!source.includes('ziggy_online_following_cache'));
 assert(!source.includes('ziggy-following-sync-frame'));
-console.log('Following pagination, status, timestamp sorting, failure and lifecycle guards passed.');
+console.log('Following pagination, status, native order, failure and lifecycle guards passed.');

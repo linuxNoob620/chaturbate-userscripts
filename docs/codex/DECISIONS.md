@@ -32,6 +32,8 @@ Status: Active
 
 Decision: Workshop does not expose or synchronize an Online Following group. Animated followed-room previews belong only to Chaturbate's native desktop Following dropdown, and its native Show All destination remains unchanged.
 
+Ordering: preserve the retained native dropdown's room order, not a broadcast-start or alphabetical sort. Newly API-returned rooms not yet in the native DOM append in API order; reopening reads the current native arrangement. Workshop sorting is independent.
+
 Authorized exception: the virtual **Recently Followed · 24h** category contains only newly observed successful follows, with no historical backfill or complete Following-list scan. It is separate from saved-room membership and does not restore Online Following polling in Workshop.
 
 ## D-006 — Recu.me replaces the native Share tab

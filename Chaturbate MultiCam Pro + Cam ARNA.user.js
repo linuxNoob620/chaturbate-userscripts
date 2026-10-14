@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.31
+// @version           16.6.32
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -1665,7 +1665,7 @@ function createSettingsSyncController(deps) {
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.31');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.32');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -1681,7 +1681,7 @@ function createSettingsSyncController(deps) {
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.31');
+  instanceMarker.setAttribute('data-suite-version', '16.6.32');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -2931,7 +2931,7 @@ function createSettingsSyncController(deps) {
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.31',
+    version: '16.6.32',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -5745,6 +5745,9 @@ function createSettingsSyncController(deps) {
           const link = document.createElement('a');
           link.className = 'FollowedDropdown__room-link';
           link.href = roomPageUrl(room.id);
+          link.style.position = 'relative';
+          link.style.userSelect = 'none';
+          link.style.webkitUserSelect = 'none';
           const image = document.createElement('img');
           image.className = 'FollowedDropdown__room-image';
           image.alt = room.id;
@@ -5771,7 +5774,7 @@ function createSettingsSyncController(deps) {
               service.stop(id);
               session.videos.get(id)?.remove();
               session.videos.delete(id);
-              image.style.display = '';
+              image.style.cssText = '';
               continue;
             }
             if (session.videos.has(id) || session.videos.size >= 8 || rooms.find(room => room.id === id)?.lastStatus !== 'online') continue;
@@ -5783,7 +5786,9 @@ function createSettingsSyncController(deps) {
             video.poster = image.src;
             video.style.cssText = 'pointer-events:none;object-fit:cover;aspect-ratio:16/9';
             image.before(video);
-            image.style.display = 'none';
+            // Quetta intercepts long presses on video even through transparent link layers.
+            // Keep the real linked thumbnail painted above it for the native room-link menu.
+            image.style.cssText = 'position:absolute;left:0;top:0;opacity:0.01;z-index:2';
             session.videos.set(id, video);
             service.start(id);
             service.attachVideo(id, video);

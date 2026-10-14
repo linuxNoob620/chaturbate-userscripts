@@ -1,5 +1,11 @@
 # Known Quirks
 
+## Quetta intercepts Following video long presses before DOM context menus
+
+On the actual Xiaomi tablet / Quetta Chromium 148.0.7778.217 with Request desktop site (2026-10-14), a linked playing video could show "This video is not supported temporarily" instead of the normal room-link menu. Video `pointer-events:none`, a transparent SPAN hit layer and moving the video behind the anchor did not reliably prevent this. Failure could occur without a DOM `contextmenu` event, so an event handler is not a reliable correction.
+
+Keeping the existing real linked thumbnail painted above the video at 1% opacity passed repeated actual long presses and scroll detach/re-entry in 16.6.32. This is a tested workaround for that browser/device, not a claim about Quetta internals or every browser version. It does not replace animated playback with a static preview.
+
 ## Quetta desktop-site preference depends on how a child tab is opened
 
 On September 19, the real OPPO/Quetta desktop-site user agent omitted Android and identified Linux desktop. The Suite's Android-only native-child guard therefore fell through to `GM_openInTab`, and actual Workshop model-name taps opened mobile rooms. Script-disabled native card navigation and `window.open` retained the desktop source preference. Detecting the touch/coarse-pointer browser in addition to Android restored desktop child navigation through actual taps from the shared dropdown and full Workshop. Do not infer mobile-site preference from touch hardware, or rewrite the user agent to compensate. Navigating from an internal browser page through DevTools can also differ from entering the URL in Quetta's address bar; use actual browser navigation for this acceptance check.

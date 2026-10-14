@@ -3,12 +3,19 @@
 ## Deployment
 
 - Primary runtime: Tampermonkey userscript `Chaturbate MultiCam Pro + Cam ARNA.user.js`.
-- Current userscript release: 16.6.31 (`main`, tag `v16.6.31`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
+- Current userscript release: 16.6.32 (`main`, tag `v16.6.32`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
 - Extension builds remain at 16.6.7. They were not modified, rebuilt, packaged, or published for this userscript-only change.
 - Local rollback point: Git tag `backup/pre-16.6.8-workshop-doubletap-20260905` at the 16.6.7 baseline.
-- Version 16.6.31 is installed in the existing Chrome testing-profile Tampermonkey entry; saved editor readback after reload matched the final source bytes, and the reloaded live runtime reports 16.6.31. No reinstall or settings reset was performed. The phone was not updated or tested in this pass; its last verified entry is 16.6.22. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
+- Version 16.6.32 is installed in the existing Chrome testing-profile and connected Xiaomi tablet Tampermonkey entries; saved editor readback after reload matched the final source bytes, and both reloaded live runtimes report 16.6.32. No reinstall or settings reset was performed. The OPPO phone was not connected or tested in this pass; its last verified entry remains 16.6.22. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
 - Recu.me release rollback point: local tag `backup/pre-recu-16.6.13-20260909` at 16.6.12.
 - Candidate rollback point: `backup/pre-native-portrait-20260905`. Extension outputs are unchanged.
+
+## Following touch link menus — 16.6.32
+
+- Following cards retain their real room anchor and thumbnail. While a preview plays, the existing thumbnail is painted above the video at 1% opacity, avoiding Quetta's native video long-press interception; the linked name is not text-selectable. Detach restores the ordinary thumbnail. No custom context menu/gesture listener, extra media request, player, timer or observer was added. Native order, Show All, eight-player limit and Workshop remain unchanged.
+- Actual Xiaomi 25079RPDCG tablet / Quetta Chromium 148.0.7778.217 with Request desktop site: script-disabled static thumbnail/name long presses opened the native room-link menu. After saving/reloading 16.6.32, three preview/name long-press cycles (six presses) passed with the same advancing video/source. Offscreen scrolling detached media and restored the image; return resumed playback and its link menu passed. Native Open in new tab opened the correct room; ordinary name tap navigated to it, retained desktop-site UA and disposed dropdown videos. The original room was restored. Debugging flag remained Default (Disabled), command-line file was absent, temporary test tabs/artifacts and port forwarding were removed.
+- Actual Chrome/Tampermonkey: 100 shared native rooms retained their relative order; eight previews played. Right-click emitted an unprevented linked-image context event and retained advancing playback; two subsequent open cycles had no duplicate links and eight previews, closing removed all dropdown videos, and keyboard Enter opened a normal room. The native desktop context-menu UI itself was not independently captured. Exact installed source SHA-256 on both browsers: `8C40814CFED3E1EA82E2CD170DD167313777D949615466CBCEF49B605C759DCE`.
+- Focused visibility/link/order regression, syntax, complete isolated userscript build/regression, read-only adapter checks, whitespace and independent scoped code review passed. No extension rebuild, account action or saved-preference change. OPPO/mobile-site layout, other Quetta releases, accessibility-reader acceptance and long-session behavior remain untested. Rollback: `backup/pre-following-touch-menu-20261014` at `56e69e98338d824626d93dec263f492e8e471c6a`.
 
 ## Native Following dropdown order — 16.6.31
 

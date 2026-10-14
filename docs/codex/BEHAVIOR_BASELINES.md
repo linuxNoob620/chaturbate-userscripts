@@ -2,6 +2,11 @@
 
 This file contains only behavior observed on Chaturbate with the Ziggy userscript disabled. Each entry must name the environment, device/browser, verification date, disabled-script state, and actual observation.
 
+## Tablet Following link menus — 2026-10-14
+
+- Actual Xiaomi 25079RPDCG tablet, Quetta / Chromium 148.0.7778.217, landscape and Request desktop site. Suite 16.6.31 and the separate fullscreen-chat test script were disabled, reloaded, and Suite runtime absence confirmed. On the same normal room's native Following dropdown, long presses on a static room thumbnail and its name opened Quetta's room-link menu including Open in new tab. Both scripts were restored to their original enabled state afterward.
+- This establishes the native link-menu acceptance target, not fullscreen or every mobile layout. Browser pointer input revealed the desktop-site dropdown; actual Android touchscreen long presses exercised its menu.
+
 ## Desktop Following order — 2026-10-14
 
 - Persistent Chrome-for-Testing / actual Tampermonkey, Suite disabled and runtime absence confirmed after reload. Clicking the native Following link opened its dropdown without navigation; Show All retained `https://chaturbate.com/followed-cams/`.

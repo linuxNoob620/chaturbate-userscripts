@@ -14,6 +14,8 @@ Decision: Normal Chaturbate room fullscreen, controls, exit, portrait, and orien
 
 Room stream startup quality is an explicit browser-local choice from 240p to 1080p, defaulting to 1080p, applied through the existing native menu on a new stream/source. Choose the requested resolution or highest offered lower resolution; preserve subsequent manual selection. Keep Workshop live-preview quality separate and do not imply it controls static thumbnail quality.
 
+Desktop fixed-quality recovery may correct a sustained mismatch between the native fixed menu choice and its same-video HLS engine falling back to Auto. Follow the current menu choice, not the startup preference; preserve deliberate Auto. Reuse existing reconciliation with bounded attempts and cooldown, retain native error fallback for persistent failures, and do not reload/replace media or force a permanent resolution cap. Unsupported engines and native mobile menus remain native-owned.
+
 ## D-003 — Mobile verification uses the real phone
 
 Status: Active

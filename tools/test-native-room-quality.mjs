@@ -19,8 +19,8 @@ function test(name, run) {
   catch (error) { error.message = `${name}: ${error.message}`; throw error; }
 }
 
-function fixture({ mobile = false, labels = [], currentSrc = 'blob:native-one', delay = 0, startupHeight, rawSettings } = {}) {
-  const clicks = [], pending = [];
+function fixture({ mobile = false, labels = [], currentSrc = 'blob:native-one', delay = 0, startupHeight, rawSettings, nativeHls = false } = {}) {
+  const clicks = [], pending = [], recoveryWrites = [];
   let now = 0, hostAvailable = true, videoAvailable = true;
   const state = { options: [], video: null };
   const host = { querySelectorAll(selector) {
@@ -29,7 +29,7 @@ function fixture({ mobile = false, labels = [], currentSrc = 'blob:native-one', 
     return selector === (mobile ? '#chat-player .vjs-menu-item' : '[data-testid="quality-option"]') ? state.options : [];
   } };
   function newVideo(src = currentSrc) {
-    return { currentSrc: src, closest(selector) {
+    return { currentSrc: src, videoHeight: 540, paused: false, ended: false, seeking: false, readyState: 4, closest(selector) {
       assert.equal(selector, '#TheaterModePlayer, #basePlayer, #VideoPanel');
       return hostAvailable ? host : null;
     } };
@@ -75,16 +75,21 @@ function fixture({ mobile = false, labels = [], currentSrc = 'blob:native-one', 
     });
   }
   setLabels(labels);
-  const document = { querySelector(selector) {
+  const document = { hidden: false, querySelector(selector) {
     assert.equal(selector, '#TheaterModePlayer video, #basePlayer video, #VideoPanel video',
       'only the normal-room native player is discovered, never Workshop/card videos');
     return videoAvailable ? state.video : null;
   } };
   let raw = rawSettings ?? JSON.stringify({ settings: { nativeRoomStartupHeight: startupHeight } });
-  const ctx = vm.createContext({ document, WeakMap, STORE_KEY: 'fixture-store', localStorage: { getItem: () => raw } });
+  const hls = nativeHls ? { media: state.video, currentLevel: 0, manualLevel: -1, autoLevelEnabled: true,
+    levels: [{ height: 540 }, { height: 720 }, { height: 1080 }],
+    set loadLevel(value) { recoveryWrites.push(value); this.manualLevel = value; this.autoLevelEnabled = false; },
+  } : null;
+  const page = { hlsInstance: hls };
+  const ctx = vm.createContext({ document, WeakMap, unsafeWindow: page, performance: { now: () => now }, STORE_KEY: 'fixture-store', localStorage: { getItem: () => raw } });
   vm.runInContext(`${qualityCode}\nglobalThis.sync = createNativeRoomQualitySync();`, ctx);
   return {
-    state, clicks, sync: ctx.sync, setLabels, newVideo,
+    state, clicks, hls, page, document, recoveryWrites, sync: ctx.sync, setLabels, newVideo,
     setStartupHeight(value) { raw = JSON.stringify({ settings: { nativeRoomStartupHeight: value } }); },
     hostAvailable(value) { hostAvailable = value; },
     videoAvailable(value) { videoAvailable = value; },
@@ -246,6 +251,76 @@ test('mobile accessibility selected suffix is not parsed as the quality label', 
   ] });
   f.sync('room_one');
   assert.deepEqual(f.clicks, ['1080p']);
+});
+
+test('fixed 1080p label with an automatic 540p fallback is recovered without a menu/source reload', () => {
+  const f = fixture({ nativeHls: true, labels: [{ label: '1080p', color: 'orange' }, '720p', 'Auto'] });
+  f.sync('room_one'); f.advance(1000); f.sync('room_one');
+  f.advance(4999); f.sync('room_one'); assert.deepEqual(f.recoveryWrites, []);
+  f.advance(1); f.sync('room_one'); assert.deepEqual(f.recoveryWrites, [2]);
+  assert.deepEqual(f.clicks, [], 'recovery does not toggle an intermediate quality');
+  assert.equal(f.state.video.currentSrc, 'blob:native-one');
+  for (let i = 0; i < 20; i++) { f.advance(1000); f.sync('room_one'); }
+  assert.deepEqual(f.recoveryWrites, [2], 'settled manual playback is not repeatedly forced');
+});
+
+test('recovery follows the current manually selected lower quality, not the startup default', () => {
+  const f = fixture({ nativeHls: true, labels: [{ label: '1080p', color: 'orange' }, '720p', 'Auto'] });
+  f.sync('room_one'); f.state.options[1].select();
+  f.advance(1000); f.sync('room_one'); f.advance(5000); f.sync('room_one');
+  assert.deepEqual(f.recoveryWrites, [1]);
+});
+
+for (const mode of ['auto', 'manual', 'correct-level', 'correct-height', 'hidden', 'paused', 'ended', 'seeking', 'buffering', 'other-media', 'other-room', 'missing-hls', 'missing-level', 'mobile-menu']) test(`recovery leaves ${mode} alone`, () => {
+  const f = fixture({ nativeHls: true, mobile: mode === 'mobile-menu', labels: [{ label: '1080p', color: 'orange' }, '720p', 'Auto'] });
+  f.sync('room_one');
+  if (mode === 'auto') f.state.options[2].select();
+  if (mode === 'manual') { f.hls.manualLevel = 1; f.hls.autoLevelEnabled = false; }
+  if (mode === 'correct-level') f.hls.currentLevel = 2;
+  if (mode === 'correct-height') f.state.video.videoHeight = 1080;
+  if (mode === 'hidden') f.document.hidden = true;
+  if (['paused', 'ended', 'seeking'].includes(mode)) f.state.video[mode] = true;
+  if (mode === 'buffering') f.state.video.readyState = 2;
+  if (mode === 'other-media') f.hls.media = {};
+  if (mode === 'missing-hls') f.page.hlsInstance = null;
+  if (mode === 'missing-level') f.hls.levels.pop();
+  for (let i = 0; i < 20; i++) { f.advance(1000); f.sync(mode === 'other-room' ? 'room_two' : 'room_one'); }
+  assert.deepEqual(f.recoveryWrites, []);
+});
+
+test('persistent failures are bounded to two recoveries per source, with a 30-second cooldown', () => {
+  const f = fixture({ nativeHls: true, labels: [{ label: '1080p', color: 'orange' }, '720p', 'Auto'] });
+  f.sync('room_one');
+  for (let i = 0; i < 100; i++) {
+    f.hls.manualLevel = -1; f.hls.autoLevelEnabled = true;
+    f.advance(1000); f.sync('room_one');
+    if (i < 35) assert.ok(f.recoveryWrites.length <= 1, 'no immediate retry loop');
+  }
+  assert.deepEqual(f.recoveryWrites, [2, 2]);
+});
+
+test('interrupted mismatch observation restarts the grace period and new sources get their own budget', () => {
+  const f = fixture({ nativeHls: true, labels: [{ label: '1080p', color: 'orange' }, '720p', 'Auto'] });
+  f.sync('room_one'); f.advance(1000); f.sync('room_one'); f.advance(4000); f.sync('room_one');
+  f.document.hidden = true; f.sync('room_one'); f.advance(10000);
+  f.document.hidden = false; f.sync('room_one'); f.advance(4999); f.sync('room_one');
+  assert.deepEqual(f.recoveryWrites, []);
+  f.advance(1); f.sync('room_one'); assert.deepEqual(f.recoveryWrites, [2]);
+  f.state.video.currentSrc = 'blob:new-source'; f.hls.manualLevel = -1; f.hls.autoLevelEnabled = true;
+  f.sync('room_one'); f.advance(1); f.sync('room_one'); f.advance(5000); f.sync('room_one');
+  assert.deepEqual(f.recoveryWrites, [2, 2], 'new source is not delayed by the old source cooldown');
+});
+
+test('throwing page-owned HLS access is contained and throwing writes consume the bounded budget', () => {
+  const f = fixture({ nativeHls: true, labels: [{ label: '1080p', color: 'orange' }, '720p'] });
+  f.sync('room_one');
+  Object.defineProperty(f.page, 'hlsInstance', { get() { throw Error('page bridge unavailable'); }, configurable: true });
+  f.advance(1000); assert.doesNotThrow(() => f.sync('room_one'));
+  Object.defineProperty(f.page, 'hlsInstance', { value: f.hls });
+  let attempts = 0;
+  Object.defineProperty(f.hls, 'loadLevel', { set() { attempts++; throw Error('obsolete player'); } });
+  for (let i = 0; i < 100; i++) { f.advance(1000); assert.doesNotThrow(() => f.sync('room_one')); }
+  assert.equal(attempts, 2);
 });
 
 test('Workshop dispatch and context-only injector never create the room quality owner', () => {

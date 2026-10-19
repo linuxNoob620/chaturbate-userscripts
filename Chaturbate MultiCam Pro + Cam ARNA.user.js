@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.32
+// @version           16.6.33
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -1665,7 +1665,7 @@ function createSettingsSyncController(deps) {
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.32');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.33');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -1681,7 +1681,7 @@ function createSettingsSyncController(deps) {
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.32');
+  instanceMarker.setAttribute('data-suite-version', '16.6.33');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -2931,7 +2931,7 @@ function createSettingsSyncController(deps) {
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.32',
+    version: '16.6.33',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -5969,7 +5969,46 @@ function createSettingsSyncController(deps) {
       if (!room) return;
       const video = document.querySelector('#TheaterModePlayer video, #basePlayer video, #VideoPanel video');
       if (!video || !video.currentSrc) return;
-      if (applied.get(video) === video.currentSrc) return;
+      const previous = applied.get(video);
+      if (previous?.source === video.currentSrc) {
+        // Native HLS error recovery can return to Auto without updating its
+        // fixed-quality menu. Reuse room reconciliation; never reload the source.
+        if (previous.room !== room || document.hidden || video.paused || video.ended || video.seeking || video.readyState < 3) {
+          previous.mismatch = null;
+          return;
+        }
+        try {
+          const page = typeof unsafeWindow === 'undefined' ? window : unsafeWindow;
+          const hls = page.hlsInstance;
+          if (!hls || hls.media !== video || hls.autoLevelEnabled !== true || hls.manualLevel !== -1) {
+            previous.mismatch = null;
+            return;
+          }
+          const host = video.closest('#TheaterModePlayer, #basePlayer, #VideoPanel');
+          const selected = [...(host?.querySelectorAll('[data-testid="quality-option"]') || [])].find(option =>
+            option.getAttribute('aria-checked') === 'true' || option.classList.contains('vjs-selected') || !!option.style.color);
+          const match = selected?.textContent.trim().match(/^(\d{3,4})p(?:\s*\d+(?:\.\d+)?(?:\s*fps)?)?$/i);
+          const height = match ? Number(match[1]) : 0;
+          const level = height ? hls.levels.findIndex(item => item.height === height) : -1;
+          if (level < 0 || video.videoHeight >= height || hls.levels[hls.currentLevel]?.height >= height) {
+            previous.mismatch = null;
+            return;
+          }
+          const now = performance.now();
+          if (previous.choice !== height || previous.mismatch === null) {
+            previous.choice = height;
+            previous.mismatch = now;
+          }
+          if (now - previous.mismatch < 5000 || previous.recoveries >= 2 || now - previous.lastRecovery < 30000) return;
+          // Claim the attempt before crossing into the page-owned player, even
+          // if a stale bridge throws. loadLevel preserves already-buffered video.
+          previous.recoveries++;
+          previous.lastRecovery = now;
+          previous.mismatch = null;
+          hls.loadLevel = level;
+        } catch (_) { /* Unsupported/replaced native engines remain native-owned. */ }
+        return;
+      }
       const host = video.closest('#TheaterModePlayer, #basePlayer, #VideoPanel');
       if (!host) return;
       // Desktop's overlay and mobile's Video.js menu invoke the native player.
@@ -5995,7 +6034,7 @@ function createSettingsSyncController(deps) {
         || best.classList.contains('vjs-selected') || !!best.style.color;
       // Native desktop selection completes asynchronously and rebuilds the menu.
       // Claim this source before clicking so reconciliation cannot click twice.
-      applied.set(video, video.currentSrc);
+      applied.set(video, { source: video.currentSrc, room, recoveries: 0, mismatch: null, choice: 0, lastRecovery: -Infinity });
       try { if (!selected) best.click(); }
       catch (_) { applied.delete(video); }
     };

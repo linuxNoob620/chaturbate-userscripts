@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.33
+// @version           16.6.34
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -82,6 +82,19 @@
 
 (function suiteFileRuntime() {
   'use strict';
+
+  function saveNativeDesktopRoomMode(wanted) {
+    if (!/(^|\.)chaturbate\.com$/.test(location.hostname)) return true;
+    if (navigator.userAgentData?.mobile || /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent || '')
+      || (navigator.maxTouchPoints > 0 && window.matchMedia?.('(pointer: coarse)').matches)) return true;
+    if (typeof wanted !== 'boolean') return false;
+    try {
+      const native = JSON.parse(localStorage.getItem('isTheaterMode') || '{}');
+      if (!native || typeof native !== 'object' || Array.isArray(native)) return false;
+      if (native.isTheaterMode !== wanted) localStorage.setItem('isTheaterMode', JSON.stringify({ ...native, isTheaterMode: wanted }));
+      return true;
+    } catch (_) { return false; }
+  }
 
   // BEGIN GENERATED SETTINGS SYNC
 // Standalone, deterministic settings protocol. Embed this exact factory in the userscript.
@@ -1665,7 +1678,7 @@ function createSettingsSyncController(deps) {
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.33');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.34');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -1681,7 +1694,7 @@ function createSettingsSyncController(deps) {
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.33');
+  instanceMarker.setAttribute('data-suite-version', '16.6.34');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -1746,31 +1759,51 @@ function createSettingsSyncController(deps) {
   // respected until the next navigation or refresh.
   function enterDefaultDesktopTheaterOnce() {
     if (!roomNameForTabTitle() || isWorkshopRoute()) return;
-    let attempts = 0;
+    const initialRoom = roomNameForTabTitle();
+    let attempts = 0, timer = 0, finished = false, transitioning = false;
+    const finish = () => {
+      finished = true;
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', wake);
+      document.removeEventListener('click', manualChoice, true);
+    };
+    const manualChoice = event => {
+      if (event.isTrusted && event.target.closest?.('#theater-mode-icon,[data-testid="theater-toggle"],[aria-label="Theater Mode"]')) finish();
+    };
+    const wake = () => {
+      clearTimeout(timer);
+      if (!finished && !document.hidden) timer = setTimeout(tryEnter, 180);
+    };
     const tryEnter = () => {
+      if (finished || document.hidden) return;
+      if (roomNameForTabTitle() !== initialRoom || isWorkshopRoute() || document.fullscreenElement) { finish(); return; }
       // Read after initialization so pending work uses the latest saved selection.
       let wantsTheater;
       try {
         wantsTheater = JSON.parse(localStorage.getItem(STORE_KEY) || 'null')?.settings?.defaultTheaterMode !== false;
-      } catch (_) { return; }
+      } catch (_) { finish(); return; }
       attempts += 1;
-      const button = document.getElementById('theater-mode-icon')
+      const button = document.querySelector('[data-testid="theater-toggle"]') || document.getElementById('theater-mode-icon')
         || document.querySelector('[aria-label="Theater Mode"]');
       const resizeHandle = [...document.querySelectorAll('.resizeHandle')]
         .find(node => node.getClientRects().length && getComputedStyle(node).display !== 'none');
-      if (button?.getClientRects().length && resizeHandle) {
-        if (wantsTheater) { try { button.click(); } catch (_) {} }
-        return;
+      // Allow native hydration to settle before claiming a legacy split layout.
+      // The newer native toggle exposes Theatre as "Default View" instead.
+      const modern = button?.getAttribute('data-testid') === 'theater-toggle';
+      const theater = modern ? button.getAttribute('aria-label') === 'Default View' : !resizeHandle;
+      if (button?.getClientRects().length && (modern || attempts >= 10)) {
+        if (theater === wantsTheater) { finish(); return; }
+        if (!transitioning) {
+          transitioning = true;
+          try { button.click(); } catch (_) { finish(); return; }
+        }
       }
-      // A mounted theater button without the normal-mode resize handle means
-      // the room is already in theater mode.
-      if (button?.getClientRects().length && !resizeHandle && attempts >= 10) {
-        if (!wantsTheater) { try { button.click(); } catch (_) {} }
-        return;
-      }
-      if (attempts < 50) setTimeout(tryEnter, 160);
+      if (attempts < 50) timer = setTimeout(tryEnter, 160);
+      else finish();
     };
-    setTimeout(tryEnter, 180);
+    document.addEventListener('visibilitychange', wake);
+    document.addEventListener('click', manualChoice, true);
+    wake();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', enterDefaultDesktopTheaterOnce, { once: true });
@@ -2931,7 +2964,7 @@ function createSettingsSyncController(deps) {
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.33',
+    version: '16.6.34',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -7425,6 +7458,9 @@ function createSettingsSyncController(deps) {
     let desktopVideoFitStartedAt = 0;
     let desktopVideoFitStableSamples = 0;
     let desktopVideoFitLastMeasurement = null;
+    let desktopVideoFitFrame = 0;
+    let desktopVideoFitSettleTimer = 0;
+    let desktopVideoFitCancelDrag = null;
     let desktopInitialRoomPositionTimer = 0;
     let desktopInitialRoomPositionAttempts = 0;
     let desktopInitialRoomPositioned = false;
@@ -7891,7 +7927,7 @@ function createSettingsSyncController(deps) {
     }
 
     function applyDesktopVideoFit() {
-      if (desktopVideoFitBusy || desktopVideoFitCompleted) return;
+      if (document.hidden || desktopVideoFitBusy || desktopVideoFitCompleted) return;
       if (!desktopVideoFitStartedAt) desktopVideoFitStartedAt = Date.now();
       const startupExpired = () => Date.now() - desktopVideoFitStartedAt >= 6000;
       const retryStartupFit = (delay = 140) => {
@@ -7968,11 +8004,20 @@ function createSettingsSyncController(deps) {
 
       const handleX = handleRect.left + (handleRect.width / 2);
       const targetX = panelRect.left + targetWidth + (handleRect.width / 2);
-      const releaseDesktopVideoFit = () => {
+      const fitRoom = currentRoom;
+      let dragActive = true;
+      const releaseDesktopVideoFit = (settle = true) => {
+        dragActive = false;
+        cancelAnimationFrame(desktopVideoFitFrame);
+        desktopVideoFitFrame = 0;
+        desktopVideoFitCancelDrag = null;
         if (!desktopVideoFitBusy) return;
         desktopVideoFitBusy = false;
-        setTimeout(() => {
-          if (!panel.isConnected) {
+        if (!settle) return;
+        desktopVideoFitSettleTimer = setTimeout(() => {
+          desktopVideoFitSettleTimer = 0;
+          if (document.hidden) return;
+          if (!panel.isConnected || currentRoom !== fitRoom) {
             desktopVideoFitCompleted = true;
             return;
           }
@@ -7993,13 +8038,23 @@ function createSettingsSyncController(deps) {
       };
       desktopVideoFitAttempts += 1;
       desktopVideoFitBusy = true;
+      desktopVideoFitCancelDrag = () => {
+        try {
+          roomContents.dispatchEvent(new MouseEvent('mouseup', {
+            bubbles: true, cancelable: true, clientX: handleX,
+            clientY: handleRect.top + (handleRect.height / 2), button: 0, buttons: 0,
+          }));
+        } catch (_) {} finally { releaseDesktopVideoFit(false); }
+      };
       try {
         handle.dispatchEvent(new MouseEvent('mousedown', {
           bubbles: true, cancelable: true,
           clientX: handleX, clientY: handleRect.top + (handleRect.height / 2),
           button: 0, buttons: 1,
         }));
-        requestAnimationFrame(() => {
+        desktopVideoFitFrame = requestAnimationFrame(() => {
+          if (!dragActive) return;
+          if (document.hidden || document.fullscreenElement || !panel.isConnected || currentRoom !== fitRoom) { desktopVideoFitCancelDrag(); return; }
           try {
             roomContents.dispatchEvent(new MouseEvent('mousemove', {
               bubbles: true, cancelable: true,
@@ -8007,10 +8062,12 @@ function createSettingsSyncController(deps) {
               button: 0, buttons: 1,
             }));
           } catch (_) {
-            releaseDesktopVideoFit();
+            desktopVideoFitCancelDrag();
             return;
           }
-          requestAnimationFrame(() => {
+          desktopVideoFitFrame = requestAnimationFrame(() => {
+            if (!dragActive) return;
+            if (document.hidden || document.fullscreenElement || !panel.isConnected || currentRoom !== fitRoom) { desktopVideoFitCancelDrag(); return; }
             try {
               roomContents.dispatchEvent(new MouseEvent('mouseup', {
                 bubbles: true, cancelable: true,
@@ -8023,19 +8080,12 @@ function createSettingsSyncController(deps) {
           });
         });
       } catch (_) {
-        try {
-          roomContents.dispatchEvent(new MouseEvent('mouseup', {
-            bubbles: true, cancelable: true,
-            clientX: targetX, clientY: handleRect.top + (handleRect.height / 2),
-            button: 0, buttons: 0,
-          }));
-        } catch (_) {}
-        releaseDesktopVideoFit();
+        desktopVideoFitCancelDrag?.();
       }
     }
 
     function scheduleDesktopVideoFit(delay = 120) {
-      if (desktopVideoFitCompleted) return;
+      if (document.hidden || desktopVideoFitCompleted) return;
       if (!desktopInitialRoomPositioned && !desktopInitialRoomPositionCancelled) {
         scheduleDesktopInitialRoomPosition(Math.min(delay, 160));
         return;
@@ -8065,7 +8115,7 @@ function createSettingsSyncController(deps) {
 
     function applyDesktopInitialRoomPosition() {
       desktopInitialRoomPositionTimer = 0;
-      if (desktopInitialRoomPositioned || desktopInitialRoomPositionCancelled) return;
+      if (document.hidden || desktopInitialRoomPositioned || desktopInitialRoomPositionCancelled) return;
       if (nativeMobilePage || isWorkstation || !currentRoom || document.fullscreenElement) {
         cancelDesktopInitialRoomPosition();
         return;
@@ -8089,7 +8139,7 @@ function createSettingsSyncController(deps) {
     }
 
     function scheduleDesktopInitialRoomPosition(delay = 160) {
-      if (desktopInitialRoomPositioned || desktopInitialRoomPositionCancelled || desktopInitialRoomPositionTimer) return;
+      if (document.hidden || desktopInitialRoomPositioned || desktopInitialRoomPositionCancelled || desktopInitialRoomPositionTimer) return;
       desktopInitialRoomPositionTimer = setTimeout(applyDesktopInitialRoomPosition, delay);
     }
 
@@ -8583,6 +8633,22 @@ function createSettingsSyncController(deps) {
     });
     document.addEventListener('visibilitychange', () => {
       if (nativeMobilePage) return;
+      if (document.hidden) {
+        clearTimeout(desktopVideoFitTimer);
+        clearTimeout(desktopVideoFitSettleTimer);
+        desktopVideoFitSettleTimer = 0;
+        clearDesktopInitialRoomPositionTimer();
+        desktopVideoFitStartedAt = 0;
+        desktopVideoFitStableSamples = 0;
+        desktopVideoFitLastMeasurement = null;
+        desktopVideoFitCancelDrag?.();
+      } else {
+        syncSuitePageMountsSoon();
+        if (!desktopInitialRoomPositionCancelled) {
+          scheduleDesktopInitialRoomPosition();
+          if (desktopInitialRoomPositioned) scheduleDesktopVideoFit();
+        }
+      }
       if (document.hidden || collapsed || activeDockTab !== 'arna') camArna.deactivate();
       else camArna.activate(activeDockRoom());
     });
@@ -13254,6 +13320,10 @@ function createSettingsSyncController(deps) {
             $('button', { class: 'ctrl-btn primary', onclick: () => {
               store.patchSettings({ maxStreamHeight: Number(quality.value) || 0, nativeRoomStartupHeight: Number(roomQuality.value), freeZoom: !!freeZoom.checked, defaultTheaterMode: theater.value === 'theatre' });
               if (!store.flush()) return;
+              if (!saveNativeDesktopRoomMode(store.state.settings.defaultTheaterMode)) {
+                toast(LANG === 'zh' ? '设置已保存，但未能更新网站记住的房间模式。请重试。' : 'Suite settings saved, but the site’s remembered room mode could not be updated. Please retry.');
+                return;
+              }
               service.refreshQuality();
               close('saved');
             } }, t('saveSettings')),

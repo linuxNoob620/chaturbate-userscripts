@@ -229,19 +229,20 @@ test('actual chat editor validates input, preserves unknown language and reports
   h.close();
 });
 test('actual playback editor preserves stored quality and failure never acknowledges Saved', () => {
-  const h = fixture(); let persisted = false, refreshed = 0;
+  const h = fixture(); let persisted = false, refreshed = 0, nativeWrites = 0;
   h.context.store.state.settings = { maxStreamHeight: 1080, nativeRoomStartupHeight: 720, freeZoom: false, defaultTheaterMode: false };
   h.context.store.patchSettings = patch => Object.assign(h.context.store.state.settings, patch);
   h.context.store.flush = () => persisted;
   h.context.service = { refreshQuality() { refreshed++; } };
+  h.context.saveNativeDesktopRoomMode = wanted => { assert.equal(persisted, true); assert.equal(wanted, false); nativeWrites++; return true; };
   vm.runInContext(block('    function openPlaybackSettingsPanel()', '    function openBackupPanel()'), h.context);
   const section = h.open('previews'), selects = section.querySelectorAll('select');
   assert.equal(selects[0].value, '1080'); assert.equal(selects[1].value, '720'); assert.equal(selects[2].value, 'normal');
   assert.deepEqual(selects[1].children.map(option => option.value), ['240', '360', '480', '720', '1080']);
   selects[1].value = '480';
   const save = section.querySelectorAll('button').find(x => x.textContent === 'saveSettings');
-  save.onclick(); assert.equal(refreshed, 0); assert(!section.textContent.includes('Saved on this device'));
-  persisted = true; save.onclick(); assert.equal(refreshed, 1); assert.match(section.textContent, /Saved on this device/);
+  save.onclick(); assert.equal(refreshed, 0); assert.equal(nativeWrites, 0); assert(!section.textContent.includes('Saved on this device'));
+  persisted = true; save.onclick(); assert.equal(refreshed, 1); assert.equal(nativeWrites, 1); assert.match(section.textContent, /Saved on this device/);
   assert.equal(h.context.store.state.settings.maxStreamHeight, 1080);
   assert.equal(h.context.store.state.settings.nativeRoomStartupHeight, 480); assert.equal(section.open, true); h.close();
 });

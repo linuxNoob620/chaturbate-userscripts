@@ -11,7 +11,7 @@ const end = source.indexOf('\n  /* ===', begin);
 const factory = source.slice(begin, end);
 
 function fixture(ids) {
-  const pending = [], events = [], timers = new Map();
+  const pending = [], events = [], timers = new Map(), stopped = [];
   let timerId = 0;
   let now = Date.now();
   const store = {
@@ -27,14 +27,50 @@ function fixture(ids) {
     numeric: (x, fallback) => Number(x) || fallback,
     clampInt: (x, min, max, fallback) => Math.max(min, Math.min(max, Number.isFinite(Number(x)) ? Number(x) : fallback)),
     EventBus: { emit: (name, data) => events.push({ name, data }) },
-    addRoomStatusHistory() {}, stopMediaElement() {}, stopAllPageMedia() {},
+    addRoomStatusHistory() {}, stopMediaElement(video) { if (video) stopped.push(video); }, stopAllPageMedia() {},
     setTimeout(fn, ms) { timers.set(++timerId, { fn, ms }); return timerId; }, clearTimeout(id) { timers.delete(id); },
     fetch(url, options) { return new Promise((resolve, reject) => { const request = { url, signal: options.signal, respond: resolve, fail: () => reject(new Error('network failure')), resolve: data => resolve({ ok: true, json: async () => data }), throttle: () => resolve({ ok: false, status: 429, headers: { get: () => '60' } }) }; options.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }); pending.push(request); }); },
   };
   const service = vm.runInNewContext(`${factory}\ncreateRoomService(store)`, globals);
-  return { service, pending, events, store, timers, advance: ms => { now += ms; } };
+  return { service, pending, events, store, timers, stopped, advance: ms => { now += ms; } };
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
+
+{
+  const f = fixture(['alpha']);
+  f.store.state.rooms[0].lastStatus = 'online';
+  const online = f.service.probe('alpha');
+  f.pending.at(-1).resolve({ room_status: 'public', hls_source: 'https://example.com/live.m3u8' }); await online;
+  const video = { src: 'https://example.com/live.m3u8', readyState: 4, ended: false };
+  f.service.attachVideo('alpha', video);
+  const denied = f.service.probe('alpha');
+  f.pending.at(-1).respond({ ok: false, status: 403, json: async () => ({ code: 'password-required' }) }); await denied;
+  assert.equal(f.store.state.rooms[0].lastStatus, 'private');
+  assert.equal(f.store.state.rooms[0].privateLabel, 'password');
+  assert.ok(f.stopped.includes(video), 'confirmed password response releases the old preview');
+  assert.equal(f.events.filter(e => e.name === 'room:online').length, 1, 'rejection never admits another stream');
+  const recovered = f.service.probe('alpha');
+  f.pending.at(-1).resolve({ room_status: 'public', hls_source: 'https://example.com/live.m3u8' }); await recovered;
+  assert.equal(f.store.state.rooms[0].privateLabel, '');
+  assert.equal(f.store.state.rooms[0].lastStatus, 'online');
+}
+for (const response of [
+  { ok: false, status: 403, json: async () => ({ code: 'access-denied' }) },
+  { ok: false, status: 403, json: async () => { throw Error('Not JSON'); } },
+  { ok: false, status: 500, json: async () => ({ code: 'password-required' }) },
+]) {
+  const f = fixture(['alpha']); f.store.state.rooms[0].lastStatus = 'online';
+  const check = f.service.probe('alpha'); f.pending.at(-1).respond(response); await check;
+  assert.equal(f.store.state.rooms[0].lastStatus, 'online', 'ambiguous errors retain existing transient handling');
+  assert.notEqual(f.store.state.rooms[0].privateLabel, 'password');
+}
+{
+  const f = fixture(['alpha']); let release;
+  const check = f.service.probe('alpha');
+  f.pending.at(-1).respond({ ok: false, status: 403, json: () => new Promise(resolve => { release = resolve; }) });
+  await settle(); f.service.stop('alpha'); release({ code: 'password-required' }); await check;
+  assert.equal(f.store.state.rooms[0].lastStatus, 'offline', 'cancelled rejected-body parsing cannot publish stale status');
+}
 
 {
   const f = fixture(['alpha']);

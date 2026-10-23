@@ -80,8 +80,8 @@ function cardFixture(status = 'offline') {
 }
 
 test('restricted presence stays online, counts consistently and respects explicit hide-private', () => {
-  const rooms = ['online', 'private', 'private', 'private', 'offline'].map((lastStatus, i) => ({
-    id: `room${i}`, lastStatus, privateLabel: ['','private','away','secret',''][i], groups: ['favorites'],
+  const rooms = ['online', 'private', 'private', 'private', 'offline', 'private'].map((lastStatus, i) => ({
+    id: `room${i}`, lastStatus, privateLabel: ['','private','away','secret','','password'][i], groups: ['favorites'],
   }));
   const ctx = vm.createContext({ LIBRARY_GROUP_ID: 'library', ONLINE_GROUP_ID: 'online', ONLINE_FAVORITES_GROUP_ID: 'onlineFavorites',
     RECENT_FOLLOWED_GROUP_ID: 'recent', FAVORITE_GROUP_ID: 'favorites', DEFAULT_GROUP_ID: 'library',
@@ -94,6 +94,8 @@ test('restricted presence stays online, counts consistently and respects explici
   assert.equal(ctx.visibleRooms().length, 4);
   assert.equal(ctx.countByGroup().online, 4); assert.equal(ctx.countByGroup().onlineFavorites, 4);
   assert.equal(ctx.roomInGroup(rooms[4], 'online'), false);
+  assert.equal(ctx.roomInGroup(rooms[5], 'online'), false, 'password-protected rooms are excluded from online categories');
+  assert.equal(ctx.roomInGroup(rooms[5], 'onlineFavorites'), false);
   ctx.store.state.settings.filter.onlyOnline = true; assert.equal(ctx.visibleRooms().length, 4);
   ctx.store.state.settings.filter.hidePrivate = true; assert.equal(ctx.visibleRooms().length, 1);
   // Presence does not make a non-public room a playable split-cycle candidate.
@@ -308,11 +310,12 @@ test('status-only room notifications do not rebuild Groups or invalidate unchang
   let subscriber, cards = 0, sidebar = 0, counts = 0, grid = 0;
   const ctx = vm.createContext({
     store: { state, subscribe(callback) { subscriber = callback; } },
-    currentSavedRoomIndex: () => new Map([[room.id, room]]), renderedRoomStatuses: new Map([[room.id, room.lastStatus]]),
+    currentSavedRoomIndex: () => new Map([[room.id, room]]),
     renderCardState() { cards++; }, scheduleSidebarRender() { sidebar++; }, scheduleWorkshopSidebarCounts() { counts++; }, scheduleGridRender() { grid++; },
     workshopRefreshState: { busy: false }, ONLINE_GROUP_ID: 'online', ONLINE_FAVORITES_GROUP_ID: 'onlineFavorites',
   });
-  vm.runInContext(block('    store.subscribe((state, path) => {', '    // ---- EventBus 订阅 ----'), ctx);
+  vm.runInContext(block('  function isRoomPresent(', '  function roomInGroup(')
+    + block('    const renderedRoomStatuses =', '    // ---- EventBus 订阅 ----'), ctx);
   for (let n = 0; n < 100; n++) { room.lastSeenOnline = n; subscriber(state, 'room:alpha'); }
   assert.equal(cards, 100, 'the affected card still receives its latest fields');
   assert.equal(sidebar + counts + grid, 0, 'unchanged status is not a category/order change');
@@ -323,6 +326,14 @@ test('status-only room notifications do not rebuild Groups or invalidate unchang
   assert.equal(counts, 2); assert.equal(grid, 1, 'manual unfiltered library order does not depend on room status');
   state.settings.filter.hideOffline = true; room.lastStatus = 'online'; subscriber(state, 'room:alpha');
   assert.equal(counts, 3); assert.equal(grid, 2, 'explicit status filtering still invalidates membership');
+  state.settings.activeGroup = 'online'; state.settings.filter = {}; room.lastStatus = 'private'; room.privateLabel = 'private'; subscriber(state, 'room:alpha');
+  const beforePassword = { counts, grid };
+  room.privateLabel = 'password'; subscriber(state, 'room:alpha');
+  assert.equal(counts, beforePassword.counts + 1); assert.equal(grid, beforePassword.grid + 1, 'subtype-only password transition removes online membership immediately');
+  room.privateLabel = 'away'; subscriber(state, 'room:alpha');
+  assert.equal(counts, beforePassword.counts + 2); assert.equal(grid, beforePassword.grid + 2, 'leaving password protection restores online eligibility');
+  room.privateLabel = 'secret'; subscriber(state, 'room:alpha');
+  assert.equal(counts, beforePassword.counts + 2); assert.equal(grid, beforePassword.grid + 2, 'other subtype-only changes do not rebuild membership');
 });
 
 test('visibility reconciliation reads the grid and each card once per pass, never across scrolls', () => {

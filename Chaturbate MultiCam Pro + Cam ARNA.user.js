@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.36
+// @version           16.6.37
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -1678,7 +1678,7 @@ function createSettingsSyncController(deps) {
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.36');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.37');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -1694,7 +1694,7 @@ function createSettingsSyncController(deps) {
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.36');
+  instanceMarker.setAttribute('data-suite-version', '16.6.37');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -2964,7 +2964,7 @@ function createSettingsSyncController(deps) {
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.36',
+    version: '16.6.37',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3366,7 +3366,7 @@ function createSettingsSyncController(deps) {
   }
 
   function isRoomPresent(room) {
-    return room?.lastStatus === 'online' || room?.lastStatus === 'private';
+    return room?.lastStatus === 'online' || (room?.lastStatus === 'private' && room.privateLabel !== 'password');
   }
   function roomInGroup(room, groupId) {
     if (groupId === LIBRARY_GROUP_ID) return true;
@@ -5019,6 +5019,10 @@ function createSettingsSyncController(deps) {
           referrerPolicy: 'strict-origin-when-cross-origin',
         });
         if (!res.ok) {
+          if (res.status === 403) {
+            const denied = await res.json().catch(() => null);
+            if (denied?.code === 'password-required') return { room_status: 'password' };
+          }
           const error = new Error('http ' + res.status);
           error.httpStatus = res.status;
           if (res.status === 429) {
@@ -14209,7 +14213,7 @@ function createSettingsSyncController(deps) {
       if (c.infoMeta) {
         const parts = [meta.label];
         if (Number(room.viewerCount) > 0) parts.push(`${Number(room.viewerCount).toLocaleString()} ${LANG === 'zh' ? '观众' : 'viewers'}`);
-        if (room.lastSeenOnline && !isRoomPresent(room)) parts.push(`${LANG === 'zh' ? '最近在线' : 'last online'} ${fmtTime(room.lastSeenOnline)}`);
+        if (room.lastSeenOnline && room.lastStatus !== 'online' && room.lastStatus !== 'private') parts.push(`${LANG === 'zh' ? '最近在线' : 'last online'} ${fmtTime(room.lastSeenOnline)}`);
         const text = parts.join(' · ');
         if (c.infoMeta.textContent !== text) c.infoMeta.textContent = text;
       }
@@ -14234,7 +14238,7 @@ function createSettingsSyncController(deps) {
       } else {
         if (!c.root.classList.contains('not-online')) c.root.classList.add('not-online');
         if (c.statusEl.style.display !== 'flex') c.statusEl.style.display = 'flex';
-        const lastSeen = room.lastSeenOnline && !isRoomPresent(room) ? fmtTime(room.lastSeenOnline) : '';
+        const lastSeen = room.lastSeenOnline && room.lastStatus !== 'online' && room.lastStatus !== 'private' ? fmtTime(room.lastSeenOnline) : '';
         const offlineKey = JSON.stringify([room.lastStatus, meta.label, meta.color, lastSeen]);
         // 关键修复：状态非 online 时彻底清理 video 节点。
         // 否则会在卡片中央显示大黑块，且可能残留音频。
@@ -14906,13 +14910,13 @@ function createSettingsSyncController(deps) {
     });
 
     // ---- Store 订阅 ----
-    const renderedRoomStatuses = new Map(store.state.rooms.map(room => [room.id, room.lastStatus]));
+    const renderedRoomStatuses = new Map(store.state.rooms.map(room => [room.id, `${room.lastStatus}:${isRoomPresent(room)}`]));
     store.subscribe((state, path) => {
       if (path === 'rooms' || path === 'all') {
         indexedRooms = state.rooms;
         savedRoomIndex = new Map(state.rooms.map(room => [room.id, room]));
         renderedRoomStatuses.clear();
-        state.rooms.forEach(room => renderedRoomStatuses.set(room.id, room.lastStatus));
+        state.rooms.forEach(room => renderedRoomStatuses.set(room.id, `${room.lastStatus}:${isRoomPresent(room)}`));
       }
       const isSettingsPath = path === 'settings' || (typeof path === 'string' && path.startsWith('settings:'));
       const settingKeys = isSettingsPath && typeof path === 'string' && path.includes(':')
@@ -14953,8 +14957,9 @@ function createSettingsSyncController(deps) {
       if (path && path.startsWith('room:')) {
         const id = path.slice(5);
         const r = currentSavedRoomIndex().get(id);
-        const statusChanged = !!r && renderedRoomStatuses.get(id) !== r.lastStatus;
-        if (r) renderedRoomStatuses.set(id, r.lastStatus);
+        const statusKey = r && `${r.lastStatus}:${isRoomPresent(r)}`;
+        const statusChanged = !!r && renderedRoomStatuses.get(id) !== statusKey;
+        if (r) renderedRoomStatuses.set(id, statusKey);
         if (r) renderCardState(r);
         if (statusChanged) scheduleWorkshopSidebarCounts();
         // 状态排序时，单卡状态变化也要重排

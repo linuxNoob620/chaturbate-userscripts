@@ -3,12 +3,18 @@
 ## Deployment
 
 - Primary runtime: Tampermonkey userscript `Chaturbate MultiCam Pro + Cam ARNA.user.js`.
-- Current userscript release: 16.6.34 (`main`, tag `v16.6.34`). The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
+- Current userscript version: 16.6.35. The documented native-fullscreen limitations are unchanged and were accepted by the user; this update does not claim to resolve them.
 - Extension builds remain at 16.6.7. They were not modified, rebuilt, packaged, or published for this userscript-only change.
 - Local rollback point: Git tag `backup/pre-16.6.8-workshop-doubletap-20260905` at the 16.6.7 baseline.
 - Version 16.6.34 is byte-verified in the existing Chrome testing-profile Tampermonkey entry, and its live runtime is verified in Floorp Chat after the published GitHub update. No settings import/reset was performed. The Xiaomi tablet's last verified entry remains 16.6.32 and the OPPO phone's 16.6.22; neither was tested in this pass. The earlier fullscreen/native-behavior verdict remains **NOT FIXED** against the complete acceptance checklist.
 - Recu.me release rollback point: local tag `backup/pre-recu-16.6.13-20260909` at 16.6.12.
 - Candidate rollback point: `backup/pre-native-portrait-20260905`. Extension outputs are unchanged.
+
+## Room chat focus — 16.6.35
+
+- Removed the unsolicited chat-input mousedown from the legacy room `iagree()` initialization and its single-use helper. Captured actual OnePlus OPD2403 / Quetta / Suite 16.6.34 focus stacks showed this call entering Chaturbate's handler and focusing the editable chat field. Suite-disabled room loading did not make that editable-field focus call. Explicit native chat interaction, existing rule acknowledgement and dismissible messages remain unchanged.
+- Eight extracted-source regressions cover chat present/absent and rule/message combinations. They fail against 16.6.34 and pass after the deletion. Syntax, clean-HEAD isolated userscript build/full regression, settings-sync and read-only compatibility adapter checks pass. The actual Chrome/Tampermonkey saved editor matches the candidate; room loading did not focus an editable field, but the sampled Chrome room had no video, so it does not establish desktop video-tap acceptance. Tablet update/acceptance is pending.
+- No media, fullscreen, gesture, persistence, account action or extension-target implementation changed. Native-fullscreen limitations remain unchanged. Rollback: `backup/pre-chat-autofocus-20261023` at `f7922a72af5a1549565fb7162bae240543a1174a`. Candidate Suite SHA-256: `5D189F73C8C179A3F322F3950BC41AB4FA9B7044C26A63CCD8B2EBD5541EE948`.
 
 ## Desktop room startup and remembered layout — 16.6.34
 

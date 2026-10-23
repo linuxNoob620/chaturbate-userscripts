@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.34
+// @version           16.6.35
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -1678,7 +1678,7 @@ function createSettingsSyncController(deps) {
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.34');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.35');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -1694,7 +1694,7 @@ function createSettingsSyncController(deps) {
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.34');
+  instanceMarker.setAttribute('data-suite-version', '16.6.35');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -2964,7 +2964,7 @@ function createSettingsSyncController(deps) {
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.34',
+    version: '16.6.35',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -16139,18 +16139,12 @@ function createSettingsSyncController(deps) {
     }
 
     function iagree(){
-        triggerMouseEvent (document.getElementsByClassName("inputDiv")[0], "mousedown");
         if (document.getElementsByClassName("acceptRulesButton").length>0){
             document.getElementsByClassName("acceptRulesButton")[0].click();
         }
         if (document.querySelector('[data-testid="dismissible-message-dismiss"]')){
             document.querySelector('[data-testid="dismissible-message-dismiss"]').click();
         }
-    }
-
-    function triggerMouseEvent (node, eventType) {
-        var clickEvent = new Event(eventType, { bubbles: true, cancelable: true });
-        node.dispatchEvent (clickEvent);
     }
 
     function setgenstyle(){

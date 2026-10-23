@@ -1,6 +1,6 @@
 {
   "name": "ziggy-chaturbate-suite",
-  "version": "16.6.34",
+  "version": "16.6.35",
   "private": true,
   "description": "Builds the maintained Tampermonkey userscript and strict-parity Chrome and Firefox/Zen extensions.",
   "scripts": {
@@ -13,7 +13,8 @@
     "test:userscript": "node ./tools/validate-userscripts.mjs && node ./tools/test-suite-regressions.mjs && node ./tools/test-following-dropdown.mjs && node ./tools/test-native-room-quality.mjs && node ./tools/test-workshop-refresh.mjs && node ./tools/test-workshop-incremental.mjs && node ./tools/test-workshop-settings.mjs && node ./tools/test-workshop-grid.mjs && node ./tools/test-workshop-dropdown.mjs && node ./tools/test-workshop-visibility.mjs && node ./tools/test-room-row-scroll.mjs && node ./tools/test-recu-panel.mjs && node ./tools/test-github-sync.mjs && node ./tools/test-stage2-persistence.mjs && node ./tools/test-stage2-legacy.mjs && node ./tools/test-stage2-ui.mjs && node ./tools/test-stage3-followups.mjs && npm run test:native-notifications && npm run test:recu-previews",
     "test:settings-sync": "node ./tools/build-settings-sync.mjs --check && node ./tools/test-settings-sync-core.mjs && node ./tools/test-settings-sync-client.mjs && node ./tools/test-settings-sync-codec.mjs && node ./tools/test-settings-sync-storage.mjs && node ./tools/test-settings-sync-controller.mjs && node ./tools/test-settings-sync-integration.mjs",
     "test:room-startup": "node ./tools/test-default-theater.mjs && node ./tools/test-room-startup-lifecycle.mjs && node ./tools/test-room-startup-preference.mjs",
-    "pretest:userscript": "npm run test:room-startup",
+    "pretest:userscript": "npm run test:room-startup && npm run test:chat-focus",
+    "test:chat-focus": "node ./tools/test-chat-focus.mjs",
     "test:performance": "node ./tools/test-desktop-decoration.mjs && node ./tools/test-thumbnail-hover.mjs && node ./tools/test-performance-settings.mjs && node ./tools/test-archive-lifetime.mjs && node ./tools/test-bulk-admission.mjs",
     "test:mobile-view": "node ./tools/real-mobile-view/verify.mjs",
     "test:native-notifications": "node ./tools/test-native-room-notifications.mjs && node ./tools/test-follow-notification-default.mjs && node ./tools/test-room-tab-preference.mjs",

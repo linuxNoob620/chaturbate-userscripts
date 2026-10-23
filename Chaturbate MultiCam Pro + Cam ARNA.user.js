@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Ziggy Chaturbate Suite
 // @namespace         https://github.com/ryujo/roomgrid-multicam-pro
-// @version           16.6.35
+// @version           16.6.36
 // @homepageURL       https://github.com/linuxNoob620/chaturbate-userscripts
 // @supportURL        https://github.com/linuxNoob620/chaturbate-userscripts/issues
 // @updateURL         https://raw.githubusercontent.com/linuxNoob620/chaturbate-userscripts/refs/heads/main/Chaturbate%20MultiCam%20Pro%20%2B%20Cam%20ARNA.meta.js
@@ -1678,7 +1678,7 @@ function createSettingsSyncController(deps) {
   }
   const fileInstanceMarker = document.createElement('meta');
   fileInstanceMarker.id = FILE_INSTANCE_MARKER_ID;
-  fileInstanceMarker.setAttribute('data-suite-version', '16.6.35');
+  fileInstanceMarker.setAttribute('data-suite-version', '16.6.36');
   (document.head || document.documentElement).appendChild(fileInstanceMarker);
 
 (function () {
@@ -1694,7 +1694,7 @@ function createSettingsSyncController(deps) {
   }
   const instanceMarker = document.createElement('meta');
   instanceMarker.id = INSTANCE_MARKER_ID;
-  instanceMarker.setAttribute('data-suite-version', '16.6.35');
+  instanceMarker.setAttribute('data-suite-version', '16.6.36');
   (document.head || document.documentElement).appendChild(instanceMarker);
   const INSTANCE_KEY = '__roomGridMultiCamWorkstationRunning';
   if (window[INSTANCE_KEY]) {
@@ -2964,7 +2964,7 @@ function createSettingsSyncController(deps) {
    * 0.6. 元数据 / Meta —— 关于 + 捐赠
    * ============================================================= */
   const META = {
-    version: '16.6.35',
+    version: '16.6.36',
     author: 'Ziggy',
     license: 'MIT',
     source: 'https://github.com/linuxNoob620/chaturbate-userscripts',
@@ -3365,10 +3365,13 @@ function createSettingsSyncController(deps) {
     return out;
   }
 
+  function isRoomPresent(room) {
+    return room?.lastStatus === 'online' || room?.lastStatus === 'private';
+  }
   function roomInGroup(room, groupId) {
     if (groupId === LIBRARY_GROUP_ID) return true;
-    if (groupId === ONLINE_GROUP_ID) return room?.lastStatus === 'online';
-    if (groupId === ONLINE_FAVORITES_GROUP_ID) return room?.lastStatus === 'online' && getRoomGroups(room).includes(FAVORITE_GROUP_ID);
+    if (groupId === ONLINE_GROUP_ID) return isRoomPresent(room);
+    if (groupId === ONLINE_FAVORITES_GROUP_ID) return isRoomPresent(room) && getRoomGroups(room).includes(FAVORITE_GROUP_ID);
     return getRoomGroups(room).includes(groupId || DEFAULT_GROUP_ID);
   }
   function roomOrderInGroup(room, groupId) {
@@ -5328,7 +5331,8 @@ function createSettingsSyncController(deps) {
       s.retryCount = 0;
       const cfg = store.state.settings.pollMs;
 
-      if (data.room_status === 'offline') {
+      const roomStatus = String(data.room_status || '').trim().toLowerCase();
+      if (roomStatus === 'offline') {
         setStatus(id, 'offline');
         destroyPlayer(id);
         s = sessions.get(id) || s;
@@ -5338,8 +5342,8 @@ function createSettingsSyncController(deps) {
         s.contextCheckedAt = Date.now();
         return { id, status: 'offline' };
       }
-      if (['private', 'hidden', 'away', 'secret', 'group', 'password'].includes(String(data.room_status || '').toLowerCase())) {
-        setStatus(id, 'private', { privateLabel: data.room_status });
+      if (['private', 'hidden', 'away', 'secret', 'group', 'password'].includes(roomStatus)) {
+        setStatus(id, 'private', { privateLabel: roomStatus });
         destroyPlayer(id);
         sessions.set(id, sessions.get(id) || s);
         schedulePoll(id, cfg.private);
@@ -11517,7 +11521,7 @@ function createSettingsSyncController(deps) {
       if (ui.track?.isConnected) ui.track.setAttribute('aria-valuenow', String(percent));
       if (ui.summary?.isConnected) {
         const rooms = regularRoomsForView();
-        const online = rooms.filter(room => room.lastStatus === 'online').length;
+        const online = rooms.filter(isRoomPresent).length;
         ui.summary.textContent = LANG === 'zh'
           ? `${rooms.length} 位主播 · ${online} 位在线`
           : `${rooms.length} models · ${online} online`;
@@ -11602,7 +11606,7 @@ function createSettingsSyncController(deps) {
       const counts = countByGroup();
       const sidebarRooms = regularRoomsForView();
       const total = sidebarRooms.length;
-      const online = sidebarRooms.filter(r => r.lastStatus === 'online').length;
+      const online = sidebarRooms.filter(isRoomPresent).length;
 
       sidebar.append($('div', { class: 'sidebar-brand' }, [
         $('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' } }, [
@@ -11715,7 +11719,7 @@ function createSettingsSyncController(deps) {
       const c = {
         [RECENT_FOLLOWED_GROUP_ID]: recentRoomMap.size,
         [LIBRARY_GROUP_ID]: rooms.length,
-        [ONLINE_GROUP_ID]: rooms.filter(r => r.lastStatus === 'online').length,
+        [ONLINE_GROUP_ID]: rooms.filter(isRoomPresent).length,
         [ONLINE_FAVORITES_GROUP_ID]: rooms.filter(r => roomInGroup(r, ONLINE_FAVORITES_GROUP_ID)).length,
       };
       for (const r of rooms) for (const g of getRoomGroups(r)) c[g] = (c[g] || 0) + 1;
@@ -12298,11 +12302,17 @@ function createSettingsSyncController(deps) {
       toast(LANG === 'zh' ? `临时 URL：新增 ${added}，失败 ${failed}` : `Temporary URLs: ${added} added, ${failed} failed`);
     }
 
-    function statusMeta(s) {
+    function statusMeta(s, privateLabel = '') {
       switch (s) {
         case 'online': return { color: '#16a34a', label: t('stOnline') };
         case 'offline': return { color: '#64748b', label: t('stOffline') };
-        case 'private': return { color: '#d97706', label: t('stPrivate') };
+        case 'private': {
+          const labels = LANG === 'zh'
+            ? { private: '私人表演', away: '暂时离开', secret: '秘密表演', hidden: '隐藏表演', group: '群组表演', password: '密码保护' }
+            : { private: 'Private show', away: 'Away', secret: 'Secret show', hidden: 'Hidden show', group: 'Group show', password: 'Password protected' };
+          const kind = String(privateLabel).trim().toLowerCase();
+          return { color: '#d97706', label: Object.hasOwn(labels, kind) ? labels[kind] : (LANG === 'zh' ? '受限直播' : 'Restricted stream') };
+        }
         case 'loading': return { color: '#2563eb', label: t('stLoading') };
         case 'error': return { color: '#dc2626', label: LANG === 'zh' ? '流不可用' : 'Stream unavailable' };
         default: return { color: '#64748b', label: t('stUnknown') };
@@ -12555,7 +12565,7 @@ function createSettingsSyncController(deps) {
           },
         } : {}),
       }, room.displayName || room.id);
-      const infoMeta = $('div', { class: 'cam-info-meta' }, statusMeta(room.lastStatus).label);
+      const infoMeta = $('div', { class: 'cam-info-meta' }, statusMeta(room.lastStatus, room.privateLabel).label);
       const infoActions = $('div', { class: 'cam-info-actions' });
       if (favoriteBtn) infoActions.appendChild(favoriteBtn);
       if (nativeNotifyBtn) infoActions.appendChild(nativeNotifyBtn);
@@ -12905,7 +12915,7 @@ function createSettingsSyncController(deps) {
         function refreshPreview() {
           if (!previewRoom || !previewHostVisible()) return;
           previewFallback = false;
-          previewStatus.textContent = statusMeta(previewRoom.lastStatus).label;
+          previewStatus.textContent = statusMeta(previewRoom.lastStatus, previewRoom.privateLabel).label;
           previewImage.src = splitPreviewSnapshotUrl(previewRoom.id, false);
         }
         function openPreview(room) {
@@ -12930,7 +12940,7 @@ function createSettingsSyncController(deps) {
           requestAnimationFrame(() => previewPanel.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
         }
         previewImage.addEventListener('load', () => {
-          if (previewRoom && previewHostVisible()) previewStatus.textContent = statusMeta(previewRoom.lastStatus).label;
+          if (previewRoom && previewHostVisible()) previewStatus.textContent = statusMeta(previewRoom.lastStatus, previewRoom.privateLabel).label;
         });
         previewImage.addEventListener('error', () => {
           if (!previewRoom || !previewHostVisible()) return;
@@ -12986,7 +12996,7 @@ function createSettingsSyncController(deps) {
             return;
           }
           rooms.forEach(room => {
-            const meta = statusMeta(room.lastStatus);
+            const meta = statusMeta(room.lastStatus, room.privateLabel);
             const inOtherPane = room.id === otherId;
             const currentPane = store.state.settings.splitRoomIds[slot] === room.id;
             const selectBtn = $('button', {
@@ -14168,7 +14178,7 @@ function createSettingsSyncController(deps) {
       const f = s.settings.filter;
       if (f.hideOffline) list = list.filter(r => r.lastStatus !== 'offline');
       if (f.hidePrivate) list = list.filter(r => r.lastStatus !== 'private');
-      if (f.onlyOnline) list = list.filter(r => r.lastStatus === 'online');
+      if (f.onlyOnline) list = list.filter(isRoomPresent);
       const sb = s.settings.sortBy;
       if (sb === 'manual') list.sort((a, b) => roomOrderInGroup(a, ag) - roomOrderInGroup(b, ag));
       else if (sb === 'name') list.sort((a, b) => a.id.localeCompare(b.id));
@@ -14195,12 +14205,11 @@ function createSettingsSyncController(deps) {
       const c = cardMap.get(room.id);
       if (!c) return;
       const muted = room.muted;
-      const meta = statusMeta(room.lastStatus);
+      const meta = statusMeta(room.lastStatus, room.privateLabel);
       if (c.infoMeta) {
         const parts = [meta.label];
         if (Number(room.viewerCount) > 0) parts.push(`${Number(room.viewerCount).toLocaleString()} ${LANG === 'zh' ? '观众' : 'viewers'}`);
-        if (room.lastSeenOnline && room.lastStatus !== 'online') parts.push(`${LANG === 'zh' ? '最近在线' : 'last online'} ${fmtTime(room.lastSeenOnline)}`);
-        if (room.lastStatus === 'private' && room.privateLabel) parts.push(room.privateLabel);
+        if (room.lastSeenOnline && !isRoomPresent(room)) parts.push(`${LANG === 'zh' ? '最近在线' : 'last online'} ${fmtTime(room.lastSeenOnline)}`);
         const text = parts.join(' · ');
         if (c.infoMeta.textContent !== text) c.infoMeta.textContent = text;
       }
@@ -14225,7 +14234,7 @@ function createSettingsSyncController(deps) {
       } else {
         if (!c.root.classList.contains('not-online')) c.root.classList.add('not-online');
         if (c.statusEl.style.display !== 'flex') c.statusEl.style.display = 'flex';
-        const lastSeen = room.lastSeenOnline ? fmtTime(room.lastSeenOnline) : '';
+        const lastSeen = room.lastSeenOnline && !isRoomPresent(room) ? fmtTime(room.lastSeenOnline) : '';
         const offlineKey = JSON.stringify([room.lastStatus, meta.label, meta.color, lastSeen]);
         // 关键修复：状态非 online 时彻底清理 video 节点。
         // 否则会在卡片中央显示大黑块，且可能残留音频。
@@ -14239,7 +14248,7 @@ function createSettingsSyncController(deps) {
         const lines = [
           $('div', { class: 'status-icon', style: { color: meta.color } }, [$('span', { class: 'status-dot-large' })]),
           $('div', { class: 'status-chip', style: { color: meta.color } }, meta.label),
-          room.lastSeenOnline
+          lastSeen
             ? $('div', { style: { fontSize: '11px', color: 'var(--text-muted)' } }, t('lastSeen', lastSeen))
             : null,
           (room.lastStatus === 'offline' || room.lastStatus === 'private')
@@ -14485,7 +14494,7 @@ function createSettingsSyncController(deps) {
       slot = slot === 1 ? 1 : 0;
       const otherId = store.state.settings.splitRoomIds[slot === 0 ? 1 : 0] || null;
       const rooms = store.state.rooms
-        .filter(room => roomInGroup(room, ONLINE_GROUP_ID))
+        .filter(room => room.lastStatus === 'online')
         .sort((a, b) => roomOrderInGroup(a, ONLINE_GROUP_ID) - roomOrderInGroup(b, ONLINE_GROUP_ID) || a.id.localeCompare(b.id));
       return rooms
         .filter(room => room.id !== otherId)
@@ -16107,9 +16116,9 @@ function createSettingsSyncController(deps) {
     function afterrebuild(){
         if (login){
             if((pageType=="ppage")){
-                document.querySelector('[data-testid="bio-header"]').innerHTML="<a href='"+domain+roomname+"?tab=bio' id=biotop>"+roomname.charAt(0).toUpperCase()+roomname.slice(1)+"'s Bio (Go to the cam page)</a>";
+                document.querySelector('[data-testid="bio-header"]').innerHTML="<a href='"+domain+encodeURIComponent(roomname)+"/?tab=bio' id=biotop>"+roomname.charAt(0).toUpperCase()+roomname.slice(1)+"'s Bio (Go to the cam page)</a>";
             }else{
-                document.querySelector('[data-testid="bio-header"]').innerHTML="<a href='"+domain+"p/"+username+"?tab=bio&model="+roomname+"' id=biotop>"+roomname.charAt(0).toUpperCase()+roomname.slice(1)+"'s Bio and Free Webcam (Go to the bio)</a>";
+                document.querySelector('[data-testid="bio-header"]').innerHTML="<a href='"+domain+encodeURIComponent(roomname)+"/?tab=bio' id=biotop>"+roomname.charAt(0).toUpperCase()+roomname.slice(1)+"'s Bio and Free Webcam (Go to the bio)</a>";
             }
             document.getElementById("biotop").addEventListener("click", function(event){window.location.replace(this.href);event.stopPropagation();event.preventDefault();return false;});
         }
@@ -16319,7 +16328,7 @@ function createSettingsSyncController(deps) {
             decorateHiddenLabel(card);
             if(!supporter){bind(imageLink,"mouseenter",moveimg);bind(imageLink,"mouseleave",moveimgstop);}
             if(login){
-                var bio=domain+"p/"+username+"/?tab=bio&model="+thumbroomname;
+                var bio=domain+encodeURIComponent(thumbroomname)+"/?tab=bio";
                 if(nameLink.href!==bio)nameLink.href=bio;
                 var imageTitle="Visit "+thumbroomname+"'s chatroom.",bioTitle="Visit "+thumbroomname+"'s bio.";
                 if(imageLink.title!==imageTitle)imageLink.title=imageTitle;
@@ -16535,7 +16544,7 @@ function createSettingsSyncController(deps) {
         newelem.style.textAlign="left";
         newelem.innerHTML='<span id="notepopName" style="text-Overflow: ellipsis; overflow:hidden; width:150px; height:20px; display:inline-block;cursor:pointer " ></span><span><img src="https://web.static.mmcdn.com/tsdefaultassets/close-gray.svg" style="position: absolute; height: 13px; width: 13px; right: 8px;" title="Close" id="noteclose"></span>';
         document.getElementById("notepop").appendChild(newelem);
-        document.getElementById("notepopName").addEventListener("click", function(){var target="_self";if (!localStorage.getItem("newtabon")){target="_blank";}window.open(domain+"p/"+username+"/?tab=bio&model="+openthumbname, target);});
+        document.getElementById("notepopName").addEventListener("click", function(){var target="_self";if (!localStorage.getItem("newtabon")){target="_blank";}window.open(domain+encodeURIComponent(openthumbname)+"/?tab=bio", target);});
         document.getElementById("noteclose").addEventListener("click", notepopclose);
         newelem=document.createElement('div');
         newelem.style.backgroundColor = "white";
@@ -17823,7 +17832,7 @@ function createSettingsSyncController(deps) {
                 userstring=userstring+"<img style='height:16px' src='"+user[2]+"'>"+bc+"<a style='font-weight: bold;color:"+user[1]+"'>"+user[0]+"</a> "+user[3]+"<br>";
             }else{
                 if (login){
-                    userstring=userstring+"<img style='height:16px' src='"+user[2]+"'>"+bc+"<a target=_blank style='font-weight: bold;color:"+user[1]+"' href='"+domain+"p/"+username+"?tab=bio&model="+user[0]+"'>"+user[0]+"</a> "+user[3]+"<br>";
+                    userstring=userstring+"<img style='height:16px' src='"+user[2]+"'>"+bc+"<a target=_blank style='font-weight: bold;color:"+user[1]+"' href='"+domain+encodeURIComponent(user[0])+"/?tab=bio'>"+user[0]+"</a> "+user[3]+"<br>";
                 }else{
                     userstring=userstring+"<img style='height:16px' src='"+user[2]+"'>"+bc+"<a target=_blank style='font-weight: bold;color:"+user[1]+"' href='"+domain+user[0]+"'>"+user[0]+"</a> "+user[3]+"<br>";
                 }
@@ -18865,7 +18874,8 @@ function createSettingsSyncController(deps) {
                     setprofile();
                     return;
                 }else{
-                    document.location.href=domain+'p/'+username+'?tab=bio&model='+roomname;
+                    noaccess=true;
+                    setprofile();
                     return;
                 }
             });

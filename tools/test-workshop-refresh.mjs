@@ -38,6 +38,25 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
 
 {
   const f = fixture(['alpha']);
+  for (const kind of ['private', 'away', 'secret', 'hidden', 'group', 'password', ' SECRET ']) {
+    const check = f.service.probe('alpha');
+    f.pending.at(-1).resolve({ room_status: kind, hls_source: 'https://example.com/unavailable.m3u8' }); await check;
+    assert.equal(f.store.state.rooms[0].lastStatus, 'private');
+    assert.equal(f.store.state.rooms[0].privateLabel, kind.trim().toLowerCase());
+    assert.equal(f.events.filter(e => e.name === 'room:online').length, 0, 'restricted source must never be admitted');
+    const wait = [...f.timers.values()].at(-1).ms;
+    assert.ok(wait >= 240000 && wait <= 360000, 'background restricted polling keeps its existing quiet cadence');
+  }
+  const publicCheck = f.service.probe('alpha');
+  f.pending.at(-1).resolve({ room_status: 'public', hls_source: 'https://example.com/live.m3u8' }); await publicCheck;
+  assert.equal(f.store.state.rooms[0].lastStatus, 'online'); assert.equal(f.store.state.rooms[0].privateLabel, '');
+  const offlineCheck = f.service.probe('alpha');
+  f.pending.at(-1).resolve({ room_status: ' OFFLINE ' }); await offlineCheck;
+  assert.equal(f.store.state.rooms[0].lastStatus, 'offline');
+}
+
+{
+  const f = fixture(['alpha']);
   const first = f.service.probe('alpha'), shared = f.service.probe('alpha');
   assert.equal(f.pending.length, 1, 'overlapping probes must share one request');
   f.pending[0].resolve({ room_status: 'offline' });

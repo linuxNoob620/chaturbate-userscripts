@@ -65,18 +65,60 @@ function cardFixture(status = 'offline') {
   const cardMap = new Map([[room.id, card]]); let detaches = 0;
   const ctx = vm.createContext({ console, cardMap, LANG: 'en', store: { state: { rooms: [room], settings: { splitRoomIds: [], activeGroup: 'library', volume: 0.7 } } },
     currentSavedRoomIndex: () => new Map([[room.id, room]]), findRoomAny: () => room,
-    roomInGroup: (item, group) => item.groups.includes(group), FAVORITE_GROUP_ID: 'favorites', LIBRARY_GROUP_ID: 'library',
+    getRoomGroups: item => item.groups, FAVORITE_GROUP_ID: 'favorites', LIBRARY_GROUP_ID: 'library',
     ONLINE_GROUP_ID: 'online', ONLINE_FAVORITES_GROUP_ID: 'onlineFavorites', RECENT_FOLLOWED_GROUP_ID: 'recent',
-    statusMeta: value => ({ label: value[0].toUpperCase() + value.slice(1), color: value === 'online' ? '#0f0' : '#999' }),
     fmtTime: value => `${value} ago`, t: (...args) => args.join(' '), $: (...args) => new Node(...args),
     setElementHint(node, value) { node.setAttribute('title', value); node.setAttribute('aria-label', value); },
     trustedHtml: value => value, iconSvg: value => `<svg>${value}</svg>`, setTrustedHtml: (node, value) => { node.innerHTML = value; },
     service: { detachVideo() { detaches++; }, refresh() {} }, resumeWaitingRecording() {},
   });
-  vm.runInContext(block('    function updateCardButtons(', '    function captureCardScreenshot(')
+  vm.runInContext(block('  function isRoomPresent(', '  function roomOrderInGroup(')
+    + block('    function statusMeta(', '    // Session-only geometry:')
+    + block('    function updateCardButtons(', '    function captureCardScreenshot(')
     + block('    function renderCardState(', '    function getVideoTransform('), ctx);
   return { ...dom, room, card, ctx, cardMap, detaches: () => detaches };
 }
+
+test('restricted presence stays online, counts consistently and respects explicit hide-private', () => {
+  const rooms = ['online', 'private', 'private', 'private', 'offline'].map((lastStatus, i) => ({
+    id: `room${i}`, lastStatus, privateLabel: ['','private','away','secret',''][i], groups: ['favorites'],
+  }));
+  const ctx = vm.createContext({ LIBRARY_GROUP_ID: 'library', ONLINE_GROUP_ID: 'online', ONLINE_FAVORITES_GROUP_ID: 'onlineFavorites',
+    RECENT_FOLLOWED_GROUP_ID: 'recent', FAVORITE_GROUP_ID: 'favorites', DEFAULT_GROUP_ID: 'library',
+    getRoomGroups: room => room.groups, regularRoomsForView: () => rooms, recentRoomMap: new Map(), normalizeUsername: s => s,
+    store: { state: { rooms, settings: { activeGroup: 'online', filter: {}, sortBy: 'name' } } },
+  });
+  vm.runInContext(block('  function isRoomPresent(', '  function roomOrderInGroup(')
+    + block('    function countByGroup(', '    function openGroupMenu(')
+    + block('    function visibleRooms(', '    function renderCardState('), ctx);
+  assert.equal(ctx.visibleRooms().length, 4);
+  assert.equal(ctx.countByGroup().online, 4); assert.equal(ctx.countByGroup().onlineFavorites, 4);
+  assert.equal(ctx.roomInGroup(rooms[4], 'online'), false);
+  ctx.store.state.settings.filter.onlyOnline = true; assert.equal(ctx.visibleRooms().length, 4);
+  ctx.store.state.settings.filter.hidePrivate = true; assert.equal(ctx.visibleRooms().length, 1);
+  // Presence does not make a non-public room a playable split-cycle candidate.
+  ctx.store.state.settings.splitRoomIds = []; ctx.roomOrderInGroup = () => 0;
+  vm.runInContext(block('    function splitOnlineCycleIds(', '    function cycleSplitOnline('), ctx);
+  assert.deepEqual(Array.from(ctx.splitOnlineCycleIds(0)), ['room0']);
+});
+
+test('restricted thumbnail subtypes update without stale labels, media, or repeated DOM work', () => {
+  const f = cardFixture('private');
+  for (const [kind, label] of [['private', 'Private show'], ['away', 'Away'], ['secret', 'Secret show'],
+    ['hidden', 'Hidden show'], ['group', 'Group show'], ['password', 'Password protected'],
+    ['<img onerror=alert(1)>', 'Restricted stream']]) {
+    f.room.privateLabel = kind; f.card.video = new f.Node('video');
+    const before = f.detaches(); f.ctx.renderCardState(f.room);
+    assert.equal(f.detaches(), before + 1); assert.equal(f.card.video, null);
+    assert.equal(f.card.statusEl.children.find(n => n.class === 'status-chip').textContent, label);
+    assert.equal(f.card.infoMeta.textContent, label, 'no stale last-online or raw subtype text');
+    assert.ok(!f.card.statusEl.textContent.includes('500 ago'));
+    f.reset(); for (let n = 0; n < 100; n++) f.ctx.renderCardState(f.room);
+    assert.deepEqual(f.counts, { style: 0, attributes: 0, html: 0, text: 0, children: 0, classList: 0 });
+  }
+  f.room.lastStatus = 'online'; f.ctx.renderCardState(f.room); assert.equal(f.card.statusEl.style.display, 'none');
+  f.room.lastStatus = 'offline'; f.ctx.renderCardState(f.room); assert.match(f.card.statusEl.textContent, /500 ago/);
+});
 
 test('100 unchanged offline renders keep the overlay, retry button and all DOM fields', () => {
   const f = cardFixture(); f.ctx.renderCardState(f.room);
